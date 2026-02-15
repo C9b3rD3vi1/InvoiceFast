@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  invoicefast:
+    build: .
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./data:/app/data
+      - ./templates:/app/templates
+    env_file: .env
+    restart: unless-stopped
