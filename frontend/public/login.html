@@ -243,6 +243,11 @@
     </div>
 
     <script>
+        // Redirect if already logged in
+        if (localStorage.getItem('token')) {
+            window.location.href = '/app/index.html';
+        }
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
