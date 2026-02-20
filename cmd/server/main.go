@@ -187,6 +187,19 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 	if cfg.Server.Mode == "production" {
 		// Landing page at root
 		r.StaticFile("/", "./frontend/public/landing.html")
+		
+		// Public pages
+		r.StaticFile("/login", "./frontend/public/login.html")
+		r.StaticFile("/register", "./frontend/public/register.html")
+		r.StaticFile("/forgot-password", "./frontend/public/forgot-password.html")
+		r.StaticFile("/privacy", "./frontend/public/privacy.html")
+		r.StaticFile("/terms", "./frontend/public/terms.html")
+		
+		// Public invoice view
+		r.GET("/invoice/:token", func(c *gin.Context) {
+			c.File("./frontend/public/invoice.html")
+		})
+		
 		// SPA at /app
 		r.Static("/app", "./frontend/public")
 	}

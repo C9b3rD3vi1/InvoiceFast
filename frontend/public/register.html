@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account - InvoiceFast</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web@2.0.3"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #0a0a0f;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.2) 0%, transparent 40%),
+                radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.15) 0%, transparent 40%);
+            pointer-events: none;
+        }
+
+        .register-container {
+            width: 100%;
+            max-width: 480px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: blur(20px);
+            position: relative;
+            z-index: 1;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo i { color: #6366f1; }
+
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 500px) {
+            .form-row { grid-template-columns: 1fr; }
+        }
+
+        .form-group { margin-bottom: 1rem; }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: white;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #6366f1;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-input::placeholder { color: #64748b; }
+
+        .form-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 256 256'%3E%3Cpath d='M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+        }
+
+        .form-select option {
+            background: #1e293b;
+            color: white;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin: 1.25rem 0;
+        }
+
+        .checkbox-group input {
+            width: 20px;
+            height: 20px;
+            accent-color: #6366f1;
+            margin-top: 2px;
+        }
+
+        .checkbox-group label {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        .checkbox-group a {
+            color: #818cf8;
+            text-decoration: none;
+        }
+
+        .checkbox-group a:hover { text-decoration: underline; }
+
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(99, 102, 241, 0.5);
+        }
+
+        .error-msg {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .error-msg.show { display: block; }
+
+        .footer-text {
+            text-align: center;
+            margin-top: 1.5rem;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .footer-text a {
+            color: #818cf8;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-text a:hover { text-decoration: underline; }
+
+        .benefits {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .benefit {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        .benefit i { color: #10b981; }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="logo">
+            <i class="ph ph-lightning"></i>
+            InvoiceFast
+        </div>
+        <p class="subtitle">Start your free trial</p>
+
+        <div class="error-msg" id="errorMsg"></div>
+
+        <form id="registerForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-input" id="name" placeholder="John Doe" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Phone (for M-Pesa)</label>
+                    <input type="tel" class="form-input" id="phone" placeholder="254712345678">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" class="form-input" id="email" placeholder="you@example.com" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Company Name</label>
+                <input type="text" class="form-input" id="company" placeholder="Your Business Ltd">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="password" placeholder="••••••••" minlength="6" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm Password</label>
+                    <input type="password" class="form-input" id="confirmPassword" placeholder="••••••••" required>
+                </div>
+            </div>
+
+            <div class="benefits">
+                <div class="benefit"><i class="ph ph-check-circle"></i> Free 14-day trial</div>
+                <div class="benefit"><i class="ph ph-check-circle"></i> No credit card</div>
+                <div class="benefit"><i class="ph ph-check-circle"></i> M-Pesa ready</div>
+                <div class="benefit"><i class="ph ph-check-circle"></i> Cancel anytime</div>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="terms" required>
+                <label for="terms">I agree to the <a href="/terms.html">Terms of Service</a> and <a href="/privacy.html">Privacy Policy</a></label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">
+                <i class="ph ph-rocket-launch"></i> Create Account
+            </button>
+        </form>
+        
+        <p class="footer-text">
+            Already have an account? <a href="/login.html">Sign in</a>
+        </p>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const errorEl = document.getElementById('errorMsg');
+
+            if (password !== confirmPassword) {
+                errorEl.textContent = 'Passwords do not match';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            const data = {
+                name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                password: password,
+                phone: document.getElementById('phone').value,
+                company_name: document.getElementById('company').value
+            };
+            
+            try {
+                const res = await fetch('/api/v1/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const response = await res.json();
+                
+                if (!res.ok) {
+                    errorEl.textContent = response.error?.message || 'Registration failed';
+                    errorEl.classList.add('show');
+                    return;
+                }
+
+                localStorage.setItem('token', response.data.access_token);
+                localStorage.setItem('user', JSON.stringify(response.data.user));
+                window.location.href = '/app/index.html';
+                
+            } catch (err) {
+                errorEl.textContent = 'Connection error. Please try again.';
+                errorEl.classList.add('show');
+            }
+        });
+    </script>
+</body>
+</html>
