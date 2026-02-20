@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-    <meta name="theme-color" content="#2563eb">
+    <meta name="theme-color" content="#6366f1">
     <meta name="description" content="InvoiceFast - Professional Invoicing with M-Pesa Integration for Kenyan Businesses">
     <meta name="keywords" content="invoicing, Kenya, M-Pesa, business, payments, accounting">
     
@@ -19,39 +19,49 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="apple-touch-icon" href="/icon-192.svg">
     
-    <!-- Preconnect to fonts -->
+    <!-- Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web@2.0.3"></script>
     
     <style>
         /* ==================== CSS VARIABLES ==================== */
         :root {
-            /* Colors */
-            --color-primary: #2563eb;
-            --color-primary-dark: #1d4ed8;
-            --color-primary-light: #3b82f6;
-            --color-success: #22c55e;
-            --color-success-dark: #16a34a;
+            /* Brand Colors */
+            --color-primary: #6366f1;
+            --color-primary-dark: #4f46e5;
+            --color-primary-light: #818cf8;
+            --color-primary-50: #eef2ff;
+            --color-primary-100: #e0e7ff;
+            
+            /* Status Colors */
+            --color-success: #10b981;
+            --color-success-dark: #059669;
+            --color-success-bg: #d1fae5;
             --color-warning: #f59e0b;
             --color-warning-dark: #d97706;
+            --color-warning-bg: #fef3c7;
             --color-danger: #ef4444;
             --color-danger-dark: #dc2626;
+            --color-danger-bg: #fee2e2;
             
-            /* Grays */
-            --color-gray-50: #f9fafb;
-            --color-gray-100: #f3f4f6;
-            --color-gray-200: #e5e7eb;
-            --color-gray-300: #d1d5db;
-            --color-gray-400: #9ca3af;
-            --color-gray-500: #6b7280;
-            --color-gray-600: #4b5563;
-            --color-gray-700: #374151;
-            --color-gray-800: #1f2937;
-            --color-gray-900: #111827;
+            /* Neutral Colors */
+            --color-gray-50: #f8fafc;
+            --color-gray-100: #f1f5f9;
+            --color-gray-200: #e2e8f0;
+            --color-gray-300: #cbd5e1;
+            --color-gray-400: #94a3b8;
+            --color-gray-500: #64748b;
+            --color-gray-600: #475569;
+            --color-gray-700: #334155;
+            --color-gray-800: #1e293b;
+            --color-gray-900: #0f172a;
             
             /* Typography */
-            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             --font-size-xs: 0.75rem;
             --font-size-sm: 0.875rem;
             --font-size-base: 1rem;
@@ -74,7 +84,7 @@
             --spacing-16: 4rem;
             
             /* Border Radius */
-            --radius-sm: 0.25rem;
+            --radius-sm: 0.375rem;
             --radius-md: 0.5rem;
             --radius-lg: 0.75rem;
             --radius-xl: 1rem;
@@ -82,15 +92,17 @@
             --radius-full: 9999px;
             
             /* Shadows */
-            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
             --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
             --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
             --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
             
             /* Transitions */
-            --transition-fast: 150ms ease;
-            --transition-base: 200ms ease;
-            --transition-slow: 300ms ease;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
             
             /* Z-index */
             --z-dropdown: 100;
@@ -99,87 +111,44 @@
             --z-toast: 400;
         }
         
-        /* ==================== RESET & BASE ==================== */
-        *, *::before, *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        /* ==================== RESET ==================== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         
-        html {
-            font-size: 16px;
-            scroll-behavior: smooth;
-            -webkit-text-size-adjust: 100%;
-        }
+        html { font-size: 16px; scroll-behavior: smooth; }
         
         body {
             font-family: var(--font-family);
             font-size: var(--font-size-base);
             line-height: 1.6;
             color: var(--color-gray-800);
-            background-color: var(--color-gray-50);
+            background: var(--color-gray-50);
             min-height: 100vh;
             -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            background-image: 
+                radial-gradient(at 40% 20%, var(--color-primary-50) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, rgba(16, 185, 129, 0.03) 0px, transparent 50%),
+                radial-gradient(at 80% 50%, rgba(245, 158, 11, 0.03) 0px, transparent 50%),
+                radial-gradient(at 0% 100%, rgba(99, 102, 241, 0.05) 0px, transparent 50%);
+            background-attachment: fixed;
         }
         
         /* ==================== TYPOGRAPHY ==================== */
-        h1, h2, h3, h4, h5, h6 {
-            font-weight: 600;
-            line-height: 1.25;
-            color: var(--color-gray-900);
-        }
-        
+        h1, h2, h3, h4, h5, h6 { font-weight: 700; line-height: 1.2; color: var(--color-gray-900); }
         h1 { font-size: var(--font-size-4xl); }
         h2 { font-size: var(--font-size-3xl); }
         h3 { font-size: var(--font-size-2xl); }
         h4 { font-size: var(--font-size-xl); }
         
-        p { margin-bottom: var(--spacing-4); }
-        
-        a {
-            color: var(--color-primary);
-            text-decoration: none;
-            transition: color var(--transition-fast);
-        }
-        
-        a:hover {
-            color: var(--color-primary-dark);
-        }
-        
-        /* Focus styles for accessibility */
-        :focus-visible {
-            outline: 2px solid var(--color-primary);
-            outline-offset: 2px;
-        }
+        :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
         
         /* ==================== UTILITIES ==================== */
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
         
-        .container {
-            width: 100%;
-            max-width: 1280px;
-            margin: 0 auto;
-            padding: 0 var(--spacing-4);
-        }
+        .container { width: 100%; max-width: 1400px; margin: 0 auto; padding: 0 var(--spacing-4); }
         
-        @media (min-width: 640px) {
-            .container { padding: 0 var(--spacing-6); }
-        }
-        
-        @media (min-width: 1024px) {
-            .container { padding: 0 var(--spacing-8); }
-        }
+        @media (min-width: 640px) { .container { padding: 0 var(--spacing-6); } }
+        @media (min-width: 1024px) { .container { padding: 0 var(--spacing-8); } }
         
         /* ==================== BUTTONS ==================== */
         .btn {
@@ -190,7 +159,7 @@
             padding: var(--spacing-3) var(--spacing-5);
             font-family: inherit;
             font-size: var(--font-size-sm);
-            font-weight: 500;
+            font-weight: 600;
             line-height: 1;
             text-decoration: none;
             border: none;
@@ -199,83 +168,56 @@
             transition: all var(--transition-fast);
         }
         
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .btn-primary {
-            background: var(--color-primary);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
         }
         
         .btn-primary:hover:not(:disabled) {
-            background: var(--color-primary-dark);
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.45);
         }
         
         .btn-secondary {
-            background: var(--color-gray-100);
+            background: white;
             color: var(--color-gray-700);
+            border: 1px solid var(--color-gray-200);
+            box-shadow: var(--shadow-xs);
         }
         
         .btn-secondary:hover:not(:disabled) {
-            background: var(--color-gray-200);
+            background: var(--color-gray-50);
+            border-color: var(--color-gray-300);
         }
         
         .btn-success {
-            background: var(--color-success);
+            background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-dark) 100%);
             color: white;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
         }
         
         .btn-success:hover:not(:disabled) {
-            background: var(--color-success-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.45);
         }
         
-        .btn-danger {
-            background: var(--color-danger);
-            color: white;
-        }
+        .btn-ghost { background: transparent; color: var(--color-gray-600); }
+        .btn-ghost:hover:not(:disabled) { background: var(--color-gray-100); }
         
-        .btn-danger:hover:not(:disabled) {
-            background: var(--color-danger-dark);
-        }
-        
-        .btn-ghost {
-            background: transparent;
-            color: var(--color-gray-600);
-        }
-        
-        .btn-ghost:hover:not(:disabled) {
-            background: var(--color-gray-100);
-        }
-        
-        .btn-sm {
-            padding: var(--spacing-2) var(--spacing-3);
-            font-size: var(--font-size-xs);
-        }
-        
-        .btn-lg {
-            padding: var(--spacing-4) var(--spacing-6);
-            font-size: var(--font-size-base);
-        }
-        
-        .btn-icon {
-            padding: var(--spacing-2);
-            width: 36px;
-            height: 36px;
-        }
+        .btn-sm { padding: var(--spacing-2) var(--spacing-3); font-size: var(--font-size-xs); }
+        .btn-lg { padding: var(--spacing-4) var(--spacing-6); font-size: var(--font-size-base); }
+        .btn-icon { padding: var(--spacing-2); width: 36px; height: 36px; }
         
         /* ==================== FORMS ==================== */
-        .form-group {
-            margin-bottom: var(--spacing-5);
-        }
+        .form-group { margin-bottom: var(--spacing-5); }
         
         .form-label {
             display: block;
             font-size: var(--font-size-sm);
-            font-weight: 500;
+            font-weight: 600;
             color: var(--color-gray-700);
             margin-bottom: var(--spacing-2);
         }
@@ -290,9 +232,9 @@
             line-height: 1.5;
             color: var(--color-gray-900);
             background: white;
-            border: 1px solid var(--color-gray-300);
+            border: 1.5px solid var(--color-gray-200);
             border-radius: var(--radius-lg);
-            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+            transition: all var(--transition-fast);
         }
         
         .form-input:focus,
@@ -300,30 +242,22 @@
         .form-textarea:focus {
             outline: none;
             border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
         }
         
-        .form-input::placeholder {
-            color: var(--color-gray-400);
-        }
-        
-        .form-input.error {
-            border-color: var(--color-danger);
-        }
-        
-        .form-error {
-            font-size: var(--font-size-sm);
-            color: var(--color-danger);
-            margin-top: var(--spacing-1);
-        }
+        .form-input::placeholder { color: var(--color-gray-400); }
         
         /* ==================== CARDS ==================== */
         .card {
             background: white;
-            border-radius: var(--radius-xl);
+            border-radius: var(--radius-2xl);
             box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-gray-100);
             overflow: hidden;
+            transition: all var(--transition-base);
         }
+        
+        .card:hover { box-shadow: var(--shadow-md); }
         
         .card-header {
             padding: var(--spacing-5) var(--spacing-6);
@@ -333,15 +267,8 @@
             justify-content: space-between;
         }
         
-        .card-title {
-            font-size: var(--font-size-lg);
-            font-weight: 600;
-            color: var(--color-gray-900);
-        }
-        
-        .card-body {
-            padding: var(--spacing-6);
-        }
+        .card-title { font-size: var(--font-size-lg); font-weight: 700; color: var(--color-gray-900); }
+        .card-body { padding: var(--spacing-6); }
         
         /* ==================== BADGES ==================== */
         .badge {
@@ -349,163 +276,104 @@
             align-items: center;
             padding: var(--spacing-1) var(--spacing-3);
             font-size: var(--font-size-xs);
-            font-weight: 500;
+            font-weight: 600;
             border-radius: var(--radius-full);
+            text-transform: capitalize;
         }
         
         .badge-draft { background: var(--color-gray-100); color: var(--color-gray-600); }
-        .badge-sent { background: #dbeafe; color: var(--color-primary); }
-        .badge-paid { background: #dcfce7; color: var(--color-success-dark); }
-        .badge-overdue { background: #fee2e2; color: var(--color-danger); }
-        .badge-pending { background: #fef3c7; color: var(--color-warning-dark); }
+        .badge-sent { background: var(--color-primary-100); color: var(--color-primary-dark); }
+        .badge-paid { background: var(--color-success-bg); color: var(--color-success-dark); }
+        .badge-overdue { background: var(--color-danger-bg); color: var(--color-danger-dark); }
+        .badge-pending { background: var(--color-warning-bg); color: var(--color-warning-dark); }
         
         /* ==================== TABLES ==================== */
-        .table-wrapper {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
+        .table-wrapper { overflow-x: auto; }
         
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        .table { width: 100%; border-collapse: collapse; }
         
         .table th,
-        .table td {
-            padding: var(--spacing-4);
-            text-align: left;
-            border-bottom: 1px solid var(--color-gray-100);
-        }
+        .table td { padding: var(--spacing-4); text-align: left; border-bottom: 1px solid var(--color-gray-100); }
         
         .table th {
             font-size: var(--font-size-xs);
-            font-weight: 600;
+            font-weight: 700;
             color: var(--color-gray-500);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             background: var(--color-gray-50);
         }
         
-        .table tbody tr:hover {
-            background: var(--color-gray-50);
-        }
+        .table tbody tr { transition: background var(--transition-fast); }
+        .table tbody tr:hover { background: var(--color-gray-50); }
         
         /* ==================== MODAL ==================== */
         .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.5);
+            position: fixed; inset: 0;
+            background: rgba(15, 23, 42, 0.6);
             backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             padding: var(--spacing-4);
             z-index: var(--z-modal);
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity var(--transition-base), visibility var(--transition-base);
+            opacity: 0; visibility: hidden;
+            transition: all var(--transition-base);
         }
         
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
         
         .modal {
             background: white;
             border-radius: var(--radius-2xl);
-            width: 100%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
+            width: 100%; max-width: 500px;
+            max-height: 90vh; overflow-y: auto;
             transform: scale(0.95) translateY(20px);
             transition: transform var(--transition-base);
+            box-shadow: var(--shadow-2xl);
         }
         
-        .modal-overlay.active .modal {
-            transform: scale(1) translateY(0);
-        }
+        .modal-overlay.active .modal { transform: scale(1) translateY(0); }
         
-        .modal-header {
-            padding: var(--spacing-6);
-            border-bottom: 1px solid var(--color-gray-100);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        
-        .modal-title {
-            font-size: var(--font-size-xl);
-            font-weight: 600;
-        }
+        .modal-header { padding: var(--spacing-6); border-bottom: 1px solid var(--color-gray-100); display: flex; align-items: center; justify-content: space-between; }
+        .modal-title { font-size: var(--font-size-xl); font-weight: 700; }
         
         .modal-close {
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: none;
-            border: none;
-            border-radius: var(--radius-md);
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            background: none; border: none;
+            border-radius: var(--radius-lg);
             color: var(--color-gray-400);
             cursor: pointer;
-            transition: background var(--transition-fast);
+            transition: all var(--transition-fast);
         }
         
-        .modal-close:hover {
-            background: var(--color-gray-100);
-            color: var(--color-gray-600);
-        }
+        .modal-close:hover { background: var(--color-gray-100); color: var(--color-gray-600); }
+        .modal-body { padding: var(--spacing-6); }
+        .modal-footer { padding: var(--spacing-4) var(--spacing-6); border-top: 1px solid var(--color-gray-100); display: flex; justify-content: flex-end; gap: var(--spacing-3); }
         
-        .modal-body {
-            padding: var(--spacing-6);
-        }
-        
-        .modal-footer {
-            padding: var(--spacing-4) var(--spacing-6);
-            border-top: 1px solid var(--color-gray-100);
-            display: flex;
-            justify-content: flex-end;
-            gap: var(--spacing-3);
-        }
-        
-        /* ==================== TOAST NOTIFICATIONS ==================== */
-        .toast-container {
-            position: fixed;
-            top: var(--spacing-4);
-            right: var(--spacing-4);
-            z-index: var(--z-toast);
-            display: flex;
-            flex-direction: column;
-            gap: var(--spacing-2);
-        }
+        /* ==================== TOAST ==================== */
+        .toast-container { position: fixed; top: var(--spacing-4); right: var(--spacing-4); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--spacing-2); }
         
         .toast {
-            min-width: 280px;
-            max-width: 400px;
-            padding: var(--spacing-4);
-            border-radius: var(--radius-lg);
-            color: white;
-            font-size: var(--font-size-sm);
-            box-shadow: var(--shadow-lg);
-            transform: translateX(120%);
-            transition: transform var(--transition-slow);
+            min-width: 300px; max-width: 400px;
+            padding: var(--spacing-4) var(--spacing-5);
+            border-radius: var(--radius-xl);
+            color: white; font-size: var(--font-size-sm); font-weight: 500;
+            box-shadow: var(--shadow-xl);
+            transform: translateX(120%); transition: transform var(--transition-slow);
+            display: flex; align-items: center; gap: var(--spacing-3);
         }
         
-        .toast.show {
-            transform: translateX(0);
-        }
+        .toast.show { transform: translateX(0); }
+        .toast-success { background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-dark) 100%); }
+        .toast-error { background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark) 100%); }
+        .toast-warning { background: linear-gradient(135deg, var(--color-warning) 0%, var(--color-warning-dark) 100%); }
+        .toast-info { background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%); }
         
-        .toast-success { background: var(--color-success-dark); }
-        .toast-error { background: var(--color-danger-dark); }
-        .toast-warning { background: var(--color-warning-dark); }
-        .toast-info { background: var(--color-primary-dark); }
+        .toast i { font-size: 20px; }
         
-        /* ==================== LOADING STATES ==================== */
+        /* ==================== LOADING ==================== */
         .spinner {
-            width: 24px;
-            height: 24px;
+            width: 24px; height: 24px;
             border: 3px solid var(--color-gray-200);
             border-top-color: var(--color-primary);
             border-radius: 50%;
@@ -515,346 +383,220 @@
         .spinner-sm { width: 16px; height: 16px; }
         .spinner-lg { width: 40px; height: 40px; }
         
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         
-        .loading-overlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: var(--z-dropdown);
-        }
-        
-        /* ==================== EMPTY STATES ==================== */
-        .empty-state {
-            text-align: center;
-            padding: var(--spacing-12) var(--spacing-6);
-            color: var(--color-gray-500);
-        }
-        
-        .empty-state svg {
-            width: 64px;
-            height: 64px;
-            margin-bottom: var(--spacing-4);
-            opacity: 0.5;
-        }
-        
-        .empty-state h3 {
-            font-size: var(--font-size-lg);
-            color: var(--color-gray-700);
-            margin-bottom: var(--spacing-2);
-        }
+        /* ==================== EMPTY STATE ==================== */
+        .empty-state { text-align: center; padding: var(--spacing-12) var(--spacing-6); color: var(--color-gray-500); }
+        .empty-state i { font-size: 48px; margin-bottom: var(--spacing-4); color: var(--color-gray-300); }
+        .empty-state h3 { font-size: var(--font-size-lg); color: var(--color-gray-700); margin-bottom: var(--spacing-2); }
         
         /* ==================== AVATAR ==================== */
         .avatar {
-            width: 40px;
-            height: 40px;
+            width: 44px; height: 44px;
             border-radius: var(--radius-full);
-            background: var(--color-primary);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
             color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            font-size: var(--font-size-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: var(--font-size-sm);
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
         }
         
-        .avatar-sm { width: 32px; height: 32px; font-size: var(--font-size-xs); }
-        .avatar-lg { width: 48px; height: 48px; font-size: var(--font-size-base); }
+        .avatar-sm { width: 36px; height: 36px; font-size: var(--font-size-xs); }
+        .avatar-lg { width: 56px; height: 56px; font-size: var(--font-size-lg); }
         
         /* ==================== STATS ==================== */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: var(--spacing-4);
-            margin-bottom: var(--spacing-6);
-        }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-4); margin-bottom: var(--spacing-6); }
+        
+        @media (min-width: 768px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
         
         .stat-card {
             background: white;
             border-radius: var(--radius-xl);
             padding: var(--spacing-5);
             box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-gray-100);
+            position: relative;
+            overflow: hidden;
+            transition: all var(--transition-base);
         }
         
-        .stat-label {
-            font-size: var(--font-size-sm);
-            color: var(--color-gray-500);
-            margin-bottom: var(--spacing-1);
+        .stat-card::before {
+            content: '';
+            position: absolute; top: 0; left: 0; right: 0; height: 4px;
+            background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+            opacity: 0; transition: opacity var(--transition-fast);
         }
         
-        .stat-value {
-            font-size: var(--font-size-2xl);
-            font-weight: 700;
-            color: var(--color-gray-900);
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .stat-card:hover::before { opacity: 1; }
+        
+        .stat-icon {
+            width: 40px; height: 40px;
+            border-radius: var(--radius-lg);
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: var(--spacing-3);
+            font-size: 20px;
         }
         
+        .stat-icon.primary { background: var(--color-primary-100); color: var(--color-primary-dark); }
+        .stat-icon.success { background: var(--color-success-bg); color: var(--color-success-dark); }
+        .stat-icon.warning { background: var(--color-warning-bg); color: var(--color-warning-dark); }
+        .stat-icon.danger { background: var(--color-danger-bg); color: var(--color-danger-dark); }
+        
+        .stat-label { font-size: var(--font-size-sm); color: var(--color-gray-500); margin-bottom: var(--spacing-1); font-weight: 500; }
+        .stat-value { font-size: var(--font-size-2xl); font-weight: 800; color: var(--color-gray-900); }
         .stat-value.success { color: var(--color-success); }
         .stat-value.warning { color: var(--color-warning); }
         .stat-value.danger { color: var(--color-danger); }
         
-        /* ==================== LIST ITEMS ==================== */
-        .list-item {
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-4);
-            padding: var(--spacing-4);
-            background: white;
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--color-gray-100);
-            cursor: pointer;
-            transition: all var(--transition-fast);
-        }
-        
-        .list-item:hover {
-            border-color: var(--color-primary);
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .list-item-content {
-            flex: 1;
-            min-width: 0;
-        }
-        
-        .list-item-title {
-            font-weight: 500;
-            color: var(--color-gray-900);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        .list-item-subtitle {
-            font-size: var(--font-size-sm);
-            color: var(--color-gray-500);
-        }
-        
-        /* ==================== AUTH SCREENS ==================== */
+        /* ==================== AUTH SCREEN ==================== */
         .auth-container {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: var(--spacing-4);
-            background: linear-gradient(135deg, var(--color-primary) 0%, #1e40af 100%);
+            background: 
+                linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+                linear-gradient(225deg, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+                var(--color-gray-50);
         }
         
         .auth-card {
             background: white;
             border-radius: var(--radius-2xl);
-            padding: var(--spacing-8);
-            width: 100%;
-            max-width: 420px;
-            box-shadow: var(--shadow-xl);
+            padding: var(--spacing-10);
+            width: 100%; max-width: 440px;
+            box-shadow: var(--shadow-2xl);
+            border: 1px solid var(--color-gray-100);
         }
         
-        .auth-logo {
-            text-align: center;
-            margin-bottom: var(--spacing-8);
+        .auth-logo { text-align: center; margin-bottom: var(--spacing-8); }
+        .auth-logo h1 { 
+            font-size: 2rem; 
+            font-weight: 800; 
+            background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
+        .auth-logo p { color: var(--color-gray-500); margin-top: var(--spacing-2); font-size: var(--font-size-sm); }
         
-        .auth-logo h1 {
-            font-size: var(--font-size-3xl);
-            font-weight: 700;
-            color: var(--color-primary);
-        }
-        
-        .auth-logo p {
-            color: var(--color-gray-500);
-            margin-top: var(--spacing-2);
-        }
-        
-        .auth-footer {
-            text-align: center;
-            margin-top: var(--spacing-6);
-            padding-top: var(--spacing-6);
-            border-top: 1px solid var(--color-gray-100);
-            color: var(--color-gray-500);
-            font-size: var(--font-size-sm);
-        }
+        .auth-footer { text-align: center; margin-top: var(--spacing-6); padding-top: var(--spacing-6); border-top: 1px solid var(--color-gray-100); color: var(--color-gray-500); font-size: var(--font-size-sm); }
         
         /* ==================== APP LAYOUT ==================== */
-        .app-layout {
-            display: flex;
-            min-height: 100vh;
-        }
+        .app-layout { display: flex; min-height: 100vh; }
         
         .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 260px;
+            position: fixed; left: 0; top: 0; bottom: 0;
+            width: 280px;
             background: white;
-            border-right: 1px solid var(--color-gray-200);
-            padding: var(--spacing-5);
+            border-right: 1px solid var(--color-gray-100);
+            padding: var(--spacing-6);
             display: none;
             flex-direction: column;
             z-index: var(--z-sticky);
+            box-shadow: var(--shadow-lg);
         }
         
-        @media (min-width: 1024px) {
-            .sidebar { display: flex; }
-        }
+        @media (min-width: 1024px) { .sidebar { display: flex; } }
         
-        .sidebar-logo {
-            font-size: var(--font-size-xl);
-            font-weight: 700;
+        .sidebar-logo { 
+            font-size: var(--font-size-2xl); 
+            font-weight: 800; 
             color: var(--color-primary);
-            padding: var(--spacing-2) var(--spacing-3);
-            margin-bottom: var(--spacing-6);
+            margin-bottom: var(--spacing-8);
+            display: flex; align-items: center; gap: var(--spacing-2);
         }
         
-        .sidebar-nav {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: var(--spacing-1);
-        }
+        .sidebar-logo i { font-size: 28px; }
+        
+        .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: var(--spacing-1); }
         
         .nav-item {
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-3);
+            display: flex; align-items: center; gap: var(--spacing-3);
             padding: var(--spacing-3) var(--spacing-4);
-            border-radius: var(--radius-lg);
+            border-radius: var(--radius-xl);
             color: var(--color-gray-600);
-            font-weight: 500;
+            font-weight: 600;
             transition: all var(--transition-fast);
             cursor: pointer;
+            text-decoration: none;
         }
         
-        .nav-item:hover {
-            background: var(--color-gray-50);
-            color: var(--color-gray-900);
-        }
-        
-        .nav-item.active {
-            background: var(--color-primary);
-            color: white;
-        }
-        
-        .nav-item svg {
-            width: 20px;
-            height: 20px;
-            flex-shrink: 0;
-        }
+        .nav-item:hover { background: var(--color-gray-100); color: var(--color-gray-900); }
+        .nav-item.active { background: var(--color-primary-50); color: var(--color-primary-dark); }
+        .nav-item.active i { color: var(--color-primary); }
+        .nav-item i { font-size: 20px; transition: color var(--transition-fast); }
         
         .main-content {
-            flex: 1;
-            margin-left: 0;
-            padding: var(--spacing-6);
-            padding-bottom: calc(60px + var(--spacing-6));
+            flex: 1; margin-left: 0; padding: var(--spacing-6);
+            padding-bottom: calc(80px + var(--spacing-6));
+            min-height: 100vh;
         }
         
-        @media (min-width: 1024px) {
-            .main-content { margin-left: 260px; }
-        }
+        @media (min-width: 1024px) { .main-content { margin-left: 280px; } }
         
-        /* Header */
         .app-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            display: flex; align-items: center; justify-content: space-between;
             margin-bottom: var(--spacing-6);
-            padding-bottom: var(--spacing-4);
+            padding-bottom: var(--spacing-5);
             border-bottom: 1px solid var(--color-gray-200);
         }
         
-        .page-title {
-            font-size: var(--font-size-2xl);
-            font-weight: 600;
-        }
+        .page-title { font-size: var(--font-size-2xl); font-weight: 700; }
         
-        /* Mobile Navigation */
+        /* Mobile Nav */
         .mobile-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            position: fixed; bottom: 0; left: 0; right: 0;
             background: white;
             border-top: 1px solid var(--color-gray-200);
-            display: flex;
-            justify-content: space-around;
+            display: flex; justify-content: space-around;
             padding: var(--spacing-2) 0;
             z-index: var(--z-sticky);
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
         }
         
-        @media (min-width: 1024px) {
-            .mobile-nav { display: none; }
-        }
+        @media (min-width: 1024px) { .mobile-nav { display: none; } }
         
         .mobile-nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: var(--spacing-1);
-            padding: var(--spacing-2);
-            color: var(--color-gray-500);
-            font-size: var(--font-size-xs);
-            cursor: pointer;
+            display: flex; flex-direction: column; align-items: center;
+            gap: var(--spacing-1); padding: var(--spacing-2);
+            color: var(--color-gray-500); font-size: var(--font-size-xs); cursor: pointer;
+            transition: color var(--transition-fast);
+            background: none; border: none;
         }
         
-        .mobile-nav-item.active {
-            color: var(--color-primary);
-        }
-        
-        .mobile-nav-item svg {
-            width: 24px;
-            height: 24px;
-        }
+        .mobile-nav-item.active { color: var(--color-primary); }
+        .mobile-nav-item i { font-size: 24px; }
         
         /* FAB */
         .fab {
-            position: fixed;
-            bottom: 80px;
-            right: var(--spacing-4);
-            width: 56px;
-            height: 56px;
+            position: fixed; bottom: 90px; right: var(--spacing-4);
+            width: 60px; height: 60px;
             border-radius: var(--radius-full);
-            background: var(--color-primary);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--shadow-lg);
-            border: none;
-            cursor: pointer;
-            z-index: var(--z-sticky);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+            color: white; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5); border: none;
+            cursor: pointer; z-index: var(--z-sticky);
             transition: all var(--transition-fast);
         }
         
-        .fab:hover {
-            background: var(--color-primary-dark);
-            transform: scale(1.05);
-        }
+        .fab:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6); }
+        .fab i { font-size: 28px; }
         
-        @media (min-width: 1024px) {
-            .fab { bottom: var(--spacing-6); }
-        }
+        @media (min-width: 1024px) { .fab { bottom: var(--spacing-6); } }
         
         /* Quick Actions */
         .quick-actions {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: var(--spacing-3);
-            margin-bottom: var(--spacing-6);
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-3); margin-bottom: var(--spacing-6);
         }
         
-        @media (min-width: 640px) {
-            .quick-actions { grid-template-columns: repeat(4, 1fr); }
-        }
+        @media (min-width: 640px) { .quick-actions { grid-template-columns: repeat(4, 1fr); } }
         
         .quick-action {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: var(--spacing-2);
-            padding: var(--spacing-4);
+            display: flex; flex-direction: column; align-items: center; gap: var(--spacing-3);
+            padding: var(--spacing-5);
             background: white;
             border-radius: var(--radius-xl);
             border: 1px solid var(--color-gray-100);
@@ -864,94 +606,97 @@
         
         .quick-action:hover {
             border-color: var(--color-primary);
-            background: var(--color-gray-50);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
         
-        .quick-action svg {
-            width: 24px;
-            height: 24px;
-            color: var(--color-primary);
-        }
-        
-        .quick-action span {
-            font-size: var(--font-size-sm);
-            font-weight: 500;
-            color: var(--color-gray-600);
-        }
+        .quick-action i { font-size: 28px; color: var(--color-primary); }
+        .quick-action span { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-gray-700); }
         
         /* Offline Banner */
         .offline-banner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: var(--color-warning);
-            color: white;
-            padding: var(--spacing-2) var(--spacing-4);
-            text-align: center;
-            font-size: var(--font-size-sm);
-            font-weight: 500;
+            position: fixed; top: 0; left: 0; right: 0;
+            background: linear-gradient(90deg, var(--color-warning) 0%, var(--color-warning-dark) 100%);
+            color: white; padding: var(--spacing-3) var(--spacing-4);
+            text-align: center; font-size: var(--font-size-sm); font-weight: 600;
             z-index: var(--z-toast);
-            transform: translateY(-100%);
-            transition: transform var(--transition-base);
+            transform: translateY(-100%); transition: transform var(--transition-base);
         }
         
-        .offline-banner.show {
-            transform: translateY(0);
-        }
+        .offline-banner.show { transform: translateY(0); }
         
         /* Page Transitions */
-        .page {
-            display: none;
-            animation: fadeIn var(--transition-base);
-        }
+        .page { display: none; animation: fadeIn 0.3s ease-out; }
+        .page.active { display: block; }
         
-        .page.active {
-            display: block;
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        /* Amount */
+        .amount { font-weight: 700; font-variant-numeric: tabular-nums; }
         
-        /* Amount formatting */
-        .amount {
-            font-weight: 600;
-            font-variant-numeric: tabular-nums;
-        }
-        
-        /* Payment section */
+        /* Payment Section */
         .payment-section {
-            background: var(--color-gray-50);
-            padding: var(--spacing-6);
+            background: linear-gradient(135deg, var(--color-primary-50) 0%, rgba(16, 185, 129, 0.1) 100%);
+            padding: var(--spacing-8);
             border-radius: var(--radius-xl);
             margin-top: var(--spacing-6);
             text-align: center;
+            border: 1px solid var(--color-primary-100);
         }
         
         .payment-amount {
-            font-size: var(--font-size-3xl);
-            font-weight: 700;
-            color: var(--color-primary);
+            font-size: var(--font-size-4xl);
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-success) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             margin-bottom: var(--spacing-4);
         }
         
-        /* Hide scrollbar but keep functionality */
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
+        /* Invoice Items */
+        .invoice-item {
+            display: grid; grid-template-columns: 1fr auto auto auto;
+            gap: var(--spacing-3); align-items: center;
+            padding: var(--spacing-3); background: var(--color-gray-50);
+            border-radius: var(--radius-lg); margin-bottom: var(--spacing-2);
         }
         
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
+        .invoice-item .form-input { background: white; }
+        
+        /* List Items */
+        .list-item {
+            display: flex; align-items: center; gap: var(--spacing-4);
+            padding: var(--spacing-4);
+            background: white;
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--color-gray-100);
+            cursor: pointer;
+            transition: all var(--transition-fast);
         }
+        
+        .list-item:hover { border-color: var(--color-primary); transform: translateX(4px); }
+        
+        .list-item-content { flex: 1; min-width: 0; }
+        .list-item-title { font-weight: 600; color: var(--color-gray-900); }
+        .list-item-subtitle { font-size: var(--font-size-sm); color: var(--color-gray-500); }
+        
+        /* Totals Box */
+        .totals-box {
+            background: linear-gradient(135deg, var(--color-gray-900) 0%, var(--color-gray-800) 100%);
+            padding: var(--spacing-5);
+            border-radius: var(--radius-xl);
+            color: white;
+        }
+        
+        .totals-box .row { display: flex; justify-content: space-between; margin-bottom: var(--spacing-2); font-size: var(--font-size-sm); color: var(--color-gray-400); }
+        .totals-box .total { display: flex; justify-content: space-between; font-size: var(--font-size-xl); font-weight: 700; margin-top: var(--spacing-3); padding-top: var(--spacing-3); border-top: 1px solid var(--color-gray-700); }
     </style>
 </head>
 <body>
     <!-- Offline Banner -->
     <div class="offline-banner" id="offlineBanner" role="alert">
-        You're offline. Changes will sync when you're back online.
+        <i class="ph ph-wifi-slash"></i> You're offline. Changes will sync when you're back online.
     </div>
 
     <!-- Toast Container -->
@@ -961,49 +706,35 @@
     <div class="auth-container" id="authScreen">
         <div class="auth-card">
             <div class="auth-logo">
-                <h1>⚡ InvoiceFast</h1>
+                <i class="ph ph-lightning"></i>
+                <h1>InvoiceFast</h1>
                 <p>Professional Invoicing for Kenyan Businesses</p>
             </div>
 
-            <!-- Login Form -->
             <form id="loginForm" novalidate>
                 <div class="form-group">
                     <label class="form-label" for="loginEmail">Email Address</label>
-                    <input 
-                        type="email" 
-                        id="loginEmail" 
-                        class="form-input" 
-                        placeholder="you@example.com"
-                        autocomplete="email"
-                        required
-                        aria-describedby="loginEmailError"
-                    >
-                    <p class="form-error" id="loginEmailError" role="alert"></p>
+                    <div style="position: relative;">
+                        <i class="ph ph-envelope" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--color-gray-400);"></i>
+                        <input type="email" id="loginEmail" class="form-input" placeholder="you@example.com" style="padding-left: 44px;" autocomplete="email" required>
+                    </div>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label" for="loginPassword">Password</label>
-                    <input 
-                        type="password" 
-                        id="loginPassword" 
-                        class="form-input" 
-                        placeholder="••••••••"
-                        autocomplete="current-password"
-                        required
-                        aria-describedby="loginPasswordError"
-                    >
-                    <p class="form-error" id="loginPasswordError" role="alert"></p>
+                    <div style="position: relative;">
+                        <i class="ph ph-lock" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--color-gray-400);"></i>
+                        <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" style="padding-left: 44px;" autocomplete="current-password" required>
+                    </div>
                 </div>
                 
-                <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
-                    Sign In
+                <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: var(--spacing-4);">
+                    <i class="ph ph-sign-in"></i> Sign In
                 </button>
             </form>
 
             <div class="auth-footer">
-                <p>Don't have an account? 
-                    <a href="#" id="showRegisterLink" aria-controls="registerModal">Sign up</a>
-                </p>
+                <p>Don't have an account? <a href="#" id="showRegisterLink" style="color: var(--color-primary); font-weight: 600;">Create one</a></p>
             </div>
         </div>
     </div>
@@ -1012,35 +743,35 @@
     <div class="modal-overlay" id="registerModal" role="dialog" aria-modal="true" aria-labelledby="registerTitle">
         <div class="modal">
             <div class="modal-header">
-                <h2 class="modal-title" id="registerTitle">Create Account</h2>
-                <button class="modal-close" id="closeRegister" aria-label="Close">&times;</button>
+                <h2 class="modal-title" id="registerTitle"><i class="ph ph-user-plus"></i> Create Account</h2>
+                <button class="modal-close" id="closeRegister" aria-label="Close"><i class="ph ph-x"></i></button>
             </div>
             <form id="registerForm" novalidate>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="form-label" for="regName">Full Name</label>
+                        <label class="form-label" for="regName"><i class="ph ph-user"></i> Full Name</label>
                         <input type="text" id="regName" class="form-input" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="regEmail">Email Address</label>
+                        <label class="form-label" for="regEmail"><i class="ph ph-envelope"></i> Email Address</label>
                         <input type="email" id="regEmail" class="form-input" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="regPassword">Password</label>
+                        <label class="form-label" for="regPassword"><i class="ph ph-lock"></i> Password</label>
                         <input type="password" id="regPassword" class="form-input" minlength="6" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="regCompany">Company Name (Optional)</label>
+                        <label class="form-label" for="regCompany"><i class="ph ph-buildings"></i> Company Name</label>
                         <input type="text" id="regCompany" class="form-input">
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="regPhone">Phone (for M-Pesa)</label>
+                        <label class="form-label" for="regPhone"><i class="ph ph-device-mobile"></i> Phone (for M-Pesa)</label>
                         <input type="tel" id="regPhone" class="form-input" placeholder="254712345678">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" id="cancelRegister">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Account</button>
+                    <button type="submit" class="btn btn-primary"><i class="ph ph-check"></i> Create Account</button>
                 </div>
             </form>
         </div>
@@ -1050,106 +781,102 @@
     <div class="app-layout" id="app">
         <!-- Sidebar -->
         <aside class="sidebar" role="navigation" aria-label="Main navigation">
-            <div class="sidebar-logo">⚡ InvoiceFast</div>
+            <div class="sidebar-logo">
+                <i class="ph ph-lightning"></i>
+                InvoiceFast
+            </div>
             
             <nav class="sidebar-nav">
-                <a class="nav-item active" data-page="dashboard" role="menuitem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                    Dashboard
+                <a class="nav-item active" data-page="dashboard">
+                    <i class="ph ph-squares-four"></i> Dashboard
                 </a>
-                <a class="nav-item" data-page="invoices" role="menuitem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                    Invoices
+                <a class="nav-item" data-page="invoices">
+                    <i class="ph ph-file-text"></i> Invoices
                 </a>
-                <a class="nav-item" data-page="clients" role="menuitem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    Clients
+                <a class="nav-item" data-page="clients">
+                    <i class="ph ph-users"></i> Clients
                 </a>
-                <a class="nav-item" data-page="payments" role="menuitem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                    Payments
+                <a class="nav-item" data-page="payments">
+                    <i class="ph ph-credit-card"></i> Payments
                 </a>
-                <a class="nav-item" data-page="settings" role="menuitem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    Settings
+                <a class="nav-item" data-page="settings">
+                    <i class="ph ph-gear"></i> Settings
                 </a>
             </nav>
             
-            <a class="nav-item" id="logoutBtn" role="menuitem">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Logout
+            <a class="nav-item" id="logoutBtn" style="margin-top: auto; color: var(--color-danger);">
+                <i class="ph ph-sign-out"></i> Logout
             </a>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content" role="main">
-            <!-- Header -->
             <header class="app-header">
                 <h1 class="page-title" id="pageTitle">Dashboard</h1>
-                <div class="user-menu">
-                    <div class="avatar" id="userAvatar" aria-label="User profile">U</div>
-                </div>
+                <div class="avatar" id="userAvatar" aria-label="User profile">U</div>
             </header>
 
             <!-- Dashboard Page -->
             <div class="page active" id="page-dashboard" role="region" aria-label="Dashboard">
                 <div class="stats-grid" role="region" aria-label="Statistics">
                     <div class="stat-card">
+                        <div class="stat-icon primary"><i class="ph ph-currency-kes"></i></div>
                         <div class="stat-label">Total Revenue</div>
                         <div class="stat-value success" id="statRevenue">KES 0</div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-icon warning"><i class="ph ph-clock"></i></div>
                         <div class="stat-label">Outstanding</div>
                         <div class="stat-value warning" id="statOutstanding">KES 0</div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-icon success"><i class="ph ph-trend-up"></i></div>
                         <div class="stat-label">This Month</div>
                         <div class="stat-value" id="statThisMonth">KES 0</div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-icon primary"><i class="ph ph-file-text"></i></div>
                         <div class="stat-label">Total Invoices</div>
                         <div class="stat-value" id="statTotalInvoices">0</div>
                     </div>
                 </div>
 
                 <div class="quick-actions" role="region" aria-label="Quick actions">
-                    <button class="quick-action" data-action="new-invoice" aria-label="Create new invoice">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <button class="quick-action" data-action="new-invoice">
+                        <i class="ph ph-plus-circle"></i>
                         <span>New Invoice</span>
                     </button>
-                    <button class="quick-action" data-action="add-client" aria-label="Add new client">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                    <button class="quick-action" data-action="add-client">
+                        <i class="ph ph-user-plus"></i>
                         <span>Add Client</span>
                     </button>
-                    <button class="quick-action" data-action="view-invoices" aria-label="View all invoices">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                        <span>View Invoices</span>
+                    <button class="quick-action" data-action="view-invoices">
+                        <i class="ph ph-files"></i>
+                        <span>View All</span>
                     </button>
-                    <button class="quick-action" data-action="payments" aria-label="View payments">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                        <span>Payments</span>
+                    <button class="quick-action" data-action="payments">
+                        <i class="ph ph-chart-line"></i>
+                        <span>Reports</span>
                     </button>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">Recent Invoices</h2>
+                        <h2 class="card-title"><i class="ph ph-clock-counter-clockwise"></i> Recent Invoices</h2>
                         <button class="btn btn-secondary btn-sm" data-action="view-all-invoices">View All</button>
                     </div>
                     <div class="table-wrapper">
                         <table class="table" role="table">
                             <thead>
                                 <tr>
-                                    <th scope="col">Invoice</th>
-                                    <th scope="col">Client</th>
-                                    <th scope="col">Amount</th>
-                                    <th scope="col">Status</th>
+                                    <th>Invoice</th>
+                                    <th>Client</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="recentInvoicesTable">
-                                <tr>
-                                    <td colspan="4"><div class="spinner" style="margin: 20px auto;"></div></td>
-                                </tr>
+                                <tr><td colspan="4"><div class="spinner" style="margin: 20px auto;"></div></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1160,25 +887,23 @@
             <div class="page" id="page-invoices" role="region" aria-label="Invoices">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">All Invoices</h2>
-                        <button class="btn btn-primary btn-sm" data-action="new-invoice">+ New Invoice</button>
+                        <h2 class="card-title"><i class="ph ph-files"></i> All Invoices</h2>
+                        <button class="btn btn-primary btn-sm" data-action="new-invoice"><i class="ph ph-plus"></i> New Invoice</button>
                     </div>
                     <div class="table-wrapper">
                         <table class="table" role="table">
                             <thead>
                                 <tr>
-                                    <th scope="col">Invoice #</th>
-                                    <th scope="col">Client</th>
-                                    <th scope="col">Amount</th>
-                                    <th scope="col">Due Date</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Action</th>
+                                    <th>Invoice #</th>
+                                    <th>Client</th>
+                                    <th>Amount</th>
+                                    <th>Due Date</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="allInvoicesTable">
-                                <tr>
-                                    <td colspan="6"><div class="spinner" style="margin: 20px auto;"></div></td>
-                                </tr>
+                                <tr><td colspan="6"><div class="spinner" style="margin: 20px auto;"></div></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1189,13 +914,11 @@
             <div class="page" id="page-clients" role="region" aria-label="Clients">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">Clients</h2>
-                        <button class="btn btn-primary btn-sm" data-action="add-client">+ Add Client</button>
+                        <h2 class="card-title"><i class="ph ph-users"></i> Clients</h2>
+                        <button class="btn btn-primary btn-sm" data-action="add-client"><i class="ph ph-plus"></i> Add Client</button>
                     </div>
-                    <div id="clientsList" role="list">
-                        <div class="empty-state">
-                            <div class="spinner"></div>
-                        </div>
+                    <div id="clientsList" role="list" style="padding: var(--spacing-4);">
+                        <div class="empty-state"><div class="spinner"></div></div>
                     </div>
                 </div>
             </div>
@@ -1204,23 +927,21 @@
             <div class="page" id="page-payments" role="region" aria-label="Payments">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">Payment History</h2>
+                        <h2 class="card-title"><i class="ph ph-credit-card"></i> Payment History</h2>
                     </div>
                     <div class="table-wrapper">
                         <table class="table" role="table">
                             <thead>
                                 <tr>
-                                    <th scope="col">Date</th>
-                                    <th scope="col">Invoice</th>
-                                    <th scope="col">Amount</th>
-                                    <th scope="col">Method</th>
-                                    <th scope="col">Status</th>
+                                    <th>Date</th>
+                                    <th>Invoice</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="paymentsTable">
-                                <tr>
-                                    <td colspan="5"><div class="spinner" style="margin: 20px auto;"></div></td>
-                                </tr>
+                                <tr><td colspan="5"><div class="spinner" style="margin: 20px auto;"></div></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1231,30 +952,26 @@
             <div class="page" id="page-settings" role="region" aria-label="Settings">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">Profile Settings</h2>
+                        <h2 class="card-title"><i class="ph ph-gear"></i> Profile Settings</h2>
                     </div>
                     <form id="settingsForm" class="card-body">
                         <div class="form-group">
-                            <label class="form-label" for="settingsCompany">Company Name</label>
+                            <label class="form-label" for="settingsCompany"><i class="ph ph-buildings"></i> Company Name</label>
                             <input type="text" id="settingsCompany" class="form-input">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="settingsEmail">Email</label>
+                            <label class="form-label" for="settingsEmail"><i class="ph ph-envelope"></i> Email</label>
                             <input type="email" id="settingsEmail" class="form-input" disabled>
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="settingsPhone">Phone</label>
+                            <label class="form-label" for="settingsPhone"><i class="ph ph-device-mobile"></i> Phone</label>
                             <input type="tel" id="settingsPhone" class="form-input">
                         </div>
                         <div class="form-group">
-                            <label class="form-label" for="settingsKRAPIN">KRA PIN</label>
+                            <label class="form-label" for="settingsKRAPIN"><i class="ph ph-identification-card"></i> KRA PIN</label>
                             <input type="text" id="settingsKRAPIN" class="form-input">
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="settingsColor">Brand Color</label>
-                            <input type="color" id="settingsColor" class="form-input" value="#2563eb" style="height: 48px; padding: 4px;">
-                        </div>
-                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <button type="submit" class="btn btn-primary"><i class="ph ph-check"></i> Save Changes</button>
                     </form>
                 </div>
             </div>
@@ -1262,29 +979,27 @@
 
         <!-- Mobile Bottom Nav -->
         <nav class="mobile-nav" role="navigation" aria-label="Mobile navigation">
-            <button class="mobile-nav-item active" data-page="dashboard" aria-label="Dashboard">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                <span>Dashboard</span>
+            <button class="mobile-nav-item active" data-page="dashboard">
+                <i class="ph ph-squares-four"></i>
+                <span>Home</span>
             </button>
-            <button class="mobile-nav-item" data-page="invoices" aria-label="Invoices">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+            <button class="mobile-nav-item" data-page="invoices">
+                <i class="ph ph-file-text"></i>
                 <span>Invoices</span>
             </button>
-            <button class="mobile-nav-item" data-page="clients" aria-label="Clients">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <button class="mobile-nav-item" data-page="clients">
+                <i class="ph ph-users"></i>
                 <span>Clients</span>
             </button>
-            <button class="mobile-nav-item" data-page="settings" aria-label="Settings">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>
+            <button class="mobile-nav-item" data-page="settings">
+                <i class="ph ph-gear"></i>
                 <span>Settings</span>
             </button>
         </nav>
 
         <!-- FAB -->
         <button class="fab" id="fabBtn" aria-label="Create new invoice">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+            <i class="ph ph-plus"></i>
         </button>
     </div>
 
@@ -1292,56 +1007,61 @@
     
     <!-- Invoice Modal -->
     <div class="modal-overlay" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle">
-        <div class="modal" style="max-width: 600px;">
+        <div class="modal" style="max-width: 650px;">
             <div class="modal-header">
-                <h2 class="modal-title" id="invoiceModalTitle">New Invoice</h2>
-                <button class="modal-close" id="closeInvoiceModal" aria-label="Close">&times;</button>
+                <h2 class="modal-title" id="invoiceModalTitle"><i class="ph ph-file-text"></i> New Invoice</h2>
+                <button class="modal-close" id="closeInvoiceModal" aria-label="Close"><i class="ph ph-x"></i></button>
             </div>
             <form id="invoiceForm" novalidate>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="form-label" for="invoiceClient">Client</label>
+                        <label class="form-label" for="invoiceClient"><i class="ph ph-user"></i> Client</label>
                         <select id="invoiceClient" class="form-select" required>
                             <option value="">Select Client</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" for="invoiceDueDate">Due Date</label>
-                        <input type="date" id="invoiceDueDate" class="form-input" required>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4);">
                         <div class="form-group">
-                            <label class="form-label" for="invoiceCurrency">Currency</label>
+                            <label class="form-label" for="invoiceDueDate"><i class="ph ph-calendar"></i> Due Date</label>
+                            <input type="date" id="invoiceDueDate" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="invoiceCurrency"><i class="ph ph-currency-kes"></i> Currency</label>
                             <select id="invoiceCurrency" class="form-select">
                                 <option value="KES">KES - Kenyan Shilling</option>
                                 <option value="USD">USD - US Dollar</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="invoiceTaxRate">Tax Rate (%)</label>
-                            <input type="number" id="invoiceTaxRate" class="form-input" value="16" min="0" max="100">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="invoiceNotes">Notes</label>
-                        <textarea id="invoiceNotes" class="form-textarea" rows="2"></textarea>
                     </div>
                     
-                    <div style="margin: 20px 0;">
-                        <label class="form-label">Items</label>
-                        <div id="invoiceItems" role="list"></div>
-                        <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 8px;" id="addInvoiceItem">+ Add Item</button>
+                    <div class="form-group">
+                        <label class="form-label" for="invoiceTaxRate"><i class="ph ph-percent"></i> Tax Rate (%)</label>
+                        <input type="number" id="invoiceTaxRate" class="form-input" value="16" min="0" max="100" style="max-width: 150px;">
                     </div>
-
-                    <div style="background: var(--color-gray-50); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Subtotal:</span><span id="invoiceSubtotal">KES 0</span></div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span>Tax:</span><span id="invoiceTax">KES 0</span></div>
-                        <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 18px;"><span>Total:</span><span id="invoiceTotal">KES 0</span></div>
+                    
+                    <div class="form-group">
+                        <label class="form-label"><i class="ph ph-list"></i> Items</label>
+                        <div id="invoiceItems"></div>
+                        <button type="button" class="btn btn-secondary btn-sm" style="margin-top: var(--spacing-2);" id="addInvoiceItem">
+                            <i class="ph ph-plus"></i> Add Item
+                        </button>
+                    </div>
+                    
+                    <div class="totals-box">
+                        <div class="row"><span>Subtotal</span><span id="invoiceSubtotal">KES 0</span></div>
+                        <div class="row"><span>Tax (<span id="taxRateDisplay">16</span>%)</span><span id="invoiceTax">KES 0</span></div>
+                        <div class="total"><span>Total</span><span id="invoiceTotal">KES 0</span></div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: var(--spacing-4);">
+                        <label class="form-label" for="invoiceNotes"><i class="ph ph-note"></i> Notes</label>
+                        <textarea id="invoiceNotes" class="form-textarea" rows="2" placeholder="Payment instructions, terms, etc."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" id="cancelInvoiceModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Invoice</button>
+                    <button type="submit" class="btn btn-primary"><i class="ph ph-check"></i> Create Invoice</button>
                 </div>
             </form>
         </div>
@@ -1351,39 +1071,35 @@
     <div class="modal-overlay" id="clientModal" role="dialog" aria-modal="true" aria-labelledby="clientModalTitle">
         <div class="modal">
             <div class="modal-header">
-                <h2 class="modal-title" id="clientModalTitle">Add Client</h2>
-                <button class="modal-close" id="closeClientModal" aria-label="Close">&times;</button>
+                <h2 class="modal-title" id="clientModalTitle"><i class="ph ph-user-plus"></i> Add Client</h2>
+                <button class="modal-close" id="closeClientModal" aria-label="Close"><i class="ph ph-x"></i></button>
             </div>
             <form id="clientForm" novalidate>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="form-label" for="clientName">Client Name</label>
+                        <label class="form-label" for="clientName"><i class="ph ph-user"></i> Client Name</label>
                         <input type="text" id="clientName" class="form-input" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="clientEmail">Email</label>
+                        <label class="form-label" for="clientEmail"><i class="ph ph-envelope"></i> Email</label>
                         <input type="email" id="clientEmail" class="form-input">
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="clientPhone">Phone</label>
+                        <label class="form-label" for="clientPhone"><i class="ph ph-device-mobile"></i> Phone</label>
                         <input type="tel" id="clientPhone" class="form-input" placeholder="254712345678">
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="clientAddress">Address</label>
+                        <label class="form-label" for="clientAddress"><i class="ph ph-map-pin"></i> Address</label>
                         <textarea id="clientAddress" class="form-textarea" rows="2"></textarea>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" for="clientKRAPIN">KRA PIN (Optional)</label>
+                        <label class="form-label" for="clientKRAPIN"><i class="ph ph-identification-card"></i> KRA PIN</label>
                         <input type="text" id="clientKRAPIN" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="clientPaymentTerms">Payment Terms (days)</label>
-                        <input type="number" id="clientPaymentTerms" class="form-input" value="30">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" id="cancelClientModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Client</button>
+                    <button type="submit" class="btn btn-primary"><i class="ph ph-check"></i> Add Client</button>
                 </div>
             </form>
         </div>
@@ -1393,8 +1109,8 @@
     <div class="modal-overlay" id="publicInvoiceModal" role="dialog" aria-modal="true">
         <div class="modal" style="max-width: 600px;">
             <div class="modal-header">
-                <h2 class="modal-title">Invoice</h2>
-                <button class="modal-close" id="closePublicInvoice" aria-label="Close">&times;</button>
+                <h2 class="modal-title"><i class="ph ph-file-text"></i> Invoice Details</h2>
+                <button class="modal-close" id="closePublicInvoice" aria-label="Close"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body" id="publicInvoiceContent">
                 <div class="spinner" style="margin: 40px auto;"></div>
@@ -1417,7 +1133,6 @@
 
         // ==================== INIT ====================
         document.addEventListener('DOMContentLoaded', () => {
-            // Check auth
             if (state.token) {
                 showApp();
                 loadDashboard();
@@ -1425,20 +1140,14 @@
                 showAuth();
             }
             
-            // Online/offline detection
             window.addEventListener('online', hideOfflineBanner);
             window.addEventListener('offline', showOfflineBanner);
-            
-            // Setup navigation
             setupNavigation();
-            
-            // Setup forms
             setupForms();
         });
 
         // ==================== NAVIGATION ====================
         function setupNavigation() {
-            // Sidebar nav
             document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -1447,7 +1156,6 @@
                 });
             });
 
-            // Mobile nav
             document.querySelectorAll('.mobile-nav-item').forEach(item => {
                 item.addEventListener('click', () => {
                     const page = item.dataset.page;
@@ -1455,45 +1163,31 @@
                 });
             });
 
-            // Quick actions
             document.querySelectorAll('.quick-action').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const action = btn.dataset.action;
-                    handleQuickAction(action);
-                });
+                btn.addEventListener('click', () => handleQuickAction(btn.dataset.action));
             });
 
-            // FAB
             document.getElementById('fabBtn').addEventListener('click', () => showInvoiceModal());
-
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', logout);
         }
 
         function navigateTo(page) {
             state.currentPage = page;
             
-            // Update sidebar nav
             document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
                 item.classList.toggle('active', item.dataset.page === page);
             });
 
-            // Update mobile nav
             document.querySelectorAll('.mobile-nav-item').forEach(item => {
                 item.classList.toggle('active', item.dataset.page === page);
             });
 
-            // Update pages
-            document.querySelectorAll('.page').forEach(p => {
-                p.classList.remove('active');
-            });
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.getElementById('page-' + page)?.classList.add('active');
 
-            // Update title
             const titles = { dashboard: 'Dashboard', invoices: 'Invoices', clients: 'Clients', payments: 'Payments', settings: 'Settings' };
             document.getElementById('pageTitle').textContent = titles[page] || page;
 
-            // Load data
             if (page === 'dashboard') loadDashboard();
             else if (page === 'invoices') loadInvoices();
             else if (page === 'clients') loadClients();
@@ -1597,20 +1291,10 @@
 
         // ==================== API ====================
         async function apiCall(endpoint, options = {}) {
-            const headers = {
-                'Content-Type': 'application/json',
-                ...options.headers
-            };
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
+            if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
 
-            if (state.token) {
-                headers['Authorization'] = 'Bearer ' + state.token;
-            }
-
-            const res = await fetch(API_BASE + endpoint, {
-                ...options,
-                headers
-            });
-
+            const res = await fetch(API_BASE + endpoint, { ...options, headers });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error?.message || 'API error');
             return data;
@@ -1637,7 +1321,7 @@
                         </tr>
                     `).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No invoices yet</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><i class="ph ph-file-x"></i><h3>No invoices yet</h3><p>Create your first invoice to get started</p></td></tr>';
                 }
             } catch (err) {
                 showToast('Failed to load dashboard', 'error');
@@ -1658,11 +1342,11 @@
                             <td class="amount">${formatCurrency(inv.total)}</td>
                             <td>${inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '-'}</td>
                             <td><span class="badge badge-${inv.status}">${inv.status}</span></td>
-                            <td><button class="btn btn-secondary btn-sm" onclick="viewInvoice('${inv.id}')">View</button></td>
+                            <td><button class="btn btn-secondary btn-sm" onclick="viewInvoice('${inv.id}')"><i class="ph ph-eye"></i></button></td>
                         </tr>
                     `).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No invoices yet</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="ph ph-file-x"></i><h3>No invoices</h3></td></tr>';
                 }
             } catch (err) {
                 showToast('Failed to load invoices', 'error');
@@ -1677,19 +1361,17 @@
                 const container = document.getElementById('clientsList');
                 if (state.clients.length > 0) {
                     container.innerHTML = state.clients.map(c => `
-                        <div class="list-item" role="listitem" data-client-id="${c.id}">
+                        <div class="list-item" role="listitem" data-client-id="${c.id}" style="margin-bottom: var(--spacing-3);">
                             <div class="avatar avatar-sm">${c.name.charAt(0).toUpperCase()}</div>
                             <div class="list-item-content">
                                 <div class="list-item-title">${c.name}</div>
                                 <div class="list-item-subtitle">${c.email || c.phone || '-'}</div>
                             </div>
-                            <div class="list-item-meta">
-                                <div class="amount">${formatCurrency(c.total_billed || 0)}</div>
-                            </div>
+                            <div class="amount" style="color: var(--color-primary);">${formatCurrency(c.total_billed || 0)}</div>
                         </div>
                     `).join('');
                 } else {
-                    container.innerHTML = '<div class="empty-state"><h3>No clients yet</h3><p>Add your first client to get started</p></div>';
+                    container.innerHTML = '<div class="empty-state"><i class="ph ph-users"></i><h3>No clients yet</h3><p>Add your first client to get started</p></div>';
                 }
             } catch (err) {
                 showToast('Failed to load clients', 'error');
@@ -1702,9 +1384,7 @@
                 const payments = [];
                 
                 (invoices.data || []).forEach(inv => {
-                    (inv.payments || []).forEach(p => {
-                        payments.push({ ...p, invoice: inv });
-                    });
+                    (inv.payments || []).forEach(p => payments.push({ ...p, invoice: inv }));
                 });
 
                 const tbody = document.getElementById('paymentsTable');
@@ -1714,12 +1394,12 @@
                             <td>${p.completed_at ? new Date(p.completed_at).toLocaleDateString() : '-'}</td>
                             <td>${p.invoice?.invoice_number || '-'}</td>
                             <td class="amount">${formatCurrency(p.amount)}</td>
-                            <td>${p.method}</td>
+                            <td><span class="badge badge-sent">${p.method}</span></td>
                             <td><span class="badge badge-${p.status === 'completed' ? 'paid' : 'pending'}">${p.status}</span></td>
                         </tr>
                     `).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No payments yet</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><i class="ph ph-receipt"></i><h3>No payments</h3></td></tr>';
                 }
             } catch (err) {
                 showToast('Failed to load payments', 'error');
@@ -1732,7 +1412,6 @@
                 document.getElementById('settingsEmail').value = state.user.email || '';
                 document.getElementById('settingsPhone').value = state.user.phone || '';
                 document.getElementById('settingsKRAPIN').value = state.user.kra_pin || '';
-                document.getElementById('settingsColor').value = state.user.brand_color || '#2563eb';
             }
         }
 
@@ -1742,14 +1421,12 @@
                 const select = document.getElementById('invoiceClient');
                 select.innerHTML = '<option value="">Select Client</option>' + 
                     (data.data || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         // ==================== MODALS ====================
         function showInvoiceModal() {
-            document.getElementById('invoiceModalTitle').textContent = 'New Invoice';
+            document.getElementById('invoiceModalTitle').innerHTML = '<i class="ph ph-file-text"></i> New Invoice';
             document.getElementById('invoiceForm').reset();
             document.getElementById('invoiceDueDate').value = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
             loadClientsForSelect();
@@ -1758,65 +1435,39 @@
             document.getElementById('invoiceModal').classList.add('active');
         }
 
-        function closeInvoiceModal() {
-            document.getElementById('invoiceModal').classList.remove('active');
-        }
-
-        function showClientModal() {
-            document.getElementById('clientForm').reset();
-            document.getElementById('clientModal').classList.add('active');
-        }
-
-        function closeClientModal() {
-            document.getElementById('clientModal').classList.remove('active');
-        }
-
-        function closeRegisterModal() {
-            document.getElementById('registerModal').classList.remove('active');
-        }
-
-        function closePublicInvoiceModal() {
-            document.getElementById('publicInvoiceModal').classList.remove('active');
-        }
+        function closeInvoiceModal() { document.getElementById('invoiceModal').classList.remove('active'); }
+        function showClientModal() { document.getElementById('clientForm').reset(); document.getElementById('clientModal').classList.add('active'); }
+        function closeClientModal() { document.getElementById('clientModal').classList.remove('active'); }
+        function closeRegisterModal() { document.getElementById('registerModal').classList.remove('active'); }
+        function closePublicInvoiceModal() { document.getElementById('publicInvoiceModal').classList.remove('active'); }
 
         // ==================== INVOICE ITEMS ====================
         function renderInvoiceItems() {
             const container = document.getElementById('invoiceItems');
-            container.innerHTML = `
-                <div class="list-item" style="margin-bottom: 8px; cursor: default;">
-                    <input type="text" class="form-input item-desc" placeholder="Description" style="flex: 2;" required>
-                    <input type="number" class="form-input item-qty" placeholder="Qty" style="width: 60px;" value="1" min="1">
-                    <input type="number" class="form-input item-price" placeholder="Price" style="width: 100px;" required>
-                    <button type="button" class="btn btn-danger btn-icon" onclick="this.parentElement.remove(); calculateTotals();" aria-label="Remove item">&times;</button>
+            container.innerHTML = createInvoiceItemRow();
+            container.querySelectorAll('input').forEach(input => input.addEventListener('input', calculateTotals));
+        }
+
+        function createInvoiceItemRow() {
+            return `
+                <div class="invoice-item">
+                    <input type="text" class="form-input item-desc" placeholder="Description" required>
+                    <input type="number" class="form-input item-qty" placeholder="Qty" value="1" min="1" style="width: 70px;">
+                    <input type="number" class="form-input item-price" placeholder="Price" required style="width: 120px;">
+                    <button type="button" class="btn btn-danger btn-icon" onclick="this.parentElement.remove(); calculateTotals();"><i class="ph ph-trash"></i></button>
                 </div>
             `;
-            
-            container.querySelectorAll('input').forEach(input => {
-                input.addEventListener('input', calculateTotals);
-            });
         }
 
         document.getElementById('addInvoiceItem')?.addEventListener('click', () => {
             const container = document.getElementById('invoiceItems');
-            const div = document.createElement('div');
-            div.className = 'list-item';
-            div.style.marginBottom = '8px';
-            div.style.cursor = 'default';
-            div.innerHTML = `
-                <input type="text" class="form-input item-desc" placeholder="Description" style="flex: 2;" required>
-                <input type="number" class="form-input item-qty" placeholder="Qty" style="width: 60px;" value="1" min="1">
-                <input type="number" class="form-input item-price" placeholder="Price" style="width: 100px;" required>
-                <button type="button" class="btn btn-danger btn-icon" onclick="this.parentElement.remove(); calculateTotals();" aria-label="Remove item">&times;</button>
-            `;
-            container.appendChild(div);
-            div.querySelectorAll('input').forEach(input => {
-                input.addEventListener('input', calculateTotals);
-            });
+            container.insertAdjacentHTML('beforeend', createInvoiceItemRow());
+            container.lastElementChild.querySelectorAll('input').forEach(input => input.addEventListener('input', calculateTotals));
         });
 
         function calculateTotals() {
             let subtotal = 0;
-            document.querySelectorAll('#invoiceItems .list-item').forEach(row => {
+            document.querySelectorAll('#invoiceItems .invoice-item').forEach(row => {
                 const qty = parseFloat(row.querySelector('.item-qty')?.value) || 0;
                 const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
                 subtotal += qty * price;
@@ -1826,12 +1477,13 @@
             const tax = subtotal * (taxRate / 100);
             const total = subtotal + tax;
 
+            document.getElementById('taxRateDisplay').textContent = taxRate;
             document.getElementById('invoiceSubtotal').textContent = formatCurrency(subtotal);
             document.getElementById('invoiceTax').textContent = formatCurrency(tax);
             document.getElementById('invoiceTotal').textContent = formatCurrency(total);
         }
 
-        // ==================== FORM SUBMISSIONS ====================
+        // ==================== FORMS ====================
         function setupForms() {
             document.getElementById('loginForm').addEventListener('submit', handleLogin);
             document.getElementById('registerForm').addEventListener('submit', handleRegister);
@@ -1839,11 +1491,7 @@
             document.getElementById('clientForm').addEventListener('submit', handleClientSubmit);
             document.getElementById('settingsForm').addEventListener('submit', handleSettingsSubmit);
 
-            // Modal close buttons
-            document.getElementById('showRegisterLink')?.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.getElementById('registerModal').classList.add('active');
-            });
+            document.getElementById('showRegisterLink')?.addEventListener('click', (e) => { e.preventDefault(); document.getElementById('registerModal').classList.add('active'); });
             document.getElementById('closeRegister')?.addEventListener('click', closeRegisterModal);
             document.getElementById('cancelRegister')?.addEventListener('click', closeRegisterModal);
             document.getElementById('closeInvoiceModal')?.addEventListener('click', closeInvoiceModal);
@@ -1852,16 +1500,10 @@
             document.getElementById('cancelClientModal')?.addEventListener('click', closeClientModal);
             document.getElementById('closePublicInvoice')?.addEventListener('click', closePublicInvoiceModal);
 
-            // Close modals on overlay click
             document.querySelectorAll('.modal-overlay').forEach(overlay => {
-                overlay.addEventListener('click', (e) => {
-                    if (e.target === overlay) {
-                        overlay.classList.remove('active');
-                    }
-                });
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('active'); });
             });
 
-            // Tax rate change
             document.getElementById('invoiceTaxRate')?.addEventListener('input', calculateTotals);
         }
 
@@ -1869,7 +1511,7 @@
             e.preventDefault();
             
             const items = [];
-            document.querySelectorAll('#invoiceItems .list-item').forEach(row => {
+            document.querySelectorAll('#invoiceItems .invoice-item').forEach(row => {
                 items.push({
                     description: row.querySelector('.item-desc').value,
                     quantity: parseFloat(row.querySelector('.item-qty').value) || 1,
@@ -1888,7 +1530,7 @@
 
             try {
                 await apiCall('/invoices', { method: 'POST', body: JSON.stringify(req) });
-                showToast('Invoice created!', 'success');
+                showToast('Invoice created successfully!', 'success');
                 closeInvoiceModal();
                 navigateTo('invoices');
             } catch (err) {
@@ -1905,12 +1547,12 @@
                 phone: document.getElementById('clientPhone').value,
                 address: document.getElementById('clientAddress').value,
                 kra_pin: document.getElementById('clientKRAPIN').value,
-                payment_terms: parseInt(document.getElementById('clientPaymentTerms').value) || 30
+                payment_terms: 30
             };
 
             try {
                 await apiCall('/clients', { method: 'POST', body: JSON.stringify(req) });
-                showToast('Client added!', 'success');
+                showToast('Client added successfully!', 'success');
                 closeClientModal();
                 loadClients();
             } catch (err) {
@@ -1946,9 +1588,10 @@
 
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
+            const icons = { success: 'ph-check-circle', error: 'ph-x-circle', warning: 'ph-warning', info: 'ph-info' };
             const toast = document.createElement('div');
             toast.className = `toast toast-${type}`;
-            toast.textContent = message;
+            toast.innerHTML = `<i class="ph ${icons[type]}"></i><span>${message}</span>`;
             toast.setAttribute('role', 'alert');
             container.appendChild(toast);
             
@@ -1960,32 +1603,27 @@
             }, 5000);
         }
 
-        function showOfflineBanner() {
-            document.getElementById('offlineBanner').classList.add('show');
-        }
+        function showOfflineBanner() { document.getElementById('offlineBanner').classList.add('show'); }
+        function hideOfflineBanner() { document.getElementById('offlineBanner').classList.remove('show'); }
 
-        function hideOfflineBanner() {
-            document.getElementById('offlineBanner').classList.remove('show');
-        }
-
-        // Make viewInvoice globally accessible
+        // ==================== INVOICE VIEW ====================
         window.viewInvoice = async function(id) {
             try {
                 const inv = await apiCall('/invoices/' + id);
                 
                 const content = document.getElementById('publicInvoiceContent');
                 content.innerHTML = `
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <h3>${inv.data.invoice_number}</h3>
-                        <span class="badge badge-${inv.data.status}">${inv.data.status}</span>
+                    <div style="text-align: center; margin-bottom: 24px;">
+                        <h3 style="font-size: 1.5rem; margin-bottom: 8px;">${inv.data.invoice_number}</h3>
+                        <span class="badge badge-${inv.data.status}" style="font-size: 14px; padding: 6px 16px;">${inv.data.status}</span>
                     </div>
                     
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 24px; padding: 16px; background: var(--color-gray-50); border-radius: 12px;">
                         <div><strong>From:</strong><br>${inv.data.user?.company_name || 'Your Company'}</div>
                         <div style="text-align: right;"><strong>To:</strong><br>${inv.data.client?.name || '-'}</div>
                     </div>
                     
-                    <table class="table" style="margin-bottom: 20px;">
+                    <table class="table" style="margin-bottom: 24px;">
                         <thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Total</th></tr></thead>
                         <tbody>
                             ${(inv.data.items || []).map(item => `
@@ -1994,16 +1632,16 @@
                         </tbody>
                     </table>
                     
-                    <div style="text-align: right; margin-bottom: 20px;">
-                        <div>Subtotal: ${formatCurrency(inv.data.subtotal)}</div>
-                        <div>Tax (${inv.data.tax_rate}%): ${formatCurrency(inv.data.tax_amount)}</div>
-                        <div style="font-size: 20px; font-weight: bold;">Total: ${formatCurrency(inv.data.total)}</div>
+                    <div class="totals-box" style="text-align: right; margin-bottom: 24px;">
+                        <div class="row"><span>Subtotal</span><span>${formatCurrency(inv.data.subtotal)}</span></div>
+                        <div class="row"><span>Tax (${inv.data.tax_rate}%)</span><span>${formatCurrency(inv.data.tax_amount)}</span></div>
+                        <div class="total"><span>Total</span><span>${formatCurrency(inv.data.total)}</span></div>
                     </div>
                     
                     ${inv.data.status !== 'paid' ? `
                         <div class="payment-section">
                             <div class="payment-amount">${formatCurrency(inv.data.total)}</div>
-                            <button class="btn btn-success btn-lg" onclick="payInvoice('${id}')">Pay with M-Pesa</button>
+                            <button class="btn btn-success btn-lg" onclick="payInvoice('${id}')"><i class="ph ph-credit-card"></i> Pay with M-Pesa</button>
                         </div>
                     ` : ''}
                 `;
