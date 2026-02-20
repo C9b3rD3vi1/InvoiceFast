@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Invoice - InvoiceFast</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web@2.0.3"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #0a0a0f;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .invoice-container {
+            max-width: 700px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+        }
+
+        .invoice-header {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            padding: 2.5rem;
+            color: white;
+        }
+
+        .invoice-header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2rem;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 800;
+        }
+
+        .brand i { color: #6366f1; }
+
+        .invoice-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .invoice-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .invoice-status.paid {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .invoice-status.sent {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .invoice-status.draft {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .invoice-status.overdue {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .invoice-parties {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .party h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 0.5rem;
+        }
+
+        .party p {
+            color: white;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .invoice-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .detail-item h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 0.25rem;
+        }
+
+        .detail-item p {
+            color: white;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .invoice-body {
+            padding: 2.5rem;
+        }
+
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+        }
+
+        .items-table th {
+            text-align: left;
+            padding: 1rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748b;
+            border-bottom: 2px solid #f1f5f9;
+        }
+
+        .items-table th:last-child {
+            text-align: right;
+        }
+
+        .items-table td {
+            padding: 1rem;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+
+        .items-table td:last-child {
+            text-align: right;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+        }
+
+        .items-table .qty {
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+
+        .invoice-totals {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .totals-box {
+            width: 280px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            color: #64748b;
+        }
+
+        .total-row.final {
+            border-top: 2px solid #334155;
+            margin-top: 0.5rem;
+            padding-top: 1rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .invoice-notes {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+
+        .invoice-notes h4 {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .invoice-notes p {
+            color: #334155;
+            font-size: 0.9375rem;
+            line-height: 1.6;
+        }
+
+        .invoice-actions {
+            padding: 2rem 2.5rem;
+            background: #f8fafc;
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.875rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            font-family: inherit;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #f1f5f9;
+        }
+
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: #64748b;
+        }
+
+        .loading i {
+            font-size: 3rem;
+            color: #6366f1;
+            margin-bottom: 1rem;
+        }
+
+        .error {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .error i {
+            font-size: 4rem;
+            color: #ef4444;
+            margin-bottom: 1rem;
+        }
+
+        .error h2 {
+            color: #334155;
+            margin-bottom: 0.5rem;
+        }
+
+        .error p {
+            color: #64748b;
+        }
+
+        .powered-by {
+            text-align: center;
+            padding: 1.5rem;
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+
+        .powered-by a {
+            color: #6366f1;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        @media (max-width: 600px) {
+            .invoice-parties { grid-template-columns: 1fr; }
+            .invoice-details { grid-template-columns: 1fr; }
+            .invoice-actions { flex-direction: column; }
+            .invoice-actions .btn { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">
+            <i class="ph ph-spinner ph-spin"></i>
+            <p>Loading invoice...</p>
+        </div>
+    </div>
+
+    <script>
+        // Get token from URL
+        const token = window.location.pathname.split('/invoice/')[1];
+
+        async function loadInvoice() {
+            try {
+                const res = await fetch('/api/v1/invoice/' + token);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showError();
+                    return;
+                }
+
+                const inv = data.data;
+                const isPaid = inv.status === 'paid';
+                const currency = inv.currency || 'KES';
+
+                document.getElementById('app').innerHTML = `
+                    <div class="invoice-container">
+                        <div class="invoice-header">
+                            <div class="invoice-header-top">
+                                <div class="brand">
+                                    <i class="ph ph-lightning"></i>
+                                    InvoiceFast
+                                </div>
+                                <div class="invoice-status ${inv.status}">
+                                    <i class="ph ${isPaid ? 'ph-check-circle' : 'ph-clock'}"></i>
+                                    ${inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                                </div>
+                            </div>
+                            <div class="invoice-number">${inv.invoice_number}</div>
+                            
+                            <div class="invoice-parties">
+                                <div class="party">
+                                    <h4>From</h4>
+                                    <p>
+                                        <strong>${inv.user?.company_name || 'Your Company'}</strong><br>
+                                        ${inv.user?.email || ''}
+                                    </p>
+                                </div>
+                                <div class="party">
+                                    <h4>Bill To</h4>
+                                    <p>
+                                        <strong>${inv.client?.name || 'Client'}</strong><br>
+                                        ${inv.client?.email || ''}<br>
+                                        ${inv.client?.phone || ''}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="invoice-details">
+                                <div class="detail-item">
+                                    <h4>Issue Date</h4>
+                                    <p>${new Date(inv.created_at).toLocaleDateString()}</p>
+                                </div>
+                                <div class="detail-item">
+                                    <h4>Due Date</h4>
+                                    <p>${new Date(inv.due_date).toLocaleDateString()}</p>
+                                </div>
+                                <div class="detail-item">
+                                    <h4>Amount Due</h4>
+                                    <p>${currency} ${inv.total?.toLocaleString() || '0'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="invoice-body">
+                            <table class="items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th>Qty</th>
+                                        <th>Price</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(inv.items || []).map(item => `
+                                        <tr>
+                                            <td>${item.description}</td>
+                                            <td class="qty">${item.quantity}</td>
+                                            <td>${currency} ${item.unit_price?.toLocaleString() || '0'}</td>
+                                            <td>${currency} ${item.total?.toLocaleString() || '0'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+
+                            <div class="invoice-totals">
+                                <div class="totals-box">
+                                    <div class="total-row">
+                                        <span>Subtotal</span>
+                                        <span>${currency} ${inv.subtotal?.toLocaleString() || '0'}</span>
+                                    </div>
+                                    <div class="total-row">
+                                        <span>Tax (${inv.tax_rate || 0}%)</span>
+                                        <span>${currency} ${inv.tax_amount?.toLocaleString() || '0'}</span>
+                                    </div>
+                                    <div class="total-row final">
+                                        <span>Total</span>
+                                        <span>${currency} ${inv.total?.toLocaleString() || '0'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            ${inv.notes ? `
+                                <div class="invoice-notes">
+                                    <h4>Notes</h4>
+                                    <p>${inv.notes}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        ${!isPaid ? `
+                            <div class="invoice-actions">
+                                <button class="btn btn-success" onclick="payNow('${inv.id}')">
+                                    <i class="ph ph-currency-kes"></i>
+                                    Pay with M-Pesa
+                                </button>
+                                <a href="mailto:${inv.client?.email}?subject=Invoice ${inv.invoice_number}&body=Please find attached invoice ${inv.invoice_number}" class="btn btn-secondary">
+                                    <i class="ph ph-envelope"></i>
+                                    Email Invoice
+                                </a>
+                                <button class="btn btn-secondary" onclick="window.print()">
+                                    <i class="ph ph-printer"></i>
+                                    Print
+                                </button>
+                            </div>
+                        ` : `
+                            <div class="invoice-actions">
+                                <a href="mailto:${inv.client?.email}?subject=Invoice ${inv.invoice_number}&body=Please find attached invoice ${inv.invoice_number}" class="btn btn-secondary">
+                                    <i class="ph ph-envelope"></i>
+                                    Email Invoice
+                                </a>
+                                <button class="btn btn-secondary" onclick="window.print()">
+                                    <i class="ph ph-printer"></i>
+                                    Print
+                                </button>
+                            </div>
+                        `}
+
+                        <div class="powered-by">
+                            Powered by <a href="/">InvoiceFast</a>
+                        </div>
+                    </div>
+                `;
+
+            } catch (err) {
+                showError();
+            }
+        }
+
+        function showError() {
+            document.getElementById('app').innerHTML = `
+                <div class="error">
+                    <i class="ph ph-file-x"></i>
+                    <h2>Invoice Not Found</h2>
+                    <p>This invoice may have been deleted or the link is invalid.</p>
+                </div>
+            `;
+        }
+
+        async function payNow(invoiceId) {
+            try {
+                const res = await fetch('/api/v1/invoices/' + invoiceId + '/pay', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ method: 'mpesa' })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('Payment request sent! Check your phone for the M-Pesa prompt.');
+                } else {
+                    alert(data.error?.message || 'Payment request failed. Please try again.');
+                }
+            } catch (err) {
+                alert('Payment error. Please try again.');
+            }
+        }
+
+        if (token) {
+            loadInvoice();
+        } else {
+            showError();
+        }
+    </script>
+</body>
+</html>
