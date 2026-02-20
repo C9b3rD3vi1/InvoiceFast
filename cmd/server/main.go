@@ -185,7 +185,10 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 
 	// Serve static files in production
 	if cfg.Server.Mode == "production" {
-		r.Static("/app", "./frontend/build")
+		// Landing page at root
+		r.StaticFile("/", "./frontend/public/landing.html")
+		// SPA at /app
+		r.Static("/app", "./frontend/public")
 	}
 
 	// 404 handler
