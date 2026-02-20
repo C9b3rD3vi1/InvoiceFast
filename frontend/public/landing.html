@@ -2,70 +2,56 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#6366f1">
-    <meta name="description" content="InvoiceFast - Professional Invoicing with M-Pesa Integration for Kenyan Businesses">
-    
-    <title>InvoiceFast - Professional Invoicing for Kenyan Businesses</title>
-    
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="apple-touch-icon" href="/icon-192.svg">
+    <title>InvoiceFast - Automate Your Invoicing</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web@2.0.3"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
     
     <style>
         :root {
-            --color-primary: #6366f1;
-            --color-primary-dark: #4f46e5;
-            --color-primary-light: #818cf8;
-            --color-success: #10b981;
-            --color-warning: #f59e0b;
-            --color-gray-50: #f8fafc;
-            --color-gray-100: #f1f5f9;
-            --color-gray-200: #e2e8f0;
-            --color-gray-300: #cbd5e1;
-            --color-gray-400: #94a3b8;
-            --color-gray-500: #64748b;
-            --color-gray-600: #475569;
-            --color-gray-700: #334155;
-            --color-gray-800: #1e293b;
-            --color-gray-900: #0f172a;
-            --font-family: 'Plus Jakarta Sans', sans-serif;
-            --radius-xl: 1rem;
-            --radius-2xl: 1.5rem;
-            --radius-full: 9999px;
-            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
-            --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --gray-900: #0f172a;
+            --gray-800: #1e293b;
+            --gray-700: #334155;
+            --gray-600: #475569;
+            --gray-500: #64748b;
+            --gray-400: #94a3b8;
+            --gray-300: #cbd5e1;
+            --gray-100: #f1f5f9;
+            --gray-50: #f8fafc;
         }
 
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         html { scroll-behavior: smooth; }
         
         body {
-            font-family: var(--font-family);
-            line-height: 1.6;
-            color: var(--color-gray-700);
-            background: var(--color-gray-50);
+            font-family: 'Outfit', sans-serif;
+            background: #0a0a0f;
+            color: white;
             overflow-x: hidden;
         }
 
-        /* Background Pattern */
-        body::before {
-            content: '';
+        /* Canvas Container */
+        #canvas-container {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: 
-                radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
-                radial-gradient(circle at 80% 20%, rgba(16, 185, 129, 0.1) 0%, transparent 40%),
-                radial-gradient(circle at 40% 40%, rgba(245, 158, 11, 0.08) 0%, transparent 30%);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            z-index: 0;
             pointer-events: none;
-            z-index: -1;
         }
 
         /* Navigation */
@@ -75,56 +61,75 @@
             left: 0;
             right: 0;
             z-index: 100;
-            padding: 1rem 2rem;
+            padding: 1.5rem 3rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
-        .nav-logo {
+        .logo {
             display: flex;
             align-items: center;
             gap: 0.5rem;
             font-size: 1.5rem;
             font-weight: 800;
-            color: var(--color-primary);
+            color: white;
             text-decoration: none;
         }
 
-        .nav-logo i { font-size: 1.75rem; }
+        .logo i { color: var(--primary); }
 
         .nav-links {
             display: flex;
-            gap: 2rem;
+            gap: 2.5rem;
             align-items: center;
         }
 
         .nav-link {
-            color: var(--color-gray-600);
+            color: var(--gray-400);
             text-decoration: none;
             font-weight: 500;
-            transition: color 0.2s;
+            font-size: 0.95rem;
+            transition: color 0.3s;
         }
 
-        .nav-link:hover { color: var(--color-primary); }
+        .nav-link:hover { color: white; }
 
-        .nav-cta {
-            background: var(--color-primary);
-            color: white;
-            padding: 0.625rem 1.5rem;
-            border-radius: var(--radius-full);
-            text-decoration: none;
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 50px;
             font-weight: 600;
-            transition: all 0.2s;
+            text-decoration: none;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            font-size: 0.95rem;
         }
 
-        .nav-cta:hover {
-            background: var(--color-primary-dark);
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+
+        .btn-ghost:hover {
+            background: rgba(255,255,255,0.2);
         }
 
         /* Hero Section */
@@ -132,591 +137,427 @@
             min-height: 100vh;
             display: flex;
             align-items: center;
-            padding: 8rem 2rem 4rem;
-            max-width: 1400px;
-            margin: 0 auto;
+            padding: 8rem 3rem 4rem;
+            position: relative;
+            z-index: 1;
         }
 
         .hero-content {
-            flex: 1;
-            max-width: 640px;
+            max-width: 600px;
         }
 
         .hero-badge {
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            background: rgba(99, 102, 241, 0.1);
-            color: var(--color-primary);
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: var(--primary-light);
             padding: 0.5rem 1rem;
-            border-radius: var(--radius-full);
-            font-size: 0.875rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
             font-weight: 600;
             margin-bottom: 1.5rem;
+            opacity: 0;
+            transform: translateY(20px);
         }
 
         .hero h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-size: clamp(3rem, 6vw, 5rem);
             font-weight: 800;
-            line-height: 1.1;
-            color: var(--color-gray-900);
+            line-height: 1.05;
             margin-bottom: 1.5rem;
+            opacity: 0;
+            transform: translateY(30px);
         }
 
-        .hero h1 span {
-            background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+        .hero h1 .gradient {
+            background: linear-gradient(135deg, var(--primary-light) 0%, #a78bfa 50%, #f472b6 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
         .hero p {
             font-size: 1.25rem;
-            color: var(--color-gray-500);
-            margin-bottom: 2rem;
-            max-width: 520px;
+            color: var(--gray-400);
+            margin-bottom: 2.5rem;
+            line-height: 1.7;
+            opacity: 0;
+            transform: translateY(30px);
         }
 
         .hero-buttons {
             display: flex;
             gap: 1rem;
             flex-wrap: wrap;
+            opacity: 0;
+            transform: translateY(30px);
         }
 
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 1rem 2rem;
-            border-radius: var(--radius-full);
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s;
-            border: none;
-            cursor: pointer;
-            font-size: 1rem;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            color: white;
-            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 24px rgba(99, 102, 241, 0.5);
-        }
-
-        .btn-secondary {
-            background: white;
-            color: var(--color-gray-700);
-            border: 2px solid var(--color-gray-200);
-        }
-
-        .btn-secondary:hover {
-            border-color: var(--color-primary);
-            color: var(--color-primary);
-        }
-
-        .hero-visual {
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        /* Comparison Section */
+        .comparison {
+            min-height: 100vh;
+            padding: 6rem 3rem;
             position: relative;
+            z-index: 1;
         }
 
-        .phone-mockup {
-            width: 320px;
-            height: 640px;
-            background: var(--color-gray-900);
-            border-radius: 2.5rem;
-            padding: 12px;
-            box-shadow: var(--shadow-2xl);
-            position: relative;
+        .section-title {
+            text-align: center;
+            margin-bottom: 4rem;
         }
 
-        .phone-screen {
-            width: 100%;
-            height: 100%;
-            background: white;
-            border-radius: 2rem;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
+        .section-title h2 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
         }
 
-        .phone-notch {
-            position: absolute;
-            top: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100px;
-            height: 28px;
-            background: var(--color-gray-900);
-            border-radius: 1rem;
-            z-index: 10;
+        .section-title p {
+            color: var(--gray-400);
+            font-size: 1.1rem;
+            max-width: 500px;
+            margin: 0 auto;
         }
 
-        /* Features Section */
-        .features {
-            padding: 6rem 2rem;
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
             max-width: 1200px;
             margin: 0 auto;
         }
 
-        .section-header {
-            text-align: center;
-            max-width: 600px;
-            margin: 0 auto 4rem;
+        @media (max-width: 900px) {
+            .comparison-grid { grid-template-columns: 1fr; }
         }
 
-        .section-header h2 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: var(--color-gray-900);
-            margin-bottom: 1rem;
+        .comparison-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
+            padding: 2.5rem;
+            backdrop-filter: blur(10px);
         }
 
-        .section-header p {
-            font-size: 1.125rem;
-            color: var(--color-gray-500);
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-
-        .feature-card {
-            background: white;
-            padding: 2rem;
-            border-radius: var(--radius-2xl);
-            border: 1px solid var(--color-gray-100);
-            transition: all 0.3s;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-xl);
-            border-color: var(--color-primary);
-        }
-
-        .feature-icon {
-            width: 56px;
-            height: 56px;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-            border-radius: var(--radius-xl);
+        .comparison-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
-            justify-content: center;
-            margin-bottom: 1.5rem;
+            gap: 0.75rem;
         }
 
-        .feature-icon i {
-            font-size: 1.75rem;
-            color: var(--color-primary);
+        .comparison-card h3 i { font-size: 1.75rem; }
+
+        .comparison-card.manual h3 { color: var(--warning); }
+        .comparison-card.automated h3 { color: var(--success); }
+
+        .comparison-card > p {
+            color: var(--gray-400);
+            margin-bottom: 2rem;
         }
 
-        .feature-card h3 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--color-gray-900);
-            margin-bottom: 0.75rem;
+        /* Manual Steps */
+        .manual-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
         }
 
-        .feature-card p {
-            color: var(--color-gray-500);
-            font-size: 0.9375rem;
+        .manual-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(245, 158, 11, 0.2);
         }
 
-        /* How It Works */
-        .how-it-works {
-            padding: 6rem 2rem;
-            background: white;
-        }
-
-        .how-it-works-inner {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        .steps {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 3rem;
-            position: relative;
-        }
-
-        .steps::before {
-            content: '';
-            position: absolute;
-            top: 40px;
-            left: 15%;
-            right: 15%;
-            height: 2px;
-            background: linear-gradient(90deg, var(--color-primary), var(--color-success));
-            opacity: 0.3;
-        }
-
-        .step {
-            text-align: center;
-            position: relative;
-        }
-
-        .step-number {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
-            color: white;
+        .manual-step-num {
+            width: 32px;
+            height: 32px;
+            background: var(--warning);
+            color: #000;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2rem;
-            font-weight: 800;
-            margin: 0 auto 1.5rem;
-            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .manual-step p {
+            color: var(--gray-300);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        /* Automated Flow */
+        .automated-flow {
+            position: relative;
+            padding: 1rem 0;
+        }
+
+        .flow-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+
+        .flow-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .flow-icon i { font-size: 1.25rem; }
+
+        .flow-arrow {
+            text-align: center;
+            color: var(--success);
+            font-size: 1.5rem;
+            margin: 0.5rem 0;
+            opacity: 0;
+        }
+
+        /* Animation Demo */
+        .animation-demo {
+            min-height: 100vh;
+            padding: 6rem 3rem;
             position: relative;
             z-index: 1;
         }
 
-        .step h3 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--color-gray-900);
-            margin-bottom: 0.5rem;
-        }
-
-        .step p {
-            color: var(--color-gray-500);
-        }
-
-        /* Pricing */
-        .pricing {
-            padding: 6rem 2rem;
-            max-width: 1200px;
+        .demo-container {
+            max-width: 1000px;
             margin: 0 auto;
-        }
-
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .pricing-card {
-            background: white;
-            padding: 2.5rem;
-            border-radius: var(--radius-2xl);
-            border: 2px solid var(--color-gray-200);
-            text-align: center;
-            transition: all 0.3s;
-        }
-
-        .pricing-card.popular {
-            border-color: var(--color-primary);
-            position: relative;
-            transform: scale(1.05);
-        }
-
-        .pricing-card.popular::before {
-            content: 'Most Popular';
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--color-primary);
-            color: white;
-            padding: 0.25rem 1rem;
-            border-radius: var(--radius-full);
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .pricing-card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-xl);
-        }
-
-        .pricing-card.popular:hover {
-            transform: scale(1.05) translateY(-4px);
-        }
-
-        .pricing-name {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--color-gray-900);
-            margin-bottom: 0.5rem;
-        }
-
-        .pricing-price {
-            font-size: 3rem;
-            font-weight: 800;
-            color: var(--color-gray-900);
-            margin-bottom: 0.5rem;
-        }
-
-        .pricing-price span {
-            font-size: 1rem;
-            font-weight: 400;
-            color: var(--color-gray-400);
-        }
-
-        .pricing-desc {
-            color: var(--color-gray-500);
-            margin-bottom: 2rem;
-        }
-
-        .pricing-features {
-            list-style: none;
-            text-align: left;
-            margin-bottom: 2rem;
-        }
-
-        .pricing-features li {
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--color-gray-100);
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            color: var(--color-gray-600);
-        }
-
-        .pricing-features li i {
-            color: var(--color-success);
-        }
-
-        /* CTA Section */
-        .cta {
-            padding: 6rem 2rem;
-            text-align: center;
-            background: linear-gradient(135deg, var(--color-primary) 0%, #4f46e5 50%, #7c3aed 100%);
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 24px;
+            padding: 3rem;
             position: relative;
             overflow: hidden;
         }
 
-        .cta::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        .demo-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }
 
-        .cta-content {
+        .demo-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .demo-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--success);
+            font-size: 0.9rem;
+        }
+
+        .demo-status .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Invoice Animation Area */
+        .invoice-path {
+            position: relative;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .invoice-doc {
+            position: absolute;
+            width: 180px;
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            transform: scale(0);
+            opacity: 0;
+        }
+
+        .invoice-doc-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .invoice-doc-logo {
+            width: 40px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 4px;
+        }
+
+        .invoice-doc-line {
+            height: 6px;
+            background: var(--gray-200);
+            border-radius: 3px;
+            margin-bottom: 0.5rem;
+        }
+
+        .invoice-doc-line.short { width: 60%; }
+
+        /* Nodes */
+        .node {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            opacity: 0;
+        }
+
+        .node-create { top: 50%; left: 5%; transform: translateY(-50%); }
+        .node-email { top: 20%; left: 35%; }
+        .node-whatsapp { top: 20%; right: 35%; }
+        .node-mpesa { bottom: 20%; right: 25%; }
+        .node-done { bottom: 50%; right: 5%; transform: translateY(50%); }
+
+        .node.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+        }
+
+        /* Stats */
+        .stats {
+            padding: 6rem 3rem;
             position: relative;
             z-index: 1;
         }
 
-        .cta h2 {
-            font-size: 2.5rem;
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255,255,255,0.03);
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .stat-value {
+            font-size: 3.5rem;
             font-weight: 800;
-            color: white;
-            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--success) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--gray-400);
+            font-size: 1rem;
+        }
+
+        /* CTA */
+        .cta {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4rem 3rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-content {
+            text-align: center;
+            max-width: 600px;
+        }
+
+        .cta h2 {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 1.5rem;
         }
 
         .cta p {
-            font-size: 1.25rem;
-            color: rgba(255, 255, 255, 0.8);
+            color: var(--gray-400);
+            font-size: 1.15rem;
             margin-bottom: 2rem;
-            max-width: 500px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .cta .btn {
-            background: white;
-            color: var(--color-primary);
-        }
-
-        .cta .btn:hover {
-            background: var(--color-gray-100);
-            transform: translateY(-2px);
         }
 
         /* Footer */
         .footer {
-            padding: 4rem 2rem 2rem;
-            background: var(--color-gray-900);
-            color: var(--color-gray-400);
-        }
-
-        .footer-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 3rem;
-        }
-
-        .footer-brand {
-            max-width: 300px;
-        }
-
-        .footer-logo {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: white;
-            margin-bottom: 1rem;
-        }
-
-        .footer-brand p {
-            font-size: 0.9375rem;
-            line-height: 1.7;
-        }
-
-        .footer h4 {
-            color: white;
-            font-weight: 600;
-            margin-bottom: 1.5rem;
-        }
-
-        .footer-links {
-            list-style: none;
-        }
-
-        .footer-links li {
-            margin-bottom: 0.75rem;
-        }
-
-        .footer-links a {
-            color: var(--color-gray-400);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-
-        .footer-links a:hover {
-            color: white;
-        }
-
-        .footer-bottom {
-            max-width: 1200px;
-            margin: 3rem auto 0;
-            padding-top: 2rem;
-            border-top: 1px solid var(--color-gray-800);
+            padding: 3rem;
             text-align: center;
-            font-size: 0.875rem;
-        }
-
-        /* Auth Modal */
-        .auth-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(4px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            padding: 1rem;
-        }
-
-        .auth-modal.active { display: flex; }
-
-        .auth-card {
-            background: white;
-            border-radius: var(--radius-2xl);
-            padding: 2.5rem;
-            width: 100%;
-            max-width: 420px;
-            box-shadow: var(--shadow-2xl);
-            animation: slideUp 0.3s ease;
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .auth-card h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            text-align: center;
-        }
-
-        .auth-card p {
-            color: var(--color-gray-500);
-            text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .form-group { margin-bottom: 1.25rem; }
-
-        .form-label {
-            display: block;
-            font-weight: 600;
-            color: var(--color-gray-700);
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.875rem 1rem;
-            border: 1.5px solid var(--color-gray-200);
-            border-radius: var(--radius-xl);
-            font-size: 1rem;
-            transition: all 0.2s;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
-        }
-
-        .btn-block { width: 100%; justify-content: center; }
-
-        .auth-switch {
-            text-align: center;
-            margin-top: 1.5rem;
-            color: var(--color-gray-500);
-        }
-
-        .auth-switch a {
-            color: var(--color-primary);
-            font-weight: 600;
-            cursor: pointer;
+            color: var(--gray-500);
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            position: relative;
+            z-index: 1;
         }
 
         /* Responsive */
-        @media (max-width: 1024px) {
-            .hero { flex-direction: column; text-align: center; padding-top: 6rem; }
-            .hero-content { max-width: 100%; }
-            .hero p { margin-left: auto; margin-right: auto; }
-            .hero-buttons { justify-content: center; }
-            .hero-visual { margin-top: 3rem; }
-            .steps::before { display: none; }
-        }
-
         @media (max-width: 768px) {
+            .nav { padding: 1rem 1.5rem; }
             .nav-links { display: none; }
-            .hero h1 { font-size: 2.25rem; }
-            .phone-mockup { width: 260px; height: 520px; }
-            .pricing-card.popular { transform: none; }
-            .pricing-card.popular:hover { transform: translateY(-4px); }
+            .hero { padding: 6rem 1.5rem 3rem; }
+            .comparison, .animation-demo, .stats, .cta { padding: 4rem 1.5rem; }
+            .comparison-card { padding: 1.5rem; }
         }
     </style>
 </head>
 <body>
+    <div id="canvas-container"></div>
+
     <!-- Navigation -->
     <nav class="nav">
-        <a href="/" class="nav-logo">
+        <a href="/" class="logo">
             <i class="ph ph-lightning"></i>
             InvoiceFast
         </a>
         <div class="nav-links">
-            <a href="#features" class="nav-link">Features</a>
-            <a href="#how-it-works" class="nav-link">How It Works</a>
-            <a href="#pricing" class="nav-link">Pricing</a>
-            <a href="#" class="nav-cta" onclick="showAuth('login')">Get Started</a>
+            <a href="#comparison" class="nav-link">Compare</a>
+            <a href="#demo" class="nav-link">See It In Action</a>
+            <a href="#stats" class="nav-link">Results</a>
+            <a href="/app" class="btn btn-ghost">Sign In</a>
+            <a href="#" class="btn btn-primary" onclick="showAuth()">Start Free</a>
         </div>
     </nav>
 
@@ -724,162 +565,167 @@
     <section class="hero">
         <div class="hero-content">
             <div class="hero-badge">
-                <i class="ph ph-star"></i>
-                #1 Invoicing Platform in Kenya
+                <i class="ph ph-sparkle"></i>
+                AI-Powered Invoicing
             </div>
-            <h1>Create Beautiful Invoices & <span>Get Paid Faster</span></h1>
-            <p>The modern invoicing solution for Kenyan businesses. Send professional invoices, track payments, and receive M-Pesa payments directly from your clients.</p>
+            <h1>Stop Chasing Payments. <span class="gradient">Start Getting Paid.</span></h1>
+            <p>Transform your invoicing from manual chaos to automated magic. Create invoices once, and let InvoiceFast handle the rest—sending, following up, and collecting payments.</p>
             <div class="hero-buttons">
-                <a href="#" class="btn btn-primary" onclick="showAuth('register')">
+                <a href="#" class="btn btn-primary" onclick="showAuth()">
                     <i class="ph ph-rocket-launch"></i>
                     Start Free Trial
                 </a>
-                <a href="#features" class="btn btn-secondary">
+                <a href="#demo" class="btn btn-ghost">
                     <i class="ph ph-play"></i>
                     See How It Works
                 </a>
             </div>
         </div>
-        <div class="hero-visual">
-            <div class="phone-mockup">
-                <div class="phone-notch"></div>
-                <div class="phone-screen">
-                    <iframe src="/app" style="width: 100%; height: 100%; border: none; border-radius: 2rem;"></iframe>
+    </section>
+
+    <!-- Comparison Section -->
+    <section class="comparison" id="comparison">
+        <div class="section-title">
+            <h2>Manual vs. Automated</h2>
+            <p>See the difference automation makes in your billing workflow</p>
+        </div>
+        
+        <div class="comparison-grid">
+            <div class="comparison-card manual">
+                <h3><i class="ph ph-hourglass-medium"></i> Manual Process</h3>
+                <p>The old way—time-consuming and prone to errors</p>
+                
+                <div class="manual-steps">
+                    <div class="manual-step">
+                        <div class="manual-step-num">1</div>
+                        <p>Create invoice in spreadsheet or word processor</p>
+                    </div>
+                    <div class="manual-step">
+                        <div class="manual-step-num">2</div>
+                        <p>Export as PDF and format manually</p>
+                    </div>
+                    <div class="manual-step">
+                        <div class="manual-step-num">3</div>
+                        <p>Compose email, attach PDF, send</p>
+                    </div>
+                    <div class="manual-step">
+                        <div class="manual-step-num">4</div>
+                        <p>Wait... and wait... for payment</p>
+                    </div>
+                    <div class="manual-step">
+                        <div class="manual-step-num">5</div>
+                        <p>Send payment reminders (repeatedly)</p>
+                    </div>
+                    <div class="manual-step">
+                        <div class="manual-step-num">6</div>
+                        <p>Manually reconcile payments in spreadsheet</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="comparison-card automated">
+                <h3><i class="ph ph-lightning"></i> With InvoiceFast</h3>
+                <p>One click. Complete automation. Zero hassle.</p>
+                
+                <div class="automated-flow">
+                    <div class="flow-item" data-step="1">
+                        <div class="flow-icon"><i class="ph ph-check"></i></div>
+                        <p><strong>Create invoice</strong> — fill in details, done</p>
+                    </div>
+                    <div class="flow-arrow" data-arrow="1">↓</div>
+                    <div class="flow-item" data-step="2">
+                        <div class="flow-icon"><i class="ph ph-send"></i></div>
+                        <p><strong>Auto-sent</strong> — email & WhatsApp instantly</p>
+                    </div>
+                    <div class="flow-arrow" data-arrow="2">↓</div>
+                    <div class="flow-item" data-step="3">
+                        <div class="flow-icon"><i class="ph ph-bell-ringing"></i></div>
+                        <p><strong>Auto-reminders</strong> — polite follow-ups scheduled</p>
+                    </div>
+                    <div class="flow-arrow" data-arrow="3">↓</div>
+                    <div class="flow-item" data-step="4">
+                        <div class="flow-icon"><i class="ph ph-currency-kes"></i></div>
+                        <p><strong>M-Pesa received</strong> — instant notification</p>
+                    </div>
+                    <div class="flow-arrow" data-arrow="4">↓</div>
+                    <div class="flow-item" data-step="5">
+                        <div class="flow-icon"><i class="ph ph-check-circle"></i></div>
+                        <p><strong>Auto-reconciled</strong> — all records updated</p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="features" id="features">
-        <div class="section-header">
-            <h2>Everything You Need to Run Your Business</h2>
-            <p>Powerful features designed specifically for Kenyan businesses</p>
+    <!-- Animation Demo -->
+    <section class="animation-demo" id="demo">
+        <div class="section-title">
+            <h2>See It In Action</h2>
+            <p>Watch how InvoiceFast automates your entire invoicing workflow</p>
         </div>
         
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="ph ph-device-mobile"></i>
+        <div class="demo-container">
+            <div class="demo-header">
+                <div class="demo-title">
+                    <i class="ph ph-file-text"></i> Invoice #INV-2025-0142
                 </div>
-                <h3>M-Pesa Integration</h3>
-                <p>Accept payments directly via STK Push. Get paid faster with instant M-Pesa settlements to your business account.</p>
+                <div class="demo-status">
+                    <span class="dot"></span>
+                    Automation Running
+                </div>
             </div>
             
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="ph ph-file-text"></i>
+            <div class="invoice-path">
+                <!-- Invoice Document -->
+                <div class="invoice-doc" id="invoice">
+                    <div class="invoice-doc-header">
+                        <div class="invoice-doc-logo"></div>
+                        <div style="width: 12px; height: 12px; background: #ef4444; border-radius: 50%;"></div>
+                    </div>
+                    <div class="invoice-doc-line"></div>
+                    <div class="invoice-doc-line short"></div>
+                    <div class="invoice-doc-line"></div>
+                    <div class="invoice-doc-line short"></div>
                 </div>
-                <h3>Professional Invoices</h3>
-                <p>Create stunning, professional invoices in seconds. Customize with your brand colors and logo.</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="ph ph-users"></i>
+                
+                <!-- Nodes -->
+                <div class="node node-create" id="node-create">
+                    <i class="ph ph-plus"></i>
                 </div>
-                <h3>Client Management</h3>
-                <p>Keep all your client details in one place. Track payment history and communicate easily.</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="ph ph-chart-line"></i>
+                <div class="node node-email" id="node-email">
+                    <i class="ph ph-envelope"></i>
                 </div>
-                <h3>Real-time Analytics</h3>
-                <p>Track revenue, outstanding payments, and business growth with beautiful dashboards.</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">
+                <div class="node node-whatsapp" id="node-whatsapp">
                     <i class="ph ph-whatsapp-logo"></i>
                 </div>
-                <h3>WhatsApp Notifications</h3>
-                <p>Send invoices and payment reminders directly to clients via WhatsApp. Higher open rates!</p>
-            </div>
-            
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="ph ph-receipt"></i>
+                <div class="node node-mpesa" id="node-mpesa">
+                    <i class="ph ph-currency-kes"></i>
                 </div>
-                <h3>KRA Compliant</h3>
-                <p>Generate e-TIMS compliant receipts automatically. Stay compliant with Kenyan tax regulations.</p>
-            </div>
-        </div>
-    </section>
-
-    <!-- How It Works -->
-    <section class="how-it-works" id="how-it-works">
-        <div class="how-it-works-inner">
-            <div class="section-header">
-                <h2>How It Works</h2>
-                <p>Get started in minutes</p>
-            </div>
-            
-            <div class="steps">
-                <div class="step">
-                    <div class="step-number">1</div>
-                    <h3>Create Account</h3>
-                    <p>Sign up for free in seconds. No credit card required.</p>
-                </div>
-                
-                <div class="step">
-                    <div class="step-number">2</div>
-                    <h3>Add Clients</h3>
-                    <p>Import or add your clients with their details and contacts.</p>
-                </div>
-                
-                <div class="step">
-                    <div class="step-number">3</div>
-                    <h3>Send Invoice</h3>
-                    <p>Create and send beautiful invoices via email or WhatsApp.</p>
-                </div>
-                
-                <div class="step">
-                    <div class="step-number">4</div>
-                    <h3>Get Paid</h3>
-                    <p>Receive payments via M-Pesa directly to your account.</p>
+                <div class="node node-done" id="node-done">
+                    <i class="ph ph-check"></i>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Pricing -->
-    <section class="pricing" id="pricing">
-        <div class="section-header">
-            <h2>Simple, Transparent Pricing</h2>
-            <p>Start free, upgrade when you're ready</p>
-        </div>
-        
-        <div class="pricing-grid">
-            <div class="pricing-card">
-                <div class="pricing-name">Starter</div>
-                <div class="pricing-price">KSh 0<span>/month</span></div>
-                <div class="pricing-desc">Perfect for freelancers and small businesses</div>
-                <ul class="pricing-features">
-                    <li><i class="ph ph-check"></i> 10 Invoices/month</li>
-                    <li><i class="ph ph-check"></i> 5 Clients</li>
-                    <li><i class="ph ph-check"></i> M-Pesa Payments</li>
-                    <li><i class="ph ph-check"></i> WhatsApp Notifications</li>
-                    <li><i class="ph ph-check"></i> Basic Analytics</li>
-                </ul>
-                <a href="#" class="btn btn-secondary btn-block" onclick="showAuth('register')">Get Started</a>
+    <!-- Stats Section -->
+    <section class="stats" id="stats">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-value" data-target="87">0%</div>
+                <div class="stat-label">Faster Payment Collection</div>
             </div>
-            
-            <div class="pricing-card popular">
-                <div class="pricing-name">Professional</div>
-                <div class="pricing-price">KSh 2,999<span>/month</span></div>
-                <div class="pricing-desc">For growing businesses</div>
-                <ul class="pricing-features">
-                    <li><i class="ph ph-check"></i> Unlimited Invoices</li>
-                    <li><i class="ph ph-check"></i> Unlimited Clients</li>
-                    <li><i class="ph ph-check"></i> M-Pesa Payments</li>
-                    <li><i class="ph ph-check"></i> WhatsApp Notifications</li>
-                    <li><i class="ph ph-check"></i> Advanced Analytics</li>
-                    <li><i class="ph ph-check"></i> KRA e-TIMS</li>
-                    <li><i class="ph ph-check"></i> Priority Support</li>
-                </ul>
-                <a href="#" class="btn btn-primary btn-block" onclick="showAuth('register')">Start Free Trial</a>
+            <div class="stat-item">
+                <div class="stat-value" data-target="42">0%</div>
+                <div class="stat-label">Time Saved Weekly</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" data-target="3">0x</div>
+                <div class="stat-label">More Invoices Sent</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" data-target="99">0%</div>
+                <div class="stat-label">Client Satisfaction</div>
             </div>
         </div>
     </section>
@@ -887,9 +733,9 @@
     <!-- CTA -->
     <section class="cta">
         <div class="cta-content">
-            <h2>Ready to Get Paid Faster?</h2>
-            <p>Join thousands of Kenyan businesses already using InvoiceFast</p>
-            <a href="#" class="btn" onclick="showAuth('register')">
+            <h2>Ready to Automate Your Invoicing?</h2>
+            <p>Join thousands of Kenyan businesses saving time and getting paid faster.</p>
+            <a href="#" class="btn btn-primary" onclick="showAuth()" style="font-size: 1.1rem; padding: 1rem 2.5rem;">
                 <i class="ph ph-rocket-launch"></i>
                 Start Free Today
             </a>
@@ -898,155 +744,237 @@
 
     <!-- Footer -->
     <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-brand">
-                <div class="footer-logo">
-                    <i class="ph ph-lightning"></i>
-                    InvoiceFast
-                </div>
-                <p>Professional invoicing for Kenyan businesses. Accept M-Pesa payments, track expenses, and grow your business.</p>
-            </div>
-            
-            <div>
-                <h4>Product</h4>
-                <ul class="footer-links">
-                    <li><a href="#features">Features</a></li>
-                    <li><a href="#pricing">Pricing</a></li>
-                    <li><a href="#">Integrations</a></li>
-                    <li><a href="#">API</a></li>
-                </ul>
-            </div>
-            
-            <div>
-                <h4>Company</h4>
-                <ul class="footer-links">
-                    <li><a href="#">About</a></li>
-                    <li><a href="#">Blog</a></li>
-                    <li><a href="#">Careers</a></li>
-                    <li><a href="#">Contact</a></li>
-                </ul>
-            </div>
-            
-            <div>
-                <h4>Legal</h4>
-                <ul class="footer-links">
-                    <li><a href="#">Privacy</a></li>
-                    <li><a href="#">Terms</a></li>
-                    <li><a href="#">Security</a></li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="footer-bottom">
-            <p>&copy; 2025 InvoiceFast. All rights reserved. Made with ❤️ in Kenya.</p>
-        </div>
+        <p>© 2025 InvoiceFast. Made with ❤️ in Kenya. <a href="/app" style="color: var(--primary-light);">Go to App →</a></p>
     </footer>
 
-    <!-- Auth Modal -->
-    <div class="auth-modal" id="authModal">
-        <div class="auth-card">
-            <h2 id="authTitle">Welcome Back</h2>
-            <p id="authSubtitle">Sign in to your account</p>
-            
-            <form id="authForm">
-                <div class="form-group" id="nameGroup" style="display: none;">
-                    <label class="form-label">Full Name</label>
-                    <input type="text" class="form-input" id="authName" placeholder="John Doe">
-                </div>
-                <div class="form-group" id="companyGroup" style="display: none;">
-                    <label class="form-label">Company Name</label>
-                    <input type="text" class="form-input" id="authCompany" placeholder="Your Business">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Email Address</label>
-                    <input type="email" class="form-input" id="authEmail" placeholder="you@example.com" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" class="form-input" id="authPassword" placeholder="••••••••" required>
-                </div>
-                <button type="submit" class="btn btn-primary btn-block" id="authSubmit">
-                    Sign In
-                </button>
-            </form>
-            
-            <div class="auth-switch">
-                <span id="authSwitchText">Don't have an account?</span>
-                <a onclick="toggleAuthMode()">Sign up</a>
-            </div>
-            
-            <div style="text-align: center; margin-top: 1rem;">
-                <a href="/app" style="color: var(--color-gray-500); font-size: 0.875rem;">Go to App →</a>
-            </div>
-        </div>
-    </div>
-
     <script>
-        let authMode = 'login';
+        // ==================== THREE.JS BACKGROUND ====================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
 
-        function showAuth(mode) {
-            authMode = mode;
-            document.getElementById('authModal').classList.add('active');
-            updateAuthUI();
+        // Create particles
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 500;
+        const posArray = new Float32Array(particlesCount * 3);
+        
+        for(let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 10;
+        }
+        
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.02,
+            color: 0x6366f1,
+            transparent: true,
+            opacity: 0.8,
+        });
+        
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        // Create connection lines
+        const linesMaterial = new THREE.LineBasicMaterial({
+            color: 0x6366f1,
+            transparent: true,
+            opacity: 0.1
+        });
+
+        // Add some floating shapes
+        const shapes = [];
+        const shapeGeometries = [
+            new THREE.TorusGeometry(0.3, 0.1, 16, 32),
+            new THREE.OctahedronGeometry(0.25),
+            new THREE.IcosahedronGeometry(0.25),
+        ];
+
+        for (let i = 0; i < 8; i++) {
+            const geometry = shapeGeometries[i % 3];
+            const material = new THREE.MeshBasicMaterial({
+                color: i % 2 === 0 ? 0x6366f1 : 0x10b981,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.3
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 5 - 2
+            );
+            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+            shapes.push(mesh);
+            scene.add(mesh);
         }
 
-        function toggleAuthMode() {
-            authMode = authMode === 'login' ? 'register' : 'login';
-            updateAuthUI();
-        }
+        camera.position.z = 4;
 
-        function updateAuthUI() {
-            const isRegister = authMode === 'register';
-            document.getElementById('authTitle').textContent = isRegister ? 'Create Account' : 'Welcome Back';
-            document.getElementById('authSubtitle').textContent = isRegister ? 'Start your free trial' : 'Sign in to your account';
-            document.getElementById('authSubmit').textContent = isRegister ? 'Create Account' : 'Sign In';
-            document.getElementById('nameGroup').style.display = isRegister ? 'block' : 'none';
-            document.getElementById('companyGroup').style.display = isRegister ? 'block' : 'none';
-            document.getElementById('authSwitchText').textContent = isRegister ? 'Already have an account?' : "Don't have an account?";
-            document.querySelector('.auth-switch a').textContent = isRegister ? 'Sign in' : 'Sign up';
-        }
+        // Mouse interaction
+        let mouseX = 0;
+        let mouseY = 0;
+        
+        document.addEventListener('mousemove', (e) => {
+            mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+        });
 
-        document.getElementById('authForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('authEmail').value;
-            const password = document.getElementById('authPassword').value;
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
             
-            const endpoint = authMode === 'register' ? '/api/v1/auth/register' : '/api/v1/auth/login';
-            const body = { email, password };
+            const time = Date.now() * 0.001;
             
-            if (authMode === 'register') {
-                body.name = document.getElementById('authName').value;
-                body.company_name = document.getElementById('authCompany').value;
-            }
+            // Rotate particles
+            particlesMesh.rotation.y = time * 0.05;
+            particlesMesh.rotation.x = time * 0.02;
+            
+            // Move shapes
+            shapes.forEach((shape, i) => {
+                shape.rotation.x += 0.005 * (i + 1);
+                shape.rotation.y += 0.007 * (i + 1);
+                shape.position.y += Math.sin(time + i) * 0.001;
+            });
+            
+            // Mouse follow
+            camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.02;
+            camera.position.y += (mouseY * 0.5 - camera.position.y) * 0.02;
+            camera.lookAt(scene.position);
+            
+            renderer.render(scene, camera);
+        }
+        
+        animate();
 
-            try {
-                const res = await fetch(window.location.origin + endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                
-                const data = await res.json();
-                
-                if (!res.ok) {
-                    alert(data.error?.message || 'Something went wrong');
-                    return;
+        // Handle resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==================== GSAP ANIMATIONS ====================
+        gsap.registerPlugin(ScrollTrigger);
+
+        // Hero animations
+        gsap.to('.hero-badge', { opacity: 1, y: 0, duration: 0.8, delay: 0.2 });
+        gsap.to('.hero h1', { opacity: 1, y: 0, duration: 0.8, delay: 0.4 });
+        gsap.to('.hero p', { opacity: 1, y: 0, duration: 0.8, delay: 0.6 });
+        gsap.to('.hero-buttons', { opacity: 1, y: 0, duration: 0.8, delay: 0.8 });
+
+        // Flow items animation
+        gsap.utils.toArray('.flow-item').forEach((item, i) => {
+            gsap.to(item, {
+                scrollTrigger: {
+                    trigger: item,
+                    start: 'top 80%',
+                },
+                opacity: 1,
+                x: 0,
+                duration: 0.6,
+                delay: i * 0.1
+            });
+        });
+
+        // Flow arrows
+        gsap.utils.toArray('.flow-arrow').forEach((arrow, i) => {
+            gsap.to(arrow, {
+                scrollTrigger: {
+                    trigger: arrow,
+                    start: 'top 80%',
+                },
+                opacity: 1,
+                duration: 0.4,
+                delay: 0.3 + i * 0.1
+            });
+        });
+
+        // Stats counter animation
+        gsap.utils.toArray('.stat-value').forEach(stat => {
+            const target = parseInt(stat.dataset.target);
+            gsap.to(stat, {
+                scrollTrigger: {
+                    trigger: stat,
+                    start: 'top 85%',
+                },
+                innerHTML: target,
+                duration: 2,
+                snap: { innerHTML: 1 },
+                onUpdate: function() {
+                    const val = Math.round(this.targets()[0].innerHTML);
+                    const suffix = stat.dataset.target.includes('x') ? 'x' : 
+                                   stat.dataset.target.includes('%') ? '%' : '';
+                    stat.innerHTML = val + suffix;
                 }
-
-                // Store token and redirect
-                localStorage.setItem('token', data.data.access_token);
-                localStorage.setItem('user', JSON.stringify(data.data.user));
-                window.location.href = '/app';
-            } catch (err) {
-                alert('Connection error. Please try again.');
-            }
+            });
         });
 
-        document.getElementById('authModal').addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) {
-                e.currentTarget.classList.remove('active');
-            }
+        // ==================== INVOICE FLOW ANIMATION ====================
+        function runInvoiceAnimation() {
+            const timeline = gsap.timeline({ repeat: -1, repeatDelay: 2 });
+            
+            // Reset
+            timeline.set('#invoice', { scale: 0, opacity: 0, x: 0, y: 0 });
+            timeline.set('.node', { opacity: 0, scale: 0 });
+            
+            // 1. Create Invoice
+            timeline.to('#node-create', { opacity: 1, scale: 1, duration: 0.5 });
+            timeline.to('#invoice', { scale: 1, opacity: 1, duration: 0.8, ease: 'back.out(1.7)' });
+            timeline.to('#node-create', { opacity: 0.3, scale: 0.8, duration: 0.3 });
+            
+            // 2. Send Email
+            timeline.to('#node-email', { opacity: 1, scale: 1, duration: 0.5 });
+            timeline.to('#invoice', { x: 150, y: -80, duration: 1, ease: 'power2.inOut' });
+            timeline.to('#node-email', { opacity: 0.3, scale: 0.8, duration: 0.3 });
+            
+            // 3. Send WhatsApp
+            timeline.to('#node-whatsapp', { opacity: 1, scale: 1, duration: 0.5 });
+            timeline.to('#invoice', { x: 150, y: 80, duration: 1, ease: 'power2.inOut' });
+            timeline.to('#node-whatsapp', { opacity: 0.3, scale: 0.8, duration: 0.3 });
+            
+            // 4. M-Pesa Payment
+            timeline.to('#node-mpesa', { opacity: 1, scale: 1, duration: 0.5 });
+            timeline.to('#invoice', { x: 0, y: 150, duration: 1, ease: 'power2.inOut' });
+            
+            // Pulse effect on M-Pesa
+            timeline.to('#node-mpesa', { 
+                boxShadow: '0 0 40px rgba(16, 185, 129, 0.8)', 
+                duration: 0.3,
+                yoyo: true,
+                repeat: 3
+            });
+            
+            // 5. Done
+            timeline.to('#node-done', { opacity: 1, scale: 1, duration: 0.5 });
+            timeline.to('#invoice', { 
+                scale: 1.3, 
+                opacity: 0, 
+                duration: 0.5,
+                ease: 'power2.in'
+            });
+            
+            // Reset
+            timeline.to('.node', { opacity: 0, scale: 0, duration: 0.3 });
+            
+            return timeline;
+        }
+
+        // Start animation when demo is visible
+        ScrollTrigger.create({
+            trigger: '.animation-demo',
+            start: 'top 70%',
+            onEnter: () => runInvoiceAnimation()
         });
+
+        // ==================== AUTH ====================
+        function showAuth() {
+            window.location.href = '/app';
+        }
     </script>
 </body>
 </html>
