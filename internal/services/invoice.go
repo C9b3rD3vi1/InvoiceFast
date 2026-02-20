@@ -210,6 +210,24 @@ func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, 
 	return &invoice, nil
 }
 
+// GetInvoiceByNumber retrieves an invoice by invoice number
+func (s *InvoiceService) GetInvoiceByNumber(invoiceNumber string) (*models.Invoice, error) {
+	if strings.TrimSpace(invoiceNumber) == "" {
+		return nil, ErrInvoiceNotFound
+	}
+
+	var invoice models.Invoice
+	err := s.db.Preload("Client").Preload("Items").Preload("Payments").
+		First(&invoice, "invoice_number = ?", invoiceNumber).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInvoiceNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch invoice: %w", err)
+	}
+	return &invoice, nil
+}
+
 // GetUserInvoices retrieves all invoices for a user with filtering
 func (s *InvoiceService) GetUserInvoices(userID string, filter InvoiceFilter) ([]models.Invoice, int64, error) {
 	if strings.TrimSpace(userID) == "" {
