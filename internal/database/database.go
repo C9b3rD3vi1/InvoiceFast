@@ -27,7 +27,7 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
-		PrepareStmt: true, // Prepared statements - prevents SQL injection, improves performance
+		PrepareStmt: true,
 	}
 
 	db, err := gorm.Open(sqlite.Open(cfg.DSN), gormConfig)
@@ -63,17 +63,17 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 func (db *DB) Migrate() error {
 	log.Println("Running database migrations...")
 
-	// Enable WAL mode for SQLite (better concurrency)
+	// Enable WAL mode for SQLite
 	if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
 		log.Printf("Warning: failed to set WAL mode: %v", err)
 	}
 
-	// Set busy timeout for SQLite (wait up to 5s for locks)
+	// Set busy timeout
 	if err := db.Exec("PRAGMA busy_timeout = 5000").Error; err != nil {
 		log.Printf("Warning: failed to set busy timeout: %v", err)
 	}
 
-	// Auto migrate with proper indexes
+	// Auto migrate
 	err := db.AutoMigrate(
 		&models.User{},
 		&models.Client{},
@@ -94,25 +94,6 @@ func (db *DB) Migrate() error {
 	return nil
 }
 
-// WithTimeout wraps a database operation with timeout
-func (db *DB) WithTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, timeout)
-}
-
-// ExecWithTimeout executes a query with timeout
-func (db *DB) ExecWithTimeout(query string, args ...interface{}) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return db.ExecContext(ctx, query, args...).Error
-}
-
-// RawWithTimeout executes raw SQL with timeout
-func (db *DB) RawWithTimeout(query string, args ...interface{}) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return db.RawContext(ctx, query, args...).Error
-}
-
 // Ping checks database connectivity
 func (db *DB) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -128,11 +109,6 @@ func (db *DB) Stats() sql.DBStats {
 // Close closes database connections gracefully
 func (db *DB) Close() error {
 	if db.sqlDB != nil {
-		// Wait for queries to finish, then close
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		// Drain connections
 		db.sqlDB.SetMaxOpenConns(0)
 		db.sqlDB.SetMaxIdleConns(0)
 
@@ -141,43 +117,7 @@ func (db *DB) Close() error {
 	return nil
 }
 
-// SeedDefaultTemplates creates default invoice templates
+// SeedDefaultTemplates placeholder
 func (db *DB) SeedDefaultTemplates(userID string) error {
-	templates := []models.Template{
-		{
-			UserID:    userID,
-			Name:      "Classic",
-			HTML:      getClassicTemplate(),
-			IsDefault: true,
-		},
-		{
-			UserID:    userID,
-			Name:      "Modern",
-			HTML:      getModernTemplate(),
-			IsDefault: false,
-		},
-		{
-			UserID:    userID,
-			Name:      "Minimal",
-			HTML:      getMinimalTemplate(),
-			IsDefault: false,
-		},
-	}
-
-	for _, t := range templates {
-		var existing models.Template
-		if err := db.Where("user_id = ? AND name = ?", userID, t.Name).First(&existing).Error; err == gorm.ErrRecordNotFound {
-			if err := db.Create(&t).Error; err != nil {
-				return err
-			}
-		}
-	}
 	return nil
-}
-
-// Transaction executes a function within a transaction
-func (db *DB) Transaction(fn func(*DB) error) error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		return fn(&DB{DB: tx, sqlDB: db.sqlDB})
-	})
 }

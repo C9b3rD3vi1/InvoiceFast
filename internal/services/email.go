@@ -169,6 +169,7 @@ type ReminderEmailData struct {
 	Currency      string
 	DueDate       string
 	DaysOverdue   int
+	Urgency       string
 }
 
 // ReceiptEmailData for receipt email template
@@ -259,6 +260,7 @@ func renderReminderEmail(data *ReminderEmailData) (string, error) {
 	} else if data.DaysOverdue > 14 {
 		urgency = "Please treat this matter as urgent."
 	}
+	data.Urgency = urgency
 
 	const templateStr = `
 <!DOCTYPE html>

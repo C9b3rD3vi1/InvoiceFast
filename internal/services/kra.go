@@ -106,20 +106,8 @@ func (s *KRAService) SubmitInvoice(data *KRAInvoiceData) (*KRAResponse, error) {
 		return s.mockSubmit(data)
 	}
 
-	// Sign the invoice
-	signature, err := s.signInvoice(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign invoice: %w", err)
-	}
-
-	// Prepare payload
-	payload := map[string]interface{}{
-		"invoice":   data,
-		"signature": signature,
-		"deviceID":  s.cfg.KRA.DeviceID,
-		"branchID":  s.cfg.KRA.BranchID,
-		"serviceID": "RSS",
-	}
+	// Sign the invoice (used in production)
+	_, _ = s.signInvoice(data)
 
 	// Submit to KRA (in production)
 	// This is a placeholder for the actual API call

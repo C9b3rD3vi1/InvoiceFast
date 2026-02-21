@@ -273,15 +273,10 @@ type ReminderSchedule struct {
 
 // ScheduleReminder creates a future reminder
 func (s *ReminderService) ScheduleReminder(invoiceID, reminderType string, sendAt time.Time) error {
-	schedule := &ReminderSchedule{
-		ID:           fmt.Sprintf("sch-%d", time.Now().UnixNano()),
-		InvoiceID:    invoiceID,
-		ReminderType: reminderType,
-		ScheduledFor: sendAt,
-		Status:       "pending",
-	}
-
-	// In production, store in database
+	// In production: store reminder in database with:
+	// - invoiceID
+	// - reminderType
+	// - sendAt time
 	log.Printf("📅 Scheduled reminder for invoice %s at %s", invoiceID, sendAt)
 	return nil
 }

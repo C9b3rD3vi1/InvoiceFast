@@ -3,10 +3,8 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 	"invoicefast/internal/utils"
 
@@ -322,7 +320,7 @@ func (h *Handler) CreateInvoice(c *gin.Context) {
 		case errors.Is(err, services.ErrInvalidQuantity):
 			utils.RespondWithError(c, http.StatusBadRequest, utils.ErrCodeValidationFailed, "Invalid quantity")
 		default:
-			if contains(err.Error(), "client not found") {
+			if strings.Contains(err.Error(), "client not found") {
 				utils.RespondWithError(c, http.StatusNotFound, utils.ErrCodeNotFound, "Client not found")
 				return
 			}

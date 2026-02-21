@@ -3,9 +3,11 @@ package services
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"invoicefast/internal/config"
@@ -334,7 +336,7 @@ func (s *AuthService) ValidateAPIKey(apiKey string) (*models.User, error) {
 	}
 
 	// Update last used
-	key.LastUsedAt = gorm.NowFunc()
+	key.LastUsedAt = sql.NullTime{Time: time.Now(), Valid: true}
 	s.db.Save(&key)
 
 	return s.GetUserByID(key.UserID)

@@ -209,31 +209,6 @@ func (s *WhatsAppService) sendToAPI(msg *WhatsAppMessage) error {
 	return nil
 }
 
-// normalizePhone normalizes phone number for WhatsApp
-func normalizePhone(phone string) string {
-	// Remove all non-digits
-	var digits string
-	for _, c := range phone {
-		if c >= '0' && c <= '9' {
-			digits += string(c)
-		}
-	}
-
-	// Handle different formats
-	if len(digits) == 10 && digits[0] == '0' {
-		return "254" + digits[1:]
-	}
-	if len(digits) == 9 {
-		return "254" + digits
-	}
-	if len(digits) == 12 && digits[:3] == "254" {
-		return digits
-	}
-
-	// Default
-	return "254" + digits
-}
-
 // WhatsAppTemplates for pre-approved templates
 // These need to be created in WhatsApp Business Manager
 var WhatsAppTemplates = map[string]string{
