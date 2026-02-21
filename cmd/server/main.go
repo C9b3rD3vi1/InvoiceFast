@@ -146,6 +146,44 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 		})
 	}
 
+	// ===== STATIC FILES - Serve these BEFORE API routes =====
+	// Landing page
+	r.GET("/", func(c *gin.Context) {
+		c.File("./frontend/public/landing.html")
+	})
+	// Login page
+	r.GET("/login", func(c *gin.Context) {
+		c.File("./frontend/public/login.html")
+	})
+	// Register page
+	r.GET("/register", func(c *gin.Context) {
+		c.File("./frontend/public/register.html")
+	})
+	// Forgot password
+	r.GET("/forgot-password", func(c *gin.Context) {
+		c.File("./frontend/public/forgot-password.html")
+	})
+	// Privacy
+	r.GET("/privacy", func(c *gin.Context) {
+		c.File("./frontend/public/privacy.html")
+	})
+	// Terms
+	r.GET("/terms", func(c *gin.Context) {
+		c.File("./frontend/public/terms.html")
+	})
+	// Invoice view
+	r.GET("/invoice/:token", func(c *gin.Context) {
+		c.File("./frontend/public/invoice.html")
+	})
+	// App (SPA)
+	r.GET("/app", func(c *gin.Context) {
+		c.File("./frontend/public/index.html")
+	})
+	// App fallback
+	r.NoRoute(func(c *gin.Context) {
+		c.File("./frontend/public/index.html")
+	})
+
 	// Protected routes
 	protected := r.Group("/api/v1")
 	protected.Use(middleware.AuthMiddleware(authService))
@@ -181,32 +219,6 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 		// Dashboard
 		protected.GET("/dashboard", handler.GetDashboard)
 	}
-
-	// Serve static files in production
-	if cfg.Server.Mode == "production" {
-		// Landing page at root
-		r.StaticFile("/", "./frontend/public/landing.html")
-		
-		// Public pages
-		r.StaticFile("/login", "./frontend/public/login.html")
-		r.StaticFile("/register", "./frontend/public/register.html")
-		r.StaticFile("/forgot-password", "./frontend/public/forgot-password.html")
-		r.StaticFile("/privacy", "./frontend/public/privacy.html")
-		r.StaticFile("/terms", "./frontend/public/terms.html")
-		
-		// Public invoice view
-		r.GET("/invoice/:token", func(c *gin.Context) {
-			c.File("./frontend/public/invoice.html")
-		})
-		
-		// SPA at /app
-		r.Static("/app", "./frontend/public")
-	}
-
-	// 404 handler
-	r.NoRoute(func(c *gin.Context) {
-		utils.RespondWithError(c, http.StatusNotFound, utils.ErrCodeNotFound, "Endpoint not found")
-	})
 
 	return r
 }
