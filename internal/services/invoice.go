@@ -2,6 +2,7 @@ package services
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -438,9 +439,8 @@ func (s *InvoiceService) SendInvoice(invoiceID, userID string) (*models.Invoice,
 		return nil, errors.New("cannot send cancelled invoice")
 	}
 
-	now := time.Now().UTC()
 	invoice.Status = models.InvoiceStatusSent
-	invoice.SentAt = gorm.NowFunc()
+	invoice.SentAt = sql.NullTime{Time: time.Now(), Valid: true}
 
 	if err := s.db.Save(invoice).Error; err != nil {
 		return nil, fmt.Errorf("failed to send invoice: %w", err)
@@ -481,7 +481,7 @@ func (s *InvoiceService) RecordPayment(invoiceID string, payment *models.Payment
 		// Full payment - cap at total (handle overpayment gracefully)
 		invoice.PaidAmount = invoice.Total
 		invoice.Status = models.InvoiceStatusPaid
-		invoice.PaidAt = gorm.NowFunc()
+		invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
 	} else if invoice.PaidAmount > 0 {
 		// Partial payment
 		invoice.Status = models.InvoiceStatusPartiallyPaid
@@ -538,8 +538,8 @@ func (s *InvoiceService) GetDashboardStats(userID string, period string) (*Dashb
 	var stats DashboardStats
 
 	// Determine date range
+	now := time.Now()
 	var startDate time.Time
-	now := time.Now().UTC()
 	switch period {
 	case "week":
 		startDate = now.AddDate(0, 0, -7)

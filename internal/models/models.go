@@ -38,6 +38,8 @@ type Client struct {
 	TotalPaid    float64   `json:"total_paid" gorm:"default:0"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+
+	Invoices []Invoice `json:"-" gorm:"foreignKey:ClientID"`
 }
 
 // InvoiceStatus represents the status of an invoice
@@ -125,6 +127,7 @@ const (
 // Payment represents a payment for an invoice
 type Payment struct {
 	ID            string        `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID        string        `json:"user_id" gorm:"type:uuid;index"`
 	InvoiceID     string        `json:"invoice_id" gorm:"type:uuid;index;not null"`
 	Amount        float64       `json:"amount" gorm:"not null"`
 	Currency      string        `json:"currency" gorm:"default:'KES'"`

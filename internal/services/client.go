@@ -1,9 +1,9 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
@@ -48,35 +48,6 @@ func (s *ClientService) CreateClient(userID string, req *CreateClientRequest) (*
 	}
 
 	return client, nil
-}
-
-// normalizePhone normalizes phone number
-func normalizePhone(phone string) string {
-	if strings.TrimSpace(phone) == "" {
-		return ""
-	}
-
-	// Remove all non-digits
-	var digits string
-	for _, c := range phone {
-		if c >= '0' && c <= '9' {
-			digits += string(c)
-		}
-	}
-
-	// Handle different formats
-	if len(digits) == 10 && digits[0] == '0' {
-		return "254" + digits[1:]
-	}
-	if len(digits) == 9 {
-		return "254" + digits
-	}
-	if len(digits) == 12 && digits[:3] == "254" {
-		return digits
-	}
-
-	// Return original if no conversion possible
-	return phone
 }
 
 // getValidCurrency ensures currency is valid

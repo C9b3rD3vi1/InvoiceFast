@@ -26,7 +26,7 @@ func HandlePaymentRequest(c *gin.Context, db *database.DB, invoiceService *servi
 		return
 	}
 
-	// Get user from context (set by auth middleware)
+	// Get user from context
 	userID, exists := c.Get("user_id")
 	if !exists {
 		utils.RespondWithError(c, http.StatusUnauthorized, utils.ErrCodeUnauthorized, "Unauthorized")
@@ -53,22 +53,27 @@ func HandlePaymentRequest(c *gin.Context, db *database.DB, invoiceService *servi
 
 	// Use provided phone or fall back to client phone
 	phone := req.Phone
-	if phone == "" && invoice.Client != nil {
+	if phone == "" {
 		phone = invoice.Client.Phone
 	}
 
 	// Initiate STK push via Intasend
 	if intasendService != nil && phone != "" {
-		result, err := intasendService.InitiateSTKPush(phone, invoice.Total, invoice.InvoiceNumber)
+		result, err := intasendService.InitiateSTKPush(services.InitiatePaymentRequest{
+			Amount:        invoice.Total,
+			Currency:      invoice.Currency,
+			PhoneNumber:   phone,
+			APIRef:       invoice.InvoiceNumber,
+			InvoiceNumber: invoice.InvoiceNumber,
+		})
 		if err != nil {
 			log.Printf("STK push failed: %v", err)
-			// Continue - may work offline
 		}
 
 		if result != nil {
 			utils.RespondWithSuccess(c, gin.H{
 				"message":     "Payment request sent to your phone",
-				"checkout_id": result.CheckoutID,
+				"checkout_id": result.ID,
 				"invoice_id":  invoiceID,
 				"amount":      invoice.Total,
 				"currency":    invoice.Currency,
@@ -111,14 +116,13 @@ func HandleIntasendWebhook(c *gin.Context, db *database.DB, invoiceService *serv
 	log.Printf("Received Intasend webhook: event=%s, checkout=%s, state=%s",
 		payload.Event, payload.CheckoutID, payload.State)
 
-	// Find invoice by invoice_number
 	if payload.InvoiceNumber == "" {
 		log.Printf("No invoice number in webhook payload")
 		c.JSON(http.StatusOK, gin.H{"status": "ignored"})
 		return
 	}
 
-	// Try to find invoice by number (public access for webhook)
+	// Find invoice
 	var invoice models.Invoice
 	err := db.Preload("Client").Preload("Items").Preload("Payments").
 		First(&invoice, "invoice_number = ?", payload.InvoiceNumber).Error
@@ -132,15 +136,12 @@ func HandleIntasendWebhook(c *gin.Context, db *database.DB, invoiceService *serv
 	// Handle different event types
 	switch payload.Event {
 	case "payment_reversed", "chargeback":
-		// Payment was reversed
 		invoice.Status = "sent"
-		invoiceService.UpdateInvoice(invoice.ID, invoice)
+		db.Save(&invoice)
 
 	case "payment_successful", "invoice_payment_signed":
-		// Payment successful - record it
 		amount := 0.0
 		if payload.Amount != "" {
-			// Parse amount - remove any currency symbols
 			var parsed float64
 			_, err := fmt.Sscanf(payload.Amount, "%f", &parsed)
 			if err == nil {
@@ -152,20 +153,23 @@ func HandleIntasendWebhook(c *gin.Context, db *database.DB, invoiceService *serv
 			amount = invoice.Total
 		}
 
-		payment := services.Payment{
+		payment := models.Payment{
+			ID:          fmt.Sprintf("pay-%d", time.Now().UnixNano()),
 			InvoiceID:   invoice.ID,
+			UserID:      invoice.UserID,
 			Amount:      amount,
-			Method:      "mpesa",
-			Status:      "completed",
+			Currency:    invoice.Currency,
+			Method:      models.PaymentMethodMpesa,
+			Status:      models.PaymentStatusCompleted,
 			Reference:   payload.Reference,
-			CompletedAt: time.Now(),
 		}
+		payment.CompletedAt.Valid = true
+		payment.CompletedAt.Time = time.Now()
 
-		invoiceService.RecordPayment(invoice.ID, payment)
+		db.Create(&payment)
 
-		// Update invoice status
 		invoice.Status = "paid"
-		invoiceService.UpdateInvoice(invoice.ID, invoice)
+		db.Save(&invoice)
 
 		log.Printf("Payment recorded for invoice %s: %f", invoice.InvoiceNumber, amount)
 

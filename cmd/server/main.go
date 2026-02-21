@@ -38,7 +38,7 @@ func main() {
 		for range ticker.C {
 			stats := db.Stats()
 			log.Printf("[DB] Open=%d Idle=%d InUse=%d WaitCount=%d",
-				stats.OpenConnections, stats.IdleConnections,
+				stats.OpenConnections, stats.Idle,
 				stats.InUse, stats.WaitCount)
 		}
 	}()
@@ -56,11 +56,9 @@ func main() {
 
 	// Initialize handlers
 	handler := handlers.NewHandler(authService, invoiceService, clientService)
-
 	// Initialize rate limiter
-	rateLimiter := middleware.NewRateLimiter(&cfg.RateLimit)
+	rateLimiter := middleware.NewRateLimiter()
 	defer rateLimiter.Stop()
-
 	// Setup Gin
 	if cfg.Server.Mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -92,6 +90,7 @@ func main() {
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeouts.Shutdown)
 	defer cancel()
+	defer func(){}()
 
 	// Stop accepting new requests
 	if err := server.Shutdown(ctx); err != nil {
@@ -134,8 +133,8 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 	public := r.Group("/api/v1")
 	{
 		// Auth - rate limited
-		public.POST("/auth/register", rateLimiter, handler.Register)
-		public.POST("/auth/login", rateLimiter, handler.Login)
+		public.POST("/auth/register", func(c *gin.Context) { rateLimiter.ServeHTTP(c) }, handler.Register)
+		public.POST("/auth/login", func(c *gin.Context) { rateLimiter.ServeHTTP(c) }, handler.Login)
 		public.POST("/auth/refresh", handler.RefreshToken)
 
 		// Public invoice (magic link)
@@ -150,7 +149,7 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 	// Protected routes
 	protected := r.Group("/api/v1")
 	protected.Use(middleware.AuthMiddleware(authService))
-	protected.Use(rateLimiter) // Apply rate limiting
+	protected.Use(func(c *gin.Context) { rateLimiter.ServeHTTP(c) }) // Apply rate limiting
 	{
 		// User
 		protected.GET("/me", handler.GetMe)
@@ -216,9 +215,6 @@ func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
 func healthCheckHandler(db *database.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check database
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-		defer cancel()
-
 		if err := db.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status": "unhealthy",

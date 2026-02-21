@@ -13,6 +13,8 @@ type Config struct {
 	Mail      MailConfig
 	RateLimit RateLimitConfig
 	Timeouts  TimeoutsConfig
+	KRA       KRAConfig
+	WhatsApp  WhatsAppConfig
 }
 
 type ServerConfig struct {
@@ -57,6 +59,27 @@ type MailConfig struct {
 	SMTPPassword string
 	FromEmail    string
 	FromName     string
+}
+
+type WhatsAppConfig struct {
+	Enabled       bool
+	APIKey        string
+	APISecret     string
+	PhoneNumber   string
+	PhoneNumberID string
+	BusinessID    string
+	AccessToken   string
+}
+
+type KRAConfig struct {
+	Enabled     bool
+	APIURL      string
+	APIKey      string
+	BranchCode string
+	DeviceID   string
+	BranchID   string
+	PrivateKey string
+	CertSerial string
 }
 
 type RateLimitConfig struct {
@@ -126,6 +149,25 @@ func Load() *Config {
 			ExternalAPI:   getDurationEnv("TIMEOUT_EXTERNAL_API", 30*time.Second),
 			Request:       getDurationEnv("TIMEOUT_REQUEST", 60*time.Second),
 			Shutdown:      getDurationEnv("TIMEOUT_SHUTDOWN", 30*time.Second),
+		},
+		KRA: KRAConfig{
+			Enabled:    getBoolEnv("KRA_ENABLED", false),
+			APIURL:     getEnv("KRA_API_URL", "https://api.kra.go.ke"),
+			APIKey:     getEnv("KRA_API_KEY", ""),
+			BranchCode: getEnv("KRA_BRANCH_CODE", ""),
+			DeviceID:   getEnv("KRA_DEVICE_ID", ""),
+			BranchID:   getEnv("KRA_BRANCH_ID", ""),
+			PrivateKey: getEnv("KRA_PRIVATE_KEY", ""),
+			CertSerial: getEnv("KRA_CERT_SERIAL", ""),
+		},
+		WhatsApp: WhatsAppConfig{
+			Enabled:       getBoolEnv("WHATSAPP_ENABLED", false),
+			APIKey:        getEnv("WHATSAPP_API_KEY", ""),
+			APISecret:     getEnv("WHATSAPP_API_SECRET", ""),
+			PhoneNumber:   getEnv("WHATSAPP_PHONE_NUMBER", ""),
+			PhoneNumberID: getEnv("WHATSAPP_PHONE_NUMBER_ID", ""),
+			BusinessID:    getEnv("WHATSAPP_BUSINESS_ID", ""),
+			AccessToken:   getEnv("WHATSAPP_ACCESS_TOKEN", ""),
 		},
 	}
 }
