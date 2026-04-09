@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice {{.InvoiceNumber}}</title>
+    <style>
+        :root {
+            --primary-color: {{.BrandColor}};
+            --text-color: #333;
+            --light-gray: #f5f5f5;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid var(--primary-color);
+        }
+        
+        .company-info h1 {
+            font-size: 28px;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        
+        .company-info p {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .invoice-details {
+            text-align: right;
+        }
+        
+        .invoice-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .invoice-meta {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .parties {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        
+        .party {
+            width: 45%;
+        }
+        
+        .party h3 {
+            font-size: 16px;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .party p {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        
+        .items-table th {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .items-table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .items-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .items-table .amount {
+            text-align: right;
+        }
+        
+        .totals {
+            margin-left: auto;
+            width: 300px;
+        }
+        
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .totals-row.total {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-top: 15px;
+        }
+        
+        .kra-compliance {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: var(--light-gray);
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .kra-compliance img {
+            width: 150px;
+            height: 150px;
+        }
+        
+        .kra-info {
+            margin-top: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .notes {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+        }
+        
+        .notes h4 {
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+        
+        @media print {
+            .invoice-container {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="invoice-header">
+            <div class="company-info">
+                {{if .LogoURL}}<img src="{{.LogoURL}}" alt="Logo" style="width: 150px; margin-bottom: 10px;">{{end}}
+                <h1>{{.CompanyName}}</h1>
+                <p>{{.CompanyEmail}}</p>
+                <p>{{.CompanyPhone}}</p>
+                <p>{{.CompanyAddress}}</p>
+                {{if .CompanyKRA}}<p style="color: #888; font-size: 12px;">KRA PIN: {{.CompanyKRA}}</p>{{end}}
+            </div>
+            <div class="invoice-details">
+                <div class="invoice-number">INVOICE #{{.InvoiceNumber}}</div>
+                <div class="invoice-meta">
+                    <p><strong>Date:</strong> {{.InvoiceDate.Format "Jan 02, 2006"}}</p>
+                    <p><strong>Due Date:</strong> {{.DueDate.Format "Jan 02, 2006"}}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="parties">
+            <div class="party">
+                <h3>From</h3>
+                <p><strong>{{.CompanyName}}</strong></p>
+                <p>{{.CompanyEmail}}</p>
+                <p>{{.CompanyPhone}}</p>
+                <p>{{.CompanyAddress}}</p>
+            </div>
+            <div class="party">
+                <h3>Bill To</h3>
+                <p><strong>{{.ClientName}}</strong></p>
+                <p>{{.ClientEmail}}</p>
+                <p>{{.ClientPhone}}</p>
+                <p>{{.ClientAddress}}</p>
+            </div>
+        </div>
+        
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th class="amount">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Items}}
+                <tr>
+                    <td>{{.Description}}</td>
+                    <td>{{.Quantity}}</td>
+                    <td>{{printf "%.2f" .UnitPrice}}</td>
+                    <td class="amount">{{printf "%.2f" .Total}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        
+        <div class="totals">
+            <div class="totals-row">
+                <span>Subtotal</span>
+                <span>{{.Currency}} {{printf "%.2f" .Subtotal}}</span>
+            </div>
+            {{if .TaxRate}}
+            <div class="totals-row">
+                <span>Tax ({{printf "%.1f" .TaxRate}}%)</span>
+                <span>{{.Currency}} {{printf "%.2f" .TaxAmount}}</span>
+            </div>
+            {{end}}
+            <div class="totals-row total">
+                <span>Total</span>
+                <span>{{.Currency}} {{printf "%.2f" .Total}}</span>
+            </div>
+        </div>
+        
+        {{if .Notes}}
+        <div class="notes">
+            <h4>Notes</h4>
+            <p>{{.Notes}}</p>
+        </div>
+        {{end}}
+        
+        {{if .QRCode}}
+        <div class="kra-compliance">
+            <img src="{{.QRCode}}" alt="KRA QR Code">
+            <div class="kra-info">
+                <p>Scan to verify this invoice</p>
+                <p>KRA e-TIMS Compliant</p>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>

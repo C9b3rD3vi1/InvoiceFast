@@ -1,0 +1,38 @@
+{
+  "name": "invoice_notification",
+  "language": "en_US",
+  "category": "TRANSACTIONAL",
+  "components": [
+    {
+      "type": "body",
+      "parameters": [
+        {
+          "type": "text",
+          "parameter_name": "company_name"
+        },
+        {
+          "type": "text",
+          "parameter_name": "invoice_number"
+        },
+        {
+          "type": "text",
+          "parameter_name": "amount"
+        },
+        {
+          "type": "text",
+          "parameter_name": "due_date"
+        }
+      ]
+    },
+    {
+      "type": "button",
+      "sub_type": "url",
+      "parameters": [
+        {
+          "type": "text",
+          "parameter_name": "payment_link"
+        }
+      ]
+    }
+  ]
+}

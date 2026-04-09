@@ -27,7 +27,7 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
-		PrepareStmt: true,
+		PrepareStmt: false, // Disable prepared statements for SQLite
 	}
 
 	db, err := gorm.Open(sqlite.Open(cfg.DSN), gormConfig)
@@ -41,11 +41,9 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
 	}
 
-	// Configure connection pool
-	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	// SQLite works better with a single connection to avoid locking issues
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -54,8 +52,7 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Printf("Database connected: max_open=%d, max_idle=%d, lifetime=%v",
-		cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
+	log.Println("Database connected: SQLite (single connection mode)")
 
 	return &DB{DB: db, sqlDB: sqlDB}, nil
 }
@@ -85,6 +82,8 @@ func (db *DB) Migrate() error {
 		&models.RefreshToken{},
 		&models.AuditLog{},
 		&models.APIKey{},
+		&models.ExchangeRate{},
+		&models.KRAQueueItem{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)

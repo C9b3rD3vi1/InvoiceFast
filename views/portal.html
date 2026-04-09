@@ -1,0 +1,313 @@
+{{define "content"}}
+<!-- Invoice Portal - Client Payment Page -->
+<div class="min-h-screen bg-slate-50 pb-12">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Invoice Header -->
+        <div class="card mb-6 overflow-hidden">
+            <div class="bg-gradient-to-r from-trust to-trust-light px-6 py-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        {{if .Invoice.LogoURL}}
+                        <img src="{{.Invoice.LogoURL}}" alt="Business Logo" class="w-12 h-12 rounded-lg object-cover bg-white">
+                        {{else}}
+                        <div class="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                            </svg>
+                        </div>
+                        {{end}}
+                        <div>
+                            <h1 class="text-xl font-bold text-white">{{.Invoice.User.CompanyName}}</h1>
+                            <p class="text-white/80 text-sm">Invoice #{{.Invoice.InvoiceNumber}}</p>
+                        </div>
+                    </div>
+                    <!-- Status Badge -->
+                    <div id="status-badge" class="px-4 py-2 rounded-full font-semibold text-sm animate-fade-in
+                        {{if eq string .Invoice.Status "paid"}}badge-success{{else if eq string .Invoice.Status "partially_paid"}}badge-warning{{else}}badge-danger{{end}}">
+                        {{if eq string .Invoice.Status "paid"}}
+                            <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            Paid
+                        {{else if eq string .Invoice.Status "partially_paid"}}
+                            Partially Paid
+                        {{else if eq string .Invoice.Status "overdue"}}
+                            Overdue
+                        {{else}}
+                            Unpaid
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invoice Details -->
+            <div class="p-6">
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <p class="text-slate-500 text-sm mb-1">Bill To</p>
+                        <p class="font-semibold text-slate-900">{{.Invoice.Client.Name}}</p>
+                        {{if .Invoice.Client.Email}}<p class="text-slate-600 text-sm">{{.Invoice.Client.Email}}</p>{{end}}
+                        {{if .Invoice.Client.Phone}}<p class="text-slate-600 text-sm">{{.Invoice.Client.Phone}}</p>{{end}}
+                        {{if .Invoice.Client.KRAPIN}}<p class="text-slate-600 text-sm">KRA PIN: {{.Invoice.Client.KRAPIN}}</p>{{end}}
+                    </div>
+                    <div class="text-right">
+                        <p class="text-slate-500 text-sm mb-1">Due Date</p>
+                        <p class="font-semibold text-slate-900">{{.Invoice.DueDate.Format "02 Jan 2006"}}</p>
+                        <p class="text-slate-500 text-sm mt-2">Created: {{.Invoice.CreatedAt.Format "02 Jan 2006"}}</p>
+                    </div>
+                </div>
+
+                <!-- Line Items Table -->
+                <div class="overflow-x-auto mb-6">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-slate-200">
+                                <th class="text-left py-3 px-4 text-slate-600 font-semibold text-sm">Description</th>
+                                <th class="text-center py-3 px-4 text-slate-600 font-semibold text-sm">Qty</th>
+                                <th class="text-right py-3 px-4 text-slate-600 font-semibold text-sm">Unit Price</th>
+                                <th class="text-right py-3 px-4 text-slate-600 font-semibold text-sm">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .Invoice.Items}}
+                            <tr class="border-b border-slate-100">
+                                <td class="py-3 px-4 text-slate-900">{{.Description}}</td>
+                                <td class="text-center py-3 px-4 text-slate-600">{{.Quantity}}</td>
+                                <td class="text-right py-3 px-4 text-slate-600">{{$.Invoice.Currency}} {{printf "%.2f" .UnitPrice}}</td>
+                                <td class="text-right py-3 px-4 text-slate-900 font-medium">{{$.Invoice.Currency}} {{printf "%.2f" .Total}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Totals -->
+                <div class="flex justify-end mb-6">
+                    <div class="w-full max-w-xs space-y-3">
+                        <div class="flex justify-between text-slate-600">
+                            <span>Subtotal</span>
+                            <span>{{.Invoice.Currency}} {{printf "%.2f" .Invoice.Subtotal}}</span>
+                        </div>
+                        {{if .Invoice.TaxAmount}}
+                        <div class="flex justify-between text-slate-600">
+                            <span>Tax ({{printf "%.1f" .Invoice.TaxRate}}%)</span>
+                            <span>{{.Invoice.Currency}} {{printf "%.2f" .Invoice.TaxAmount}}</span>
+                        </div>
+                        {{end}}
+                        {{if .Invoice.Discount}}
+                        <div class="flex justify-between text-success">
+                            <span>Discount</span>
+                            <span>-{{.Invoice.Currency}} {{printf "%.2f" .Invoice.Discount}}</span>
+                        </div>
+                        {{end}}
+                        <div class="border-t border-slate-200 pt-3 flex justify-between text-lg font-bold text-slate-900">
+                            <span>Total</span>
+                            <span id="total-amount">{{.Invoice.Currency}} {{printf "%.2f" .Invoice.Total}}</span>
+                        </div>
+                        {{if ne .Invoice.Currency "KES"}}
+                        <div class="flex justify-between text-sm text-slate-500">
+                            <span>KES Equivalent</span>
+                            <span id="kes-amount">KES {{printf "%.2f" .Invoice.KESEquivalent}}</span>
+                        </div>
+                        {{end}}
+                        {{if .Invoice.PaidAmount}}
+                        <div class="flex justify-between text-sm text-success">
+                            <span>Paid</span>
+                            <span>{{.Invoice.Currency}} {{printf "%.2f" .Invoice.PaidAmount}}</span>
+                        </div>
+                        <div class="flex justify-between text-sm font-semibold text-slate-700">
+                            <span>Remaining</span>
+                            <span id="remaining-amount">{{.Invoice.Currency}} {{printf "%.2f" (sub .Invoice.Total .Invoice.PaidAmount)}}</span>
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+
+                {{if ne string .Invoice.Status "paid"}}
+                <!-- M-Pesa Payment Section -->
+                <div class="border-t border-slate-200 pt-6">
+                    <h3 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Pay with M-Pesa
+                    </h3>
+
+                    <!-- Payment Form -->
+                    <div id="payment-form" class="mb-6">
+                        <form
+                            hx-post="/api/v1/payment/stk-push"
+                            hx-target="#payment-result"
+                            hx-swap="outerHTML"
+                            hx-indicator="#payment-loading"
+                            class="space-y-4"
+                        >
+                            <input type="hidden" name="invoice_token" value="{{.Invoice.MagicToken}}">
+                            <input type="hidden" name="amount" value="{{.Invoice.Total}}">
+
+                            <div>
+                                <label for="phone" class="block text-sm font-medium text-slate-700 mb-2">
+                                    M-Pesa Phone Number
+                                </label>
+                                <input
+                                    type="tel"
+                                    id="phone"
+                                    name="phone"
+                                    placeholder="0712 345 678"
+                                    class="input-field"
+                                    required
+                                    pattern="^(07|01|254)\d{8}$"
+                                    autocomplete="tel"
+                                >
+                                <p class="text-xs text-slate-500 mt-1">Enter your M-Pesa registered number</p>
+                            </div>
+
+                            <div class="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                                <svg class="w-5 h-5 text-success mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <div>
+                                    <p class="text-sm font-medium text-green-900">Secure Payment</p>
+                                    <p class="text-xs text-green-700">You'll receive an STK push on your phone. Enter your M-Pesa PIN to complete payment.</p>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-success w-full flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                                Pay Now - {{.Invoice.Currency}} {{printf "%.2f" (sub .Invoice.Total .Invoice.PaidAmount)}}
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Loading Indicator -->
+                    <div id="payment-loading" class="htmx-indicator text-center py-8">
+                        <div class="spinner mx-auto mb-3"></div>
+                        <p class="text-slate-600">Processing your payment request...</p>
+                        <p class="text-sm text-slate-500">Check your phone for the M-Pesa prompt</p>
+                    </div>
+
+                    <!-- Payment Result / Polling Status -->
+                    <div id="payment-result"></div>
+
+                    <!-- Live Status Polling (shown after STK push) -->
+                    <div id="payment-status-poll" class="hidden mt-4">
+                        <div
+                            hx-get="/api/v1/payment/status/{{.Invoice.MagicToken}}"
+                            hx-trigger="every 3s"
+                            hx-target="#payment-status-poll"
+                            hx-swap="outerHTML"
+                        >
+                            <div class="bg-slate-100 rounded-lg p-4 flex items-center gap-3">
+                                <div class="spinner"></div>
+                                <div>
+                                    <p class="font-medium text-slate-900">Waiting for payment confirmation...</p>
+                                    <p class="text-sm text-slate-600">Please complete the STK push on your phone</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {{else}}
+                <!-- Paid Invoice - Show KRA Details -->
+                <div class="border-t border-slate-200 pt-6">
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-success-pulse">
+                            <svg class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-green-900 mb-2">Payment Received</h3>
+                        <p class="text-green-700 mb-4">Thank you for your payment!</p>
+
+                        {{if .Invoice.KRAICN}}
+                        <div class="bg-white rounded-lg p-4 inline-block">
+                            <p class="text-sm text-slate-600 mb-2">KRA e-TIMS ICN</p>
+                            <p class="font-mono font-bold text-slate-900">{{.Invoice.KRAICN}}</p>
+                            {{if .Invoice.KRAQRCode}}
+                            <div class="mt-3">
+                                <img src="data:image/png;base64,{{.Invoice.KRAQRCode}}" alt="KRA QR Code" class="w-32 h-32 mx-auto">
+                            </div>
+                            {{end}}
+                        </div>
+                        {{end}}
+
+                        <div class="flex gap-3 mt-6 justify-center">
+                            <a href="/api/v1/invoice/{{.Invoice.MagicToken}}/pdf" class="btn-trust">
+                                Download Receipt
+                            </a>
+                            <button onclick="window.print()" class="btn-outline">
+                                Print
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+        <!-- Powered by InvoiceFast -->
+        <div class="text-center text-slate-500 text-sm">
+            <p>Powered by <a href="/" class="text-trust hover:underline">InvoiceFast</a></p>
+            <p class="mt-1">Secure payment processing with M-Pesa</p>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Success Modal (triggered by HTMX) -->
+<div id="success-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl p-8 max-w-md w-full text-center animate-slide-up">
+        <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-10 h-10 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+        </div>
+        <h3 class="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h3>
+        <p class="text-slate-600 mb-6">Your payment has been confirmed.</p>
+        <a href="/invoice/{{.Invoice.MagicToken}}/receipt" class="btn-trust w-full block">View Receipt</a>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    // Phone number formatting
+    const phoneInput = document.getElementById('phone');
+    if (phoneInput) {
+        phoneInput.addEventListener('input', (e) => {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.startsWith('254')) {
+                value = '0' + value.substring(3);
+            }
+            if (value.length > 10) {
+                value = value.substring(0, 10);
+            }
+            e.target.value = value;
+        });
+    }
+
+    // Handle HTMX payment success
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.elt.id === 'payment-form') {
+            try {
+                const data = JSON.parse(evt.detail.xhr.responseText);
+                if (data.status === 'pending' || data.status === 'stk_push_sent') {
+                    // Show polling indicator
+                    document.getElementById('payment-status-poll').classList.remove('hidden');
+                    document.getElementById('payment-form').classList.add('hidden');
+                } else if (data.status === 'completed') {
+                    // Show success modal
+                    document.getElementById('success-modal').classList.remove('hidden');
+                    // Refresh page after delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                }
+            } catch (e) {
+                // Ignore if not JSON
+            }
+        }
+    });
+</script>
+{{end}}

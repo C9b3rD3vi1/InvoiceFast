@@ -273,10 +273,13 @@ func SanitizeInput(input string) string {
 	return input
 }
 
-// JSONMiddleware sets proper JSON headers
+// JSONMiddleware sets proper JSON headers for API routes only
 func JSONMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Content-Type", "application/json")
+		// Only set JSON content type for API routes
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.Header("Content-Type", "application/json")
+		}
 		c.Next()
 	}
 }

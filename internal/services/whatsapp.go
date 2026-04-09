@@ -158,23 +158,22 @@ func (s *WhatsAppService) SendThankYou(phone, invoiceNumber string) error {
 
 // Send is the main method to send messages
 func (s *WhatsAppService) Send(msg *WhatsAppMessage) error {
-	// In production, use actual WhatsApp Business API
-	// For now, log the message
-
-	fmt.Printf("📱 [WHATSAPP MESSAGE]\n")
-	fmt.Printf("To: %s\n", msg.To)
-	if msg.Template != nil {
-		fmt.Printf("Type: template (%s)\n", msg.Template.Name)
+	// Check if WhatsApp is configured
+	if s.cfg.WhatsApp.AccessToken == "" || s.cfg.WhatsApp.PhoneNumberID == "" {
+		fmt.Printf("📱 [WHATSAPP MOCK - Not configured]\n")
+		fmt.Printf("To: %s\n", msg.To)
+		if msg.Template != nil {
+			fmt.Printf("Type: template (%s)\n", msg.Template.Name)
+		}
+		if msg.Text != nil {
+			fmt.Printf("Message: %s\n", msg.Text.Body)
+		}
+		fmt.Println("WhatsApp API not configured - run in production mode to enable")
+		return nil
 	}
-	if msg.Text != nil {
-		fmt.Printf("Message: %s\n", msg.Text.Body)
-	}
-	fmt.Println()
 
-	// Uncomment below for production:
-	// return s.sendToAPI(msg)
-
-	return nil
+	// Send via WhatsApp Business API
+	return s.sendToAPI(msg)
 }
 
 // sendToAPI sends message to WhatsApp Business API

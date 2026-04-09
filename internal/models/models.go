@@ -3,34 +3,49 @@ package models
 import (
 	"database/sql"
 	"time"
-
-	"github.com/google/uuid"
 )
+
+// Tenant represents an organization/company in the system
+type Tenant struct {
+	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
+	Name      string    `json:"name" gorm:"not null"`
+	Subdomain string    `json:"subdomain" gorm:"uniqueIndex"` // For custom domains
+	Plan      string    `json:"plan" gorm:"default:'free'"`   // free, pro, agency, enterprise
+	Settings  string    `json:"settings" gorm:"type:text"`    // JSON settings
+	IsActive  bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
 // User represents a user/tenant in the system
 type User struct {
 	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID     string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	Email        string    `json:"email" gorm:"uniqueIndex;not null"`
 	PasswordHash string    `json:"-" gorm:"not null"`
 	Name         string    `json:"name"`
 	Phone        string    `json:"phone"`
 	CompanyName  string    `json:"company_name"`
-	KRAPIN       string    `json:"kra_pin"`
+	KRAPIN       string    `json:"kra_pin"`                    // Encrypted - stored as ciphertext
 	Plan         string    `json:"plan" gorm:"default:'free'"` // free, pro, agency, enterprise
 	IsActive     bool      `json:"is_active" gorm:"default:true"`
+	Role         string    `json:"role" gorm:"default:'user'"` // admin, manager, user
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+
+	Tenant Tenant `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
 }
 
 // Client represents a customer/client of the user
 type Client struct {
 	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID       string    `json:"user_id" gorm:"type:uuid;index;not null"`
+	TenantID     string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID       string    `json:"user_id" gorm:"type:uuid;index;not null"` // Legacy - for backward compat
 	Name         string    `json:"name" gorm:"not null"`
 	Email        string    `json:"email"`
 	Phone        string    `json:"phone"`
 	Address      string    `json:"address"`
-	KRAPIN       string    `json:"kra_pin"`
+	KRAPIN       string    `json:"kra_pin"` // Encrypted - stored as ciphertext
 	Currency     string    `json:"currency" gorm:"default:'KES'"`
 	PaymentTerms int       `json:"payment_terms" gorm:"default:30"` // days
 	Notes        string    `json:"notes"`
@@ -57,31 +72,37 @@ const (
 
 // Invoice represents an invoice
 type Invoice struct {
-	ID            string        `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID        string        `json:"user_id" gorm:"type:uuid;index;not null"`
-	ClientID      string        `json:"client_id" gorm:"type:uuid;index;not null"`
-	InvoiceNumber string        `json:"invoice_number" gorm:"uniqueIndex"`
-	Reference     string        `json:"reference"`
-	Currency      string        `json:"currency" gorm:"default:'KES'"`
-	Subtotal      float64       `json:"subtotal" gorm:"not null"`
-	TaxRate       float64       `json:"tax_rate" gorm:"default:0"`
-	TaxAmount     float64       `json:"tax_amount" gorm:"default:0"`
-	Discount      float64       `json:"discount" gorm:"default:0"`
-	Total         float64       `json:"total" gorm:"not null"`
-	PaidAmount    float64       `json:"paid_amount" gorm:"default:0"`
-	Status        InvoiceStatus `json:"status" gorm:"default:'draft'"`
-	DueDate       time.Time     `json:"due_date"`
-	SentAt        sql.NullTime  `json:"sent_at"`
-	ViewedAt      sql.NullTime  `json:"viewed_at"`
-	PaidAt        sql.NullTime  `json:"paid_at"`
-	Notes         string        `json:"notes"`
-	Terms         string        `json:"terms"`
-	BrandColor    string        `json:"brand_color" gorm:"default:'#2563eb'"`
-	LogoURL       string        `json:"logo_url"`
-	PaymentLink   string        `json:"payment_link"`
-	MagicToken    string        `json:"magic_token" gorm:"uniqueIndex"` // For client portal
-	CreatedAt     time.Time     `json:"created_at"`
-	UpdatedAt     time.Time     `json:"updated_at"`
+	ID                  string        `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID            string        `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID              string        `json:"user_id" gorm:"type:uuid;index;not null"`
+	ClientID            string        `json:"client_id" gorm:"type:uuid;index;not null"`
+	InvoiceNumber       string        `json:"invoice_number" gorm:"uniqueIndex"`
+	Reference           string        `json:"reference"`
+	Currency            string        `json:"currency" gorm:"default:'KES'"`
+	KESEquivalent       float64       `json:"kes_equivalent" gorm:"default:0"` // Dual display: KES value
+	ExchangeRate        float64       `json:"exchange_rate" gorm:"default:1"`  // Rate used for conversion
+	Subtotal            float64       `json:"subtotal" gorm:"not null"`
+	TaxRate             float64       `json:"tax_rate" gorm:"default:0"`
+	TaxAmount           float64       `json:"tax_amount" gorm:"default:0"`
+	Discount            float64       `json:"discount" gorm:"default:0"`
+	Total               float64       `json:"total" gorm:"not null"`
+	PaidAmount          float64       `json:"paid_amount" gorm:"default:0"`
+	Status              InvoiceStatus `json:"status" gorm:"default:'draft'"`
+	DueDate             time.Time     `json:"due_date"`
+	SentAt              sql.NullTime  `json:"sent_at"`
+	ViewedAt            sql.NullTime  `json:"viewed_at"`
+	PaidAt              sql.NullTime  `json:"paid_at"`
+	Notes               string        `json:"notes"`
+	Terms               string        `json:"terms"`
+	BrandColor          string        `json:"brand_color" gorm:"default:'#2563eb'"`
+	LogoURL             string        `json:"logo_url"`
+	PaymentLink         string        `json:"payment_link"`
+	MagicToken          string        `json:"magic_token" gorm:"uniqueIndex"` // For client portal
+	MagicTokenExpiresAt sql.NullTime  `json:"magic_token_expires_at"`         // Token expiration
+	KRAICN              string        `json:"kra_icn"`                        // KRA Invoice Confirmation Number
+	KRAQRCode           string        `json:"kra_qr_code"`                    // KRA QR Code
+	CreatedAt           time.Time     `json:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at"`
 
 	// Relations
 	User     User          `json:"-" gorm:"foreignKey:UserID"`
@@ -127,13 +148,14 @@ const (
 // Payment represents a payment for an invoice
 type Payment struct {
 	ID            string        `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      string        `json:"tenant_id" gorm:"type:uuid;index;not null;uniqueIndex:idx_payment_tenant_ref"`
 	UserID        string        `json:"user_id" gorm:"type:uuid;index"`
 	InvoiceID     string        `json:"invoice_id" gorm:"type:uuid;index;not null"`
 	Amount        float64       `json:"amount" gorm:"not null"`
 	Currency      string        `json:"currency" gorm:"default:'KES'"`
 	Method        PaymentMethod `json:"method" gorm:"not null"`
 	Status        PaymentStatus `json:"status" gorm:"default:'pending'"`
-	Reference     string        `json:"reference"` // M-Pesa receipt number, etc.
+	Reference     string        `json:"reference" gorm:"index"` // M-Pesa receipt number
 	IntasendID    string        `json:"intasend_id"`
 	PhoneNumber   string        `json:"phone_number"`
 	CustomerEmail string        `json:"customer_email"`
@@ -148,6 +170,7 @@ type Payment struct {
 // Reminder represents an automated reminder
 type Reminder struct {
 	ID          string       `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID    string       `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID      string       `json:"user_id" gorm:"type:uuid;index;not null"`
 	InvoiceID   string       `json:"invoice_id" gorm:"type:uuid;index;not null"`
 	Type        string       `json:"type"`   // email, whatsapp, sms
@@ -161,6 +184,7 @@ type Reminder struct {
 // Template represents an invoice template
 type Template struct {
 	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID  string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
 	Name      string    `json:"name" gorm:"not null"`
 	HTML      string    `json:"html" gorm:"type:text"`
@@ -172,6 +196,7 @@ type Template struct {
 // RefreshToken for JWT refresh
 type RefreshToken struct {
 	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID  string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
 	Token     string    `json:"token" gorm:"uniqueIndex;not null"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -181,6 +206,7 @@ type RefreshToken struct {
 // AuditLog for tracking changes
 type AuditLog struct {
 	ID         string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID   string    `json:"tenant_id" gorm:"type:uuid;index"`
 	UserID     string    `json:"user_id" gorm:"type:uuid;index"`
 	Action     string    `json:"action" gorm:"not null"`
 	EntityType string    `json:"entity_type"` // invoice, client, payment
@@ -193,6 +219,7 @@ type AuditLog struct {
 // APIKey for programmatic access
 type APIKey struct {
 	ID         string       `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID   string       `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID     string       `json:"user_id" gorm:"type:uuid;index;not null"`
 	Name       string       `json:"name"`
 	Key        string       `json:"key" gorm:"uniqueIndex;not null"`
@@ -203,49 +230,38 @@ type APIKey struct {
 	CreatedAt  time.Time    `json:"created_at"`
 }
 
-// BeforeCreate hook for UUID
-func (u *User) BeforeCreate() error {
-	if u.ID == "" {
-		u.ID = uuid.New().String()
-	}
-	return nil
+// ExchangeRate for storing currency rates
+type ExchangeRate struct {
+	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
+	Currency     string    `json:"currency" gorm:"not null;index"`
+	BaseCurrency string    `json:"base_currency" gorm:"default:'KES'"`
+	Rate         float64   `json:"rate" gorm:"not null"`
+	ValidFrom    time.Time `json:"valid_from"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
-func (c *Client) BeforeCreate() error {
-	if c.ID == "" {
-		c.ID = uuid.New().String()
-	}
-	return nil
-}
+// KRAQueueStatus represents KRA submission status
+type KRAQueueStatus string
 
-func (i *Invoice) BeforeCreate() error {
-	if i.ID == "" {
-		i.ID = uuid.New().String()
-	}
-	if i.InvoiceNumber == "" {
-		i.InvoiceNumber = generateInvoiceNumber()
-	}
-	if i.MagicToken == "" {
-		i.MagicToken = uuid.New().String()
-	}
-	return nil
-}
+const (
+	KRAQueuePending   KRAQueueStatus = "pending"
+	KRAQueueFailed    KRAQueueStatus = "failed"
+	KRAQueueCompleted KRAQueueStatus = "completed"
+)
 
-func (i *InvoiceItem) BeforeCreate() error {
-	if i.ID == "" {
-		i.ID = uuid.New().String()
-	}
-	return nil
-}
-
-func (p *Payment) BeforeCreate() error {
-	if p.ID == "" {
-		p.ID = uuid.New().String()
-	}
-	return nil
-}
-
-// Helper to generate invoice number
-func generateInvoiceNumber() string {
-	return "INV-" + time.Now().Format("20060102") + "-" + uuid.New().String()[:4]
+// KRAQueueItem for failed KRA submissions
+type KRAQueueItem struct {
+	ID            string         `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      string         `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	InvoiceID     string         `json:"invoice_id" gorm:"type:uuid;index;not null"`
+	InvoiceNumber string         `json:"invoice_number"`
+	Payload       string         `json:"payload" gorm:"type:text"` // JSON payload
+	RetryCount    int            `json:"retry_count" gorm:"default:0"`
+	MaxRetries    int            `json:"max_retries" gorm:"default:3"`
+	Status        KRAQueueStatus `json:"status" gorm:"default:'pending'"`
+	LastError     string         `json:"last_error"`
+	NextRetryAt   *time.Time     `json:"next_retry_at"`
+	CompletedAt   *time.Time     `json:"completed_at"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }

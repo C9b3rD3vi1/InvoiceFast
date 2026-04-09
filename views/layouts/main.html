@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} | InvoiceFast</title>
+    <meta name="description" content="{{.Description}}">
+
+    <!-- OpenGraph / WhatsApp Preview -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{.Title}} | InvoiceFast">
+    <meta property="og:description" content="{{.Description}}">
+    <meta property="og:image" content="/static/images/og-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS v4 (via CDN for now) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: {
+                            DEFAULT: '#0277BD',
+                            light: '#039BE5',
+                            dark: '#01579B',
+                        },
+                        success: {
+                            DEFAULT: '#2E7D32',
+                            light: '#43A047',
+                            dark: '#1B5E20',
+                        },
+                        slate: {
+                            50: '#F8FAFC',
+                            100: '#F1F5F9',
+                            200: '#E2E8F0',
+                            300: '#CBD5E1',
+                            400: '#94A3B8',
+                            500: '#64748B',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1E293B',
+                            900: '#0F172A',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.4s ease-out',
+                        'success-pulse': 'successPulse 2s infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        successPulse: {
+                            '0%, 100%': { transform: 'scale(1)' },
+                            '50%': { transform: 'scale(1.05)' },
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    <style>
+        /* Base styles */
+        body {
+            background-color: #F8FAFC;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        /* Glassmorphism Nav */
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        /* Trust Blue Button */
+        .btn-trust {
+            background-color: #0277BD;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .btn-trust:hover {
+            background-color: #01579B;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(2, 119, 189, 0.3);
+        }
+
+        /* Success Green Button */
+        .btn-success {
+            background-color: #2E7D32;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .btn-success:hover {
+            background-color: #1B5E20;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+        }
+
+        /* Outline Button */
+        .btn-outline {
+            background-color: transparent;
+            color: #0277BD;
+            border: 2px solid #0277BD;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .btn-outline:hover {
+            background-color: #0277BD;
+            color: white;
+        }
+
+        /* Card */
+        .card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #E2E8F0;
+        }
+
+        /* Input */
+        .input-field {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #CBD5E1;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #0277BD;
+            box-shadow: 0 0 0 3px rgba(2, 119, 189, 0.1);
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-trust { background-color: #E1F5FE; color: #01579B; }
+        .badge-success { background-color: #E8F5E9; color: #1B5E20; }
+        .badge-warning { background-color: #FFF8E1; color: #F57F17; }
+        .badge-danger { background-color: #FFEBEE; color: #B71C1C; }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast-success { background: #2E7D32; color: white; }
+        .toast-error { background: #DC2626; color: white; }
+        .toast-warning { background: #F59E0B; color: white; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Loading spinner */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #E2E8F0;
+            border-top-color: #0277BD;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* HTMX indicators */
+        .htmx-indicator {
+            display: none;
+        }
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+        .htmx-request.htmx-indicator {
+            display: inline-block;
+        }
+
+        /* M-Pesa brand colors */
+        .mpesa-brand {
+            background: linear-gradient(135deg, #8DC63F 0%, #00A651 100%);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col">
+    <!-- Navigation -->
+    <nav class="glass-nav sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo -->
+                <div class="flex items-center gap-2">
+                    <a href="/" class="flex items-center gap-2">
+                        <div class="w-10 h-10 bg-gradient-to-br from-trust to-trust-dark rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <span class="text-xl font-bold text-slate-800">InvoiceFast</span>
+                    </a>
+                </div>
+
+                <!-- Desktop Nav -->
+                <div class="hidden md:flex items-center gap-8">
+                    <a href="/#features" class="text-slate-600 hover:text-trust font-medium transition-colors">Features</a>
+                    <a href="/#pricing" class="text-slate-600 hover:text-trust font-medium transition-colors">Pricing</a>
+                    <a href="/contact.html" class="text-slate-600 hover:text-trust font-medium transition-colors">Contact</a>
+                    <a href="/login.html" class="text-slate-600 hover:text-trust font-medium">Login</a>
+                    <a href="/register.html" class="btn-trust">Start Free</a>
+                </div>
+
+                <!-- Mobile menu button -->
+                <button id="mobile-menu-btn" class="md:hidden p-2 text-slate-600 hover:text-trust">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-200">
+            <div class="px-4 py-4 space-y-3">
+                <a href="/#features" class="block text-slate-600 hover:text-trust font-medium">Features</a>
+                <a href="/#pricing" class="block text-slate-600 hover:text-trust font-medium">Pricing</a>
+                <a href="/contact.html" class="block text-slate-600 hover:text-trust font-medium">Contact</a>
+                <a href="/login.html" class="block text-slate-600 hover:text-trust font-medium">Login</a>
+                <a href="/register.html" class="block btn-trust text-center">Start Free</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow">
+        {{template "content" .}}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-white mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <!-- Brand -->
+                <div class="col-span-1 md:col-span-2">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-10 h-10 bg-gradient-to-br from-trust to-trust-dark rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <span class="text-xl font-bold">InvoiceFast</span>
+                    </div>
+                    <p class="text-slate-400 mb-4">Kenya's leading invoicing platform with M-Pesa integration and KRA e-TIMS compliance.</p>
+
+                    <!-- Trust Badges -->
+                    <div class="flex gap-3">
+                        <div class="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-lg">
+                            <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                            <span class="text-sm">KRA Compliant</span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-lg">
+                            <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span class="text-sm">M-Pesa Ready</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Product Links -->
+                <div>
+                    <h4 class="font-semibold mb-4 text-slate-300">Product</h4>
+                    <ul class="space-y-2 text-slate-400">
+                        <li><a href="/#features" class="hover:text-white transition-colors">Features</a></li>
+                        <li><a href="/#pricing" class="hover:text-white transition-colors">Pricing</a></li>
+                        <li><a href="/docs.html" class="hover:text-white transition-colors">Documentation</a></li>
+                    </ul>
+                </div>
+
+                <!-- Company Links -->
+                <div>
+                    <h4 class="font-semibold mb-4 text-slate-300">Company</h4>
+                    <ul class="space-y-2 text-slate-400">
+                        <li><a href="/contact.html" class="hover:text-white transition-colors">Contact</a></li>
+                        <li><a href="/privacy.html" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                        <li><a href="/terms.html" class="hover:text-white transition-colors">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-800 mt-8 pt-8 text-center text-slate-500 text-sm">
+                <p>&copy; 2024 InvoiceFast. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        // Mobile menu toggle
+        const menuBtn = document.getElementById('mobile-menu-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+
+        if (menuBtn && mobileMenu) {
+            menuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+        }
+
+        // HTMX config
+        htmx.config.defaultSwapStyle = 'outerHTML';
+        htmx.config.defaultSettleDelay = 50;
+        htmx.config.timeout = 10000;
+
+        // Toast notification helper
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 4000);
+        }
+
+        // HTMX event handlers for toast
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            try {
+                const data = JSON.parse(evt.detail.xhr.responseText);
+                showToast(data.error || 'An error occurred', 'error');
+            } catch (e) {
+                showToast('An error occurred', 'error');
+            }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            try {
+                const data = JSON.parse(evt.detail.xhr.responseText);
+                if (data.message) {
+                    showToast(data.message, 'success');
+                }
+            } catch (e) {
+                // Ignore if not JSON
+            }
+        });
+    </script>
+
+    {{block "scripts" .}}{{end}}
+</body>
+</html>

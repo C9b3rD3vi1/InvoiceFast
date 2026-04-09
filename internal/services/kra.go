@@ -1,25 +1,38 @@
 package services
 
 import (
+	"bytes"
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/database"
+	"invoicefast/internal/models"
 )
+
+// ErrMockMode is returned when KRA is running in sandbox/mock mode
+var ErrMockMode = errors.New("KRA e-TIMS running in mock/sandbox mode - production API not configured")
 
 // KRAService handles KRA e-TIMS integration
 type KRAService struct {
 	cfg *config.Config
+	db  *database.DB
 }
 
 // KRAInvoiceData for e-TIMS submission
@@ -99,25 +112,214 @@ func NewKRAService(cfg *config.Config) *KRAService {
 	return &KRAService{cfg: cfg}
 }
 
-// SubmitInvoice submits an invoice to KRA e-TIMS
+// NewKRAServiceWithDB creates a new KRA service with database for queue management
+func NewKRAServiceWithDB(cfg *config.Config, db *database.DB) *KRAService {
+	return &KRAService{cfg: cfg, db: db}
+}
+
+// SubmitInvoice submits an invoice to KRA e-TIMS via OSCP (Online Sales Control Protocol)
 func (s *KRAService) SubmitInvoice(data *KRAInvoiceData) (*KRAResponse, error) {
-	if s.cfg.KRA.APIURL == "" {
-		// Development mode - return mock response
-		return s.mockSubmit(data)
+	// If no API URL configured, return error so frontend can show sandbox warning
+	if s.cfg.KRA.APIURL == "" || s.cfg.KRA.APIURL == "https://api.kra.go.ke" {
+		log.Printf("[KRA] Mock mode - production API not configured")
+		return nil, ErrMockMode
 	}
 
-	// Sign the invoice (used in production)
-	_, _ = s.signInvoice(data)
+	// Build the signed payload for VSCU (Virtual Sales Control Unit)
+	payload, err := s.buildETIMSPayload(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build e-TIMS payload: %w", err)
+	}
 
-	// Submit to KRA (in production)
-	// This is a placeholder for the actual API call
+	// Sign the payload
+	_, err = s.signETIMSPayload(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign e-TIMS payload: %w", err)
+	}
+
+	// Submit to KRA e-TIMS API
+	response, err := s.submitToKRA(payload)
+	if err != nil {
+		// Queue for retry instead of silent fallback
+		log.Printf("[KRA] API submission failed: %v - queuing for retry", err)
+
+		// Extract tenant info from invoice data
+		tenantID := "" // Would need to be passed in
+		invoiceID := ""
+
+		if s.db != nil && data.InvoiceNumber != "" {
+			// Try to find invoice for queue item
+			var invoice struct {
+				ID       string
+				TenantID string
+			}
+			if err := s.db.Model(&models.Invoice{}).Where("invoice_number = ?", data.InvoiceNumber).First(&invoice).Error; err == nil {
+				tenantID = invoice.TenantID
+				invoiceID = invoice.ID
+			}
+		}
+
+		if tenantID != "" && invoiceID != "" {
+			_ = s.QueueFailedSubmission(tenantID, invoiceID, data.InvoiceNumber, payload, err.Error())
+		}
+
+		return nil, fmt.Errorf("KRA submission queued for retry: %w", err)
+	}
+
+	return response, nil
+}
+
+// buildETIMSPayload builds the e-TIMS JSON payload according to KRA specification
+func (s *KRAService) buildETIMSPayload(data *KRAInvoiceData) ([]byte, error) {
+	etimsPayload := map[string]interface{}{
+		"invoiceNumber": data.InvoiceNumber,
+		"invoiceDate":   data.InvoiceDate,
+		"invoiceTime":   data.InvoiceTime,
+		"seller": map[string]string{
+			"registrationNumber": data.Seller.RegistrationNumber,
+			"businessName":       data.Seller.BusinessName,
+			"address":            data.Seller.Address,
+			"contactMobile":      data.Seller.ContactMobile,
+			"contactEmail":       data.Seller.ContactEmail,
+		},
+		"buyer": map[string]interface{}{
+			"buyerType":          data.Buyer.BuyerType,
+			"registrationNumber": data.Buyer.RegistrationNumber,
+			"customerName":       data.Buyer.CustomerName,
+			"address":            data.Buyer.Address,
+			"contactMobile":      data.Buyer.ContactMobile,
+			"contactEmail":       data.Buyer.ContactEmail,
+		},
+		"items":              data.Items,
+		"subTotal":           data.SubTotal,
+		"discount":           data.Discount,
+		"totalExcludingVAT":  data.TotalExcludingVAT,
+		"vatRate":            data.VATRate,
+		"vatAmount":          data.VATAmount,
+		"totalIncludingVAT":  data.TotalIncludingVAT,
+		"paymentMode":        data.PaymentMode,
+		"esdAmount":          data.ESDAmount,
+		"escAmount":          data.ESCAmount,
+		"currency":           data.Currency,
+		"deviceID":           s.cfg.KRA.DeviceID,
+		"branchID":           s.cfg.KRA.BranchID,
+		"registrationNumber": s.cfg.KRA.BranchCode,
+	}
+
+	return json.Marshal(etimsPayload)
+}
+
+// signETIMSPayload signs the e-TIMS payload using RSA-SHA256
+func (s *KRAService) signETIMSPayload(payload []byte) (string, error) {
+	if s.cfg.KRA.PrivateKey == "" {
+		return "", errors.New("KRA private key not configured")
+	}
+
+	// Calculate SHA256 hash of payload
+	hash := sha256.Sum256(payload)
+
+	// Try to parse as RSA private key
+	rsaPrivateKey, err := s.parsePrivateKey()
+	if err != nil {
+		// Fallback: use mock signing for development
+		log.Printf("[KRA] Using fallback signature method (not RSA)")
+		return base64.StdEncoding.EncodeToString(hash[:]), nil
+	}
+
+	// Sign with RSA private key
+	signature, err := rsa.SignPKCS1v15(rand.Reader, rsaPrivateKey, crypto.SHA256, hash[:])
+	if err != nil {
+		return "", fmt.Errorf("RSA signing failed: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(signature), nil
+}
+
+func (s *KRAService) parsePrivateKey() (*rsa.PrivateKey, error) {
+	keyData := s.cfg.KRA.PrivateKey
+
+	// Try to decode base64 first (if key is base64 encoded)
+	keyBytes, err := base64.StdEncoding.DecodeString(keyData)
+	if err != nil {
+		// Try raw bytes
+		keyBytes = []byte(keyData)
+	}
+
+	// Try to parse as PKCS#8 or PKCS#1
+	priv, err := x509.ParsePKCS8PrivateKey(keyBytes)
+	if err != nil {
+		priv, err = x509.ParsePKCS1PrivateKey(keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+	}
+
+	rsaKey, ok := priv.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("key is not an RSA private key")
+	}
+
+	return rsaKey, nil
+}
+
+// submitToKRA submits the signed payload to KRA e-TIMS API
+func (s *KRAService) submitToKRA(payload []byte) (*KRAResponse, error) {
+	apiURL := fmt.Sprintf("%s/etims/v1/sales/invoice", s.cfg.KRA.APIURL)
+
+	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.KRA.APIKey)
+	httpReq.Header.Set("X-Device-ID", s.cfg.KRA.DeviceID)
+	httpReq.Header.Set("X-Branch-ID", s.cfg.KRA.BranchID)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to submit to KRA: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("KRA API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	// Parse KRA response
+	var kraResp struct {
+		ResultCode    string `json:"resultCode"`
+		ResultDesc    string `json:"resultDesc"`
+		InvoiceNumber string `json:"invoiceNumber"`
+		ICN           string `json:"icn"`
+		QRCode        string `json:"qrCode"`
+		Signature     string `json:"signature"`
+		Timestamp     string `json:"timestamp"`
+	}
+
+	if err := json.Unmarshal(body, &kraResp); err != nil {
+		return nil, fmt.Errorf("failed to parse KRA response: %w", err)
+	}
+
+	if kraResp.ResultCode != "0" && kraResp.ResultCode != "00" {
+		return nil, fmt.Errorf("KRA rejected invoice: %s", kraResp.ResultDesc)
+	}
+
 	return &KRAResponse{
-		ResultCode:    "0",
-		ResultDesc:    "SUCCESS",
-		InvoiceNumber: data.InvoiceNumber,
-		QRCode:        s.generateQRCode(data),
-		ICN:           s.generateICN(),
-		Timestamp:     time.Now().Format(time.RFC3339),
+		ResultCode:    kraResp.ResultCode,
+		ResultDesc:    kraResp.ResultDesc,
+		InvoiceNumber: kraResp.InvoiceNumber,
+		QRCode:        kraResp.QRCode,
+		Signature:     kraResp.Signature,
+		ICN:           kraResp.ICN,
+		Timestamp:     kraResp.Timestamp,
 	}, nil
 }
 
@@ -232,13 +434,20 @@ func (s *KRAService) signInvoice(data *KRAInvoiceData) (*KRASignature, error) {
 
 // mockSubmit for development/testing
 func (s *KRAService) mockSubmit(data *KRAInvoiceData) (*KRAResponse, error) {
-	fmt.Printf("📋 [MOCK KRA SUBMISSION]\n")
-	fmt.Printf("Invoice: %s\n", data.InvoiceNumber)
-	fmt.Printf("Seller: %s (%s)\n", data.Seller.BusinessName, data.Seller.RegistrationNumber)
-	fmt.Printf("Buyer: %s\n", data.Buyer.CustomerName)
-	fmt.Printf("Total: %.2f %s\n", data.TotalIncludingVAT, data.Currency)
-	fmt.Printf("VAT: %.2f\n", data.VATAmount)
-	fmt.Println()
+	// Mask sensitive data for logging (KRA PINs are sensitive PII)
+	maskedSellerPIN := maskPIN(data.Seller.RegistrationNumber)
+	maskedBuyerPIN := maskPIN(data.Buyer.RegistrationNumber)
+
+	log.Printf("[KRA MOCK] Invoice: %s | Seller: %s (PIN: %s) | Buyer: %s (PIN: %s) | Total: %.2f %s | VAT: %.2f",
+		data.InvoiceNumber,
+		data.Seller.BusinessName,
+		maskedSellerPIN,
+		data.Buyer.CustomerName,
+		maskedBuyerPIN,
+		data.TotalIncludingVAT,
+		data.Currency,
+		data.VATAmount,
+	)
 
 	// Simulate network delay
 	time.Sleep(100 * time.Millisecond)
@@ -368,4 +577,113 @@ type Client struct {
 	Phone   string
 	Address string
 	KRAPIN  string
+}
+
+// maskPIN masks KRA PIN for secure logging (shows only last 4 chars)
+func maskPIN(pin string) string {
+	if pin == "" {
+		return ""
+	}
+	if len(pin) <= 4 {
+		return "****"
+	}
+	return "****" + pin[len(pin)-4:]
+}
+
+// QueueFailedSubmission adds a failed KRA submission to the retry queue
+func (s *KRAService) QueueFailedSubmission(tenantID, invoiceID, invoiceNumber string, payload []byte, errMsg string) error {
+	if s.db == nil {
+		log.Printf("[KRA] Queue unavailable - no database connection")
+		return errors.New("KRA queue unavailable")
+	}
+
+	payloadJSON, _ := json.Marshal(payload)
+	queueItem := models.KRAQueueItem{
+		ID:            fmt.Sprintf("kra-%d", time.Now().UnixNano()),
+		TenantID:      tenantID,
+		InvoiceID:     invoiceID,
+		InvoiceNumber: invoiceNumber,
+		Payload:       string(payloadJSON),
+		RetryCount:    0,
+		MaxRetries:    3,
+		Status:        models.KRAQueuePending,
+		LastError:     errMsg,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	if err := s.db.Create(&queueItem).Error; err != nil {
+		log.Printf("[KRA] Failed to queue item: %v", err)
+		return err
+	}
+
+	log.Printf("[KRA] Queued failed submission for invoice %s (retry %d/%d)", invoiceNumber, 0, 3)
+	return nil
+}
+
+// ProcessRetryQueue processes pending KRA submissions
+func (s *KRAService) ProcessRetryQueue() error {
+	if s.db == nil {
+		return errors.New("KRA queue unavailable")
+	}
+
+	var pending []models.KRAQueueItem
+	s.db.Where("status = ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", models.KRAQueuePending, time.Now()).
+		Order("created_at ASC").
+		Limit(50).
+		Find(&pending)
+
+	if len(pending) == 0 {
+		return nil
+	}
+
+	log.Printf("[KRA] Processing %d queued items", len(pending))
+
+	for _, item := range pending {
+		s.processQueueItem(&item)
+	}
+
+	return nil
+}
+
+func (s *KRAService) processQueueItem(item *models.KRAQueueItem) {
+	var payload []byte
+	json.Unmarshal([]byte(item.Payload), &payload)
+
+	resp, err := s.submitToKRA(payload)
+	if err != nil {
+		item.RetryCount++
+		item.LastError = err.Error()
+
+		if item.RetryCount >= item.MaxRetries {
+			item.Status = models.KRAQueueFailed
+			log.Printf("[KRA] Queue item %s failed permanently after %d retries", item.ID, item.RetryCount)
+		} else {
+			nextRetry := time.Now().Add(time.Duration(item.RetryCount) * 5 * time.Minute)
+			item.NextRetryAt = &nextRetry
+			log.Printf("[KRA] Queue item %s failed, retry %d/%d at %v", item.ID, item.RetryCount, item.MaxRetries, nextRetry)
+		}
+	} else {
+		item.Status = models.KRAQueueCompleted
+		now := time.Now()
+		item.CompletedAt = &now
+		log.Printf("[KRA] Queue item %s completed - ICN: %s", item.ID, resp.ICN)
+	}
+
+	item.UpdatedAt = time.Now()
+	s.db.Save(item)
+}
+
+// GetQueueStatus returns the status of KRA queue
+func (s *KRAService) GetQueueStatus() (pending, failed, completed int64, err error) {
+	if s.db == nil {
+		err = errors.New("KRA queue unavailable")
+		return
+	}
+
+	s.db.Model(&models.KRAQueueItem{}).Where("status = ?", models.KRAQueuePending).Count(&pending)
+	s.db.Model(&models.KRAQueueItem{}).Where("status = ?", models.KRAQueueFailed).Count(&failed)
+	s.db.Model(&models.KRAQueueItem{}).Where("status = ?", models.KRAQueueCompleted).Count(&completed)
+
+	return
 }

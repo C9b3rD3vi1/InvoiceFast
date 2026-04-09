@@ -1,0 +1,15 @@
+{
+  "name": "payment_reminder",
+  "subject": "Payment Reminder - Invoice {{invoice_number}}",
+  "body_html": "\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Payment Reminder</title>\n    <style>\n        body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }\n        .container { max-width: 600px; margin: 0 auto; }\n        .header { background: #ffc107; color: #333; padding: 30px; text-align: center; }\n        .content { background: #f9f9f9; padding: 30px; }\n        .btn { display: inline-block; padding: 12px 30px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>Payment Reminder</h1>\n        </div>\n        <div class=\"content\">\n            <p>Dear {{client_name}},</p>\n            <p>This is a friendly reminder that invoice <strong>#{{invoice_number}}</strong> is due on <strong>{{due_date}}</strong>.</p>\n            \n            <p><strong>Amount Due:</strong> {{currency}} {{total}}</p>\n            <p><strong>Days Overdue:</strong> {{days_overdue}}</p>\n            \n            <a href=\"{{payment_link}}\" class=\"btn\">Pay Now</a>\n            \n            <p>If you have already paid, please ignore this reminder.</p>\n        </div>\n    </div>\n</body>\n</html>\n",
+  "body_text": "\nDear {{client_name}},\n\nThis is a friendly reminder that invoice #{{invoice_number}} is due on {{due_date}}.\n\nAmount Due: {{currency}} {{total}}\nDays Overdue: {{days_overdue}}\n\nPay now: {{payment_link}}\n\nIf you have already paid, please ignore this reminder.\n",
+  "variables": [
+    "invoice_number",
+    "due_date",
+    "client_name",
+    "total",
+    "currency",
+    "days_overdue",
+    "payment_link"
+  ]
+}

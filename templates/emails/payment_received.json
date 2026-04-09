@@ -1,0 +1,15 @@
+{
+  "name": "payment_received",
+  "subject": "Payment Received - Invoice {{invoice_number}}",
+  "body_html": "\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Payment Received</title>\n    <style>\n        body { font-family: 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }\n        .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n        .header { background: #28a745; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }\n        .content { background: #f9f9f9; padding: 30px; }\n        .receipt { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>\u2713 Payment Received</h1>\n        </div>\n        <div class=\"content\">\n            <p>Dear {{client_name}},</p>\n            <p>We have received your payment. Thank you!</p>\n            \n            <div class=\"receipt\">\n                <h3>Payment Receipt</h3>\n                <p><strong>Invoice Number:</strong> {{invoice_number}}</p>\n                <p><strong>Amount Paid:</strong> {{currency}} {{amount_paid}}</p>\n                <p><strong>Payment Method:</strong> {{payment_method}}</p>\n                <p><strong>Date:</strong> {{payment_date}}</p>\n            </div>\n            \n            <p>Your receipt is attached to this email.</p>\n            \n            <p>Best regards,<br>{{company_name}}</p>\n        </div>\n    </div>\n</body>\n</html>\n",
+  "body_text": "\nDear {{client_name}},\n\nWe have received your payment. Thank you!\n\nPayment Details:\n- Invoice Number: {{invoice_number}}\n- Amount Paid: {{currency}} {{amount_paid}}\n- Payment Method: {{payment_method}}\n- Date: {{payment_date}}\n\nYour receipt is attached to this email.\n\nBest regards,\n{{company_name}}\n",
+  "variables": [
+    "invoice_number",
+    "client_name",
+    "company_name",
+    "amount_paid",
+    "currency",
+    "payment_method",
+    "payment_date"
+  ]
+}

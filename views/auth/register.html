@@ -1,0 +1,239 @@
+{{define "content"}}
+<!-- Register Page -->
+<div class="min-h-screen bg-gradient-to-br from-trust via-trust-light to-cyan-400 flex items-center justify-center p-4 py-12">
+    <div class="w-full max-w-md">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <a href="/" class="inline-flex items-center gap-2">
+                <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <span class="text-2xl font-bold text-white">InvoiceFast</span>
+            </a>
+            <p class="text-white/80 mt-2">Create your free account</p>
+        </div>
+
+        <!-- Register Card -->
+        <div class="card p-8 animate-slide-up">
+            <!-- Error Container (HTMX target) -->
+            <div id="register-error-container"></div>
+
+            <form
+                hx-post="/api/v1/auth/register"
+                hx-target="#register-error-container"
+                hx-swap="innerHTML"
+                hx-indicator="#register-loading"
+                class="space-y-6"
+            >
+                <!-- Company Name -->
+                <div>
+                    <label for="company_name" class="block text-sm font-medium text-slate-700 mb-2">
+                        Company Name
+                    </label>
+                    <input
+                        type="text"
+                        id="company_name"
+                        name="company_name"
+                        required
+                        class="input-field"
+                        placeholder="Your Business Ltd"
+                        autocomplete="organization"
+                    >
+                </div>
+
+                <!-- Full Name -->
+                <div>
+                    <label for="name" class="block text-sm font-medium text-slate-700 mb-2">
+                        Full Name
+                    </label>
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        required
+                        class="input-field"
+                        placeholder="John Doe"
+                        autocomplete="name"
+                    >
+                </div>
+
+                <!-- Email -->
+                <div>
+                    <label for="email" class="block text-sm font-medium text-slate-700 mb-2">
+                        Email Address
+                    </label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        required
+                        class="input-field"
+                        placeholder="you@company.com"
+                        autocomplete="email"
+                    >
+                </div>
+
+                <!-- Phone -->
+                <div>
+                    <label for="phone" class="block text-sm font-medium text-slate-700 mb-2">
+                        Phone Number
+                    </label>
+                    <input
+                        type="tel"
+                        id="phone"
+                        name="phone"
+                        required
+                        class="input-field"
+                        placeholder="0712 345 678"
+                        pattern="^(07|01|254)\d{8}$"
+                        autocomplete="tel"
+                    >
+                    <p class="text-xs text-slate-500 mt-1">For M-Pesa payments</p>
+                </div>
+
+                <!-- Password -->
+                <div>
+                    <label for="password" class="block text-sm font-medium text-slate-700 mb-2">
+                        Password
+                    </label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required
+                        minlength="8"
+                        class="input-field"
+                        placeholder="At least 8 characters"
+                        autocomplete="new-password"
+                    >
+                    <p class="text-xs text-slate-500 mt-1">Minimum 8 characters</p>
+                </div>
+
+                <!-- KRA PIN (Optional) -->
+                <div>
+                    <label for="kra_pin" class="block text-sm font-medium text-slate-700 mb-2">
+                        KRA PIN (Optional)
+                    </label>
+                    <input
+                        type="text"
+                        id="kra_pin"
+                        name="kra_pin"
+                        class="input-field"
+                        placeholder="A0011223344X"
+                        autocomplete="off"
+                    >
+                    <p class="text-xs text-slate-500 mt-1">Required for e-TIMS compliance</p>
+                </div>
+
+                <!-- Terms Checkbox -->
+                <div>
+                    <label class="flex items-start gap-2">
+                        <input type="checkbox" name="terms" required class="w-4 h-4 text-trust rounded border-slate-300 focus:ring-trust mt-1">
+                        <span class="text-sm text-slate-600">
+                            I agree to the <a href="/terms.html" class="text-trust hover:underline" target="_blank">Terms of Service</a> and <a href="/privacy.html" class="text-trust hover:underline" target="_blank">Privacy Policy</a>
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="btn-success w-full flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                    </svg>
+                    Create Free Account
+                </button>
+            </form>
+
+            <!-- Loading Indicator -->
+            <div id="register-loading" class="htmx-indicator text-center py-4">
+                <div class="spinner mx-auto mb-2"></div>
+                <p class="text-slate-600 text-sm">Creating your account...</p>
+            </div>
+
+            <!-- Divider -->
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-slate-200"></div>
+                </div>
+                <div class="relative flex justify-center text-sm">
+                    <span class="px-4 bg-white text-slate-500">Already have an account?</span>
+                </div>
+            </div>
+
+            <!-- Login Link -->
+            <a href="/login.html" class="btn-outline w-full block text-center">
+                Sign In
+            </a>
+        </div>
+
+        <!-- Footer Links -->
+        <div class="text-center mt-6">
+            <a href="/" class="text-white/80 hover:text-white text-sm">← Back to home</a>
+        </div>
+    </div>
+</div>
+
+{{define "scripts"}}
+<script>
+    // Handle register response
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        const errorContainer = document.getElementById('register-error-container');
+
+        if (evt.detail.successful) {
+            try {
+                const data = JSON.parse(evt.detail.xhr.responseText);
+                if (data.access_token || data.message) {
+                    // Redirect to dashboard or onboarding
+                    window.location.href = '/dashboard';
+                    return;
+                }
+            } catch (e) {
+                // Continue to error handling
+            }
+        }
+
+        // Show error
+        if (evt.detail.xhr.status >= 400) {
+            try {
+                const data = JSON.parse(evt.detail.xhr.responseText);
+                errorContainer.innerHTML = `
+                    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 flex items-start gap-2">
+                        <svg class="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div>
+                            <p class="font-medium">Registration failed</p>
+                            <p class="text-sm">${data.error || 'Please check your information and try again'}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                errorContainer.innerHTML = `
+                    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
+                        <p class="font-medium">Registration failed</p>
+                        <p class="text-sm">Please check your information and try again</p>
+                    </div>
+                `;
+            }
+        }
+    });
+
+    // Phone number formatting
+    const phoneInput = document.getElementById('phone');
+    if (phoneInput) {
+        phoneInput.addEventListener('input', (e) => {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.startsWith('254')) {
+                value = '0' + value.substring(3);
+            }
+            if (value.length > 10) {
+                value = value.substring(0, 10);
+            }
+            e.target.value = value;
+        });
+    }
+</script>
+{{end}}
+{{end}}
