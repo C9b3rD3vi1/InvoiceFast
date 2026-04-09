@@ -4,241 +4,302 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+
+	"invoicefast/internal/cache"
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
 	"invoicefast/internal/middleware"
+	"invoicefast/internal/routes"
 	"invoicefast/internal/services"
-	"invoicefast/internal/utils"
-
-	"github.com/gin-gonic/gin"
+	"invoicefast/internal/worker"
 )
 
 func main() {
-	// Load configuration
 	cfg := config.Load()
 
-	// Initialize database
 	db, err := database.New(&cfg.Database)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Database error: %v", err)
+	}
+
+	// Graceful shutdown channel
+	stopCh := make(chan struct{})
+
+	// Initialize Redis if configured
+	var redisCache *cache.RedisCache
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		redisCache, err = cache.NewRedisCache(&cache.CacheConfig{URL: redisURL})
+		if err != nil {
+			log.Printf("Redis connection failed: %v (continuing without cache)", err)
+		} else {
+			defer redisCache.Close()
+		}
 	}
 	defer db.Close()
 
-	// Log database stats periodically
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			stats := db.Stats()
-			log.Printf("[DB] Open=%d Idle=%d InUse=%d WaitCount=%d",
-				stats.OpenConnections, stats.Idle,
-				stats.InUse, stats.WaitCount)
-		}
-	}()
-
-	// Run migrations
 	if err := db.Migrate(); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Initialize services
-	authService := services.NewAuthService(db, cfg)
-	invoiceService := services.NewInvoiceService(db)
-	clientService := services.NewClientService(db)
-	intasendService := services.NewIntasendService(&cfg.Intasend)
-
-	// Initialize handlers
-	handler := handlers.NewHandler(authService, invoiceService, clientService)
-	// Initialize rate limiter
-	rateLimiter := middleware.NewRateLimiter()
-	defer rateLimiter.Stop()
-	// Setup Gin
-	if cfg.Server.Mode == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	// Custom server with timeouts
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%s", cfg.Server.Port),
-		Handler:      setupRouter(cfg, db, handler, rateLimiter, authService, invoiceService, intasendService),
+	app := fiber.New(fiber.Config{
+		AppName:      "InvoiceFast",
+		ServerHeader: "InvoiceFast/1.0.0",
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
+		ErrorHandler: customErrorHandler,
+	})
+
+	app.Use(recover.New())
+	app.Use(logger.New(logger.Config{
+		Format:     "[${time}] ${status} - ${method} ${path} ${latency}\n",
+		TimeFormat: "2006-01-02 15:04:05",
+	}))
+
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     cfg.CORS.AllowedOrigins,
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Idempotency-Key",
+		AllowCredentials: true,
+	}))
+
+	authService := services.NewAuthService(db, cfg)
+	invoiceService := services.NewInvoiceService(db)
+	clientService := services.NewClientService(db)
+	kraService := services.NewKRAServiceWithDB(cfg, db)
+	exchangeRateService := services.NewExchangeRateService(db)
+	exchangeRateService.StartCronJob()
+
+	var idempotencySvc *services.IdempotencyService
+	if redisCache != nil {
+		idempotencySvc = services.NewIdempotencyService(redisCache)
 	}
 
-	// Start server in goroutine
+	var emailService *services.EmailService
+	if cfg.Mail.SMTPHost != "" {
+		emailService = services.NewEmailService(cfg)
+	}
+
+	var whatsappService *services.WhatsAppService
+	if cfg.WhatsApp.Enabled {
+		whatsappService = services.NewWhatsAppService(cfg)
+	}
+
+	// Build invoice service with all features: exchange rates + notifications + KRA
+	invoiceService = services.NewInvoiceServiceWithKRAService(db, exchangeRateService, emailService, whatsappService, kraService, cfg)
+
+	// Payment service for M-Pesa integration
+	paymentService := services.NewPaymentService(db, cfg)
+
+	// Intasend service for STK Push
+	var intasendService *services.IntasendService
+	if cfg.Intasend.SecretKey != "" && cfg.Intasend.APIURL != "" {
+		intasendService = services.NewIntasendService(&cfg.Intasend)
+	}
+
+	reminderService := services.NewReminderService(db, emailService, whatsappService)
 	go func() {
-		log.Printf("Starting InvoiceFast server on :%s (mode: %s)", cfg.Server.Port, cfg.Server.Mode)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopCh:
+				log.Println("Stopping reminder cron...")
+				return
+			case <-ticker.C:
+				if err := reminderService.RunReminders(); err != nil {
+					log.Printf("Reminder error: %v", err)
+				}
+			}
 		}
 	}()
 
-	// Wait for interrupt signal
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("Shutting down server...")
-
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeouts.Shutdown)
-	defer cancel()
-	defer func(){}()
-
-	// Stop accepting new requests
-	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
-	}
-
-	// Close database connections
-	if err := db.Close(); err != nil {
-		log.Printf("Error closing database: %v", err)
-	}
-
-	log.Println("Server exited gracefully")
-}
-
-func setupRouter(cfg *config.Config, db *database.DB, handler *handlers.Handler,
-	rateLimiter *middleware.RateLimiter, authService *services.AuthService,
-	invoiceService *services.InvoiceService, intasendService *services.IntasendService) *gin.Engine {
-
-	r := gin.New()
-
-	// Recovery - prevents panics from crashing server
-	r.Use(gin.Recovery())
-
-	// Logger - structured logging
-	r.Use(utils.LoggerMiddleware())
-
-	// Request ID - for tracing
-	r.Use(utils.RequestIDMiddleware())
-
-	// CORS
-	r.Use(utils.CORSHeaders("*"))
-
-	// JSON headers
-	r.Use(utils.JSONMiddleware())
-
-	// Health check (no rate limiting, no auth)
-	r.GET("/health", healthCheckHandler(db))
-
-	// Public routes
-	public := r.Group("/api/v1")
-	{
-		// Auth - rate limited
-		public.POST("/auth/register", func(c *gin.Context) { rateLimiter.ServeHTTP(c) }, handler.Register)
-		public.POST("/auth/login", func(c *gin.Context) { rateLimiter.ServeHTTP(c) }, handler.Login)
-		public.POST("/auth/refresh", handler.RefreshToken)
-
-		// Public invoice (magic link)
-		public.GET("/invoice/:token", handler.GetInvoiceByToken)
-
-		// Webhook (Intasend)
-		public.POST("/webhook/intasend", func(c *gin.Context) {
-			HandleIntasendWebhook(c, db, invoiceService, intasendService)
-		})
-	}
-
-	// ===== STATIC FILES - Serve these BEFORE API routes =====
-	// Landing page
-	r.GET("/", func(c *gin.Context) {
-		c.File("./frontend/public/landing.html")
-	})
-	// Login page
-	r.GET("/login", func(c *gin.Context) {
-		c.File("./frontend/public/login.html")
-	})
-	// Register page
-	r.GET("/register", func(c *gin.Context) {
-		c.File("./frontend/public/register.html")
-	})
-	// Forgot password
-	r.GET("/forgot-password", func(c *gin.Context) {
-		c.File("./frontend/public/forgot-password.html")
-	})
-	// Privacy
-	r.GET("/privacy", func(c *gin.Context) {
-		c.File("./frontend/public/privacy.html")
-	})
-	// Terms
-	r.GET("/terms", func(c *gin.Context) {
-		c.File("./frontend/public/terms.html")
-	})
-	// Invoice view
-	r.GET("/invoice/:token", func(c *gin.Context) {
-		c.File("./frontend/public/invoice.html")
-	})
-	// App (SPA)
-	r.GET("/app", func(c *gin.Context) {
-		c.File("./frontend/public/index.html")
-	})
-	// App fallback
-	r.NoRoute(func(c *gin.Context) {
-		c.File("./frontend/public/index.html")
-	})
-
-	// Protected routes
-	protected := r.Group("/api/v1")
-	protected.Use(middleware.AuthMiddleware(authService))
-	protected.Use(func(c *gin.Context) { rateLimiter.ServeHTTP(c) }) // Apply rate limiting
-	{
-		// User
-		protected.GET("/me", handler.GetMe)
-		protected.PUT("/me", handler.UpdateUser)
-		protected.POST("/change-password", handler.ChangePassword)
-		protected.POST("/logout", handler.Logout)
-		protected.POST("/api-keys", handler.GenerateAPIKey)
-
-		// Clients
-		protected.POST("/clients", handler.CreateClient)
-		protected.GET("/clients", handler.GetClients)
-		protected.GET("/clients/:id", handler.GetClient)
-		protected.PUT("/clients/:id", handler.UpdateClient)
-		protected.DELETE("/clients/:id", handler.DeleteClient)
-		protected.GET("/clients/:id/stats", handler.GetClientStats)
-
-		// Invoices
-		protected.POST("/invoices", handler.CreateInvoice)
-		protected.GET("/invoices", handler.GetInvoices)
-		protected.GET("/invoices/:id", handler.GetInvoice)
-		protected.PUT("/invoices/:id", handler.UpdateInvoice)
-		protected.PUT("/invoices/:id/items", handler.UpdateInvoiceItems)
-		protected.POST("/invoices/:id/send", handler.SendInvoice)
-		protected.POST("/invoices/:id/cancel", handler.CancelInvoice)
-		protected.POST("/invoices/:id/pay", func(c *gin.Context) {
-			HandlePaymentRequest(c, db, invoiceService, intasendService)
-		})
-
-		// Dashboard
-		protected.GET("/dashboard", handler.GetDashboard)
-	}
-
-	return r
-}
-
-// healthCheckHandler returns server health status
-func healthCheckHandler(db *database.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Check database
-		if err := db.Ping(); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "unhealthy",
-				"error":  "database connection failed",
-			})
-			return
+	// KRA retry queue processor
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopCh:
+				log.Println("Stopping KRA queue processor...")
+				return
+			case <-ticker.C:
+				if err := kraService.ProcessRetryQueue(); err != nil {
+					log.Printf("KRA queue error: %v", err)
+				}
+			}
 		}
+	}()
 
-		c.JSON(http.StatusOK, gin.H{
+	var pdfWorker *worker.PDFWorker
+	if redisCache != nil {
+		pdfWorker = worker.NewPDFWorker(redisCache, db, cfg)
+		pdfWorker.Start(context.Background())
+		defer pdfWorker.Stop()
+	}
+
+	handler := handlers.NewFiberHandler(authService, invoiceService, clientService, kraService, exchangeRateService, pdfWorker)
+	publicHandler := handlers.NewPublicHandler(invoiceService, authService, paymentService, intasendService)
+	rateLimiter := middleware.NewFiberRateLimiter()
+
+	// Serve static assets from /static directory
+	app.Static("/static", "./static")
+	app.Static("/css", "./static/css")
+	app.Static("/js", "./static/js")
+	app.Static("/images", "./static/images")
+
+	// Public routes (landing, auth, portal)
+	routes.PublicRoutes(app, publicHandler)
+	routes.PublicAPIRoutes(app, publicHandler)
+	routes.PublicAuthRoutes(app, publicHandler, rateLimiter)
+
+	// Legacy page routes (for backward compatibility)
+	app.Get("/pricing.html", func(c *fiber.Ctx) error {
+		return c.Render("pricing.html", fiber.Map{
+			"Title": "Pricing",
+			"Page":  "pricing",
+		}, "base")
+	})
+	app.Get("/contact.html", func(c *fiber.Ctx) error {
+		return c.Render("contact.html", fiber.Map{
+			"Title": "Contact",
+			"Page":  "contact",
+		}, "base")
+	})
+	app.Get("/forgot-password.html", func(c *fiber.Ctx) error {
+		return c.Render("forgot-password.html", fiber.Map{
+			"Title": "Reset Password",
+			"Page":  "forgot",
+		})
+	})
+	app.Get("/privacy.html", func(c *fiber.Ctx) error {
+		return c.Render("privacy.html", fiber.Map{
+			"Title": "Privacy Policy",
+			"Page":  "privacy",
+		})
+	})
+	app.Get("/terms.html", func(c *fiber.Ctx) error {
+		return c.Render("terms.html", fiber.Map{
+			"Title": "Terms of Service",
+			"Page":  "terms",
+		})
+	})
+	app.Get("/invoice.html", func(c *fiber.Ctx) error {
+		return c.Render("invoice.html", fiber.Map{
+			"Title": "Invoice",
+			"Page":  "invoice",
+		})
+	})
+
+	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc)
+
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
 			"status":  "healthy",
 			"time":    time.Now().UTC().Format(time.RFC3339),
 			"version": "1.0.0",
 		})
+	})
+
+	go func() {
+		addr := fmt.Sprintf(":%s", cfg.Server.Port)
+		log.Printf("Starting InvoiceFast on %s (mode: %s)", addr, cfg.Server.Mode)
+		if err := app.Listen(addr); err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down...")
+
+	// Signal cron jobs to stop
+	close(stopCh)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := app.ShutdownWithContext(ctx); err != nil {
+		log.Printf("Shutdown error: %v", err)
+	}
+
+	log.Println("Server exited")
+}
+
+func customErrorHandler(c *fiber.Ctx, err error) error {
+	code := fiber.StatusInternalServerError
+	if e, ok := err.(*fiber.Error); ok {
+		code = e.Code
+	}
+
+	return c.Status(code).JSON(fiber.Map{
+		"error": err.Error(),
+		"code":  code,
+	})
+}
+
+func setupRoutes(app *fiber.App, cfg *config.Config,
+	handler *handlers.FiberHandler, rateLimiter *middleware.FiberRateLimiter,
+	authService *services.AuthService, idempotencySvc *services.IdempotencyService) {
+
+	// Swagger disabled - requires additional configuration
+	// app.Get("/api/docs/*", swagger.HandlerDefault(app))
+
+	authGroup := app.Group("/api/v1/auth")
+	authGroup.Post("/register", rateLimiter.Limit(10, time.Minute), handler.Register)
+	authGroup.Post("/login", rateLimiter.Limit(10, time.Minute), handler.Login)
+	authGroup.Post("/refresh", handler.RefreshToken)
+	authGroup.Post("/forgot-password", rateLimiter.Limit(5, time.Minute), handler.ForgotPassword)
+	authGroup.Post("/reset-password", handler.ResetPassword)
+	authGroup.Get("/validate-reset-token", handler.ValidateResetToken)
+
+	publicGroup := app.Group("/api/v1")
+	publicGroup.Get("/invoice/:token", handler.GetInvoiceByToken)
+	publicGroup.Post("/webhook/intasend",
+		middleware.IdempotencyMiddleware(idempotencySvc),
+		handler.HandleIntasendWebhook)
+
+	tenantGroup := app.Group("/api/v1/tenant")
+	tenantGroup.Use(middleware.TenantMiddleware(authService))
+	tenantGroup.Use(rateLimiter.Limit(100, time.Minute))
+	{
+		tenantGroup.Get("/me", handler.GetMe)
+		tenantGroup.Put("/me", handler.UpdateUser)
+		tenantGroup.Post("/change-password", handler.ChangePassword)
+		tenantGroup.Post("/logout", handler.Logout)
+		tenantGroup.Post("/api-keys", handler.GenerateAPIKey)
+
+		tenantGroup.Post("/clients", handler.CreateClient)
+		tenantGroup.Get("/clients", handler.GetClients)
+		tenantGroup.Get("/clients/:id", handler.GetClient)
+		tenantGroup.Put("/clients/:id", handler.UpdateClient)
+		tenantGroup.Delete("/clients/:id", handler.DeleteClient)
+		tenantGroup.Get("/clients/:id/stats", handler.GetClientStats)
+
+		tenantGroup.Post("/invoices", handler.CreateInvoice)
+		tenantGroup.Get("/invoices", handler.GetInvoices)
+		tenantGroup.Get("/invoices/:id", handler.GetInvoice)
+		tenantGroup.Put("/invoices/:id", handler.UpdateInvoice)
+		tenantGroup.Put("/invoices/:id/items", handler.UpdateInvoiceItems)
+		tenantGroup.Post("/invoices/:id/send", handler.SendInvoice)
+		tenantGroup.Post("/invoices/:id/cancel", handler.CancelInvoice)
+		tenantGroup.Post("/invoices/:id/pay", handler.RequestPayment)
+		tenantGroup.Get("/invoices/:id/pdf", handler.GetInvoicePDF)
+		tenantGroup.Get("/invoices/:id/status", handler.GetInvoiceStatus)
+
+		tenantGroup.Get("/dashboard", handler.GetDashboard)
+		tenantGroup.Get("/rates", handler.GetExchangeRates)
 	}
 }

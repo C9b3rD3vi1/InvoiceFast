@@ -1,12 +1,10 @@
-# InvoiceFast - Production Dockerfile
-
-# Build stage
+# Build Stage
 FROM golang:1.21-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git make
-
 WORKDIR /app
+
+# Install dependencies
+RUN apk add --no-cache git make
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -15,38 +13,44 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o invoicefast ./cmd/server
+# Build binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o migrate ./cmd/migrate
 
-# Final stage
+# Production Stage
 FROM alpine:3.19
 
-# Install certificates for HTTPS and ca-certificates for TLS
-RUN apk --no-cache add ca-certificates tzdata
+# Install certificates and ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/invoicefast .
+# Create directories
+RUN mkdir -p /app/data /app/templates /app/logs
 
-# Create data directory
-RUN mkdir -p /app/data /app/logs
+# Copy binaries from builder
+COPY --from=builder /app/server /app/server
+COPY --from=builder /app/migrate /app/migrate
 
-# Copy env file template
+# Copy configuration
 COPY .env.example /app/.env
+COPY templates /app/templates
 
-# Create non-root user
-RUN adduser -D -u 1000 appuser && \
-    chown -R appuser:appuser /app
-
-USER appuser
+# Set permissions
+RUN chmod +x /app/server /app/migrate
 
 # Expose port
 EXPOSE 8082
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8082/health || exit 1
 
-# Run the application
-CMD ["./invoicefast"]
+# Run as non-root user
+RUN addgroup -g 1000 appgroup && \
+    adduser -u 1000 -G appgroup -s /bin/sh -D appuser
+
+USER appuser
+
+# Start command
+CMD ["./server"]

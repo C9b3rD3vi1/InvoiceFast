@@ -1,0 +1,49 @@
+2026/04/08 22:15:56 WARNING: Using default JWT secret. Set JWT_SECRET environment variable for security.
+2026/04/08 22:15:56 Database connected: max_open=25, max_idle=10, lifetime=5m0s
+2026/04/08 22:15:56 Running database migrations...
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:67
+[0m[33m[0.164ms] [34;1m[rows:0][0m PRAGMA journal_mode=WAL
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:72
+[0m[33m[0.080ms] [34;1m[rows:0][0m PRAGMA busy_timeout = 5000
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[0.375ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="tenants"
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[2.218ms] [34;1m[rows:0][0m CREATE TABLE `tenants` (`id` uuid,`name` text NOT NULL,`subdomain` text,`plan` text DEFAULT "free",`settings` text,`is_active` numeric DEFAULT true,`created_at` datetime,`updated_at` datetime,PRIMARY KEY (`id`))
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[0.995ms] [34;1m[rows:0][0m CREATE UNIQUE INDEX `idx_tenants_subdomain` ON `tenants`(`subdomain`)
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[0.091ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="users"
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[0.876ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "users" AND sql IS NOT NULL order by type = "table" desc
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[0.185ms] [34;1m[rows:-][0m SELECT * FROM `users` LIMIT 1
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[3.721ms] [34;1m[rows:0][0m ALTER TABLE `users` ADD `tenant_id` uuid NOT NULL
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[1.567ms] [34;1m[rows:0][0m ALTER TABLE `users` ADD `role` text DEFAULT "user"
+
+2026/04/08 22:15:56 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
+[0m[33m[0.201ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "users" AND (sql LIKE "%CONSTRAINT ""fk_users_tenant"" %" OR sql LIKE "%CONSTRAINT fk_users_tenant %" OR sql LIKE "%CONSTRAINT `fk_users_tenant`%" OR sql LIKE "%CONSTRAINT [fk_users_tenant]%" OR sql LIKE "%CONSTRAINT 	fk_users_tenant	%")
+
+2026/04/08 22:15:56 [32m
+[0m[33m[0.122ms] [34;1m[rows:-][0m SELECT sql FROM sqlite_master WHERE type = "table" AND tbl_name = "users" AND name = "users"
+
+2026/04/08 22:15:56 [32m
+[0m[33m[2.378ms] [34;1m[rows:0][0m CREATE TABLE `users__temp`  (`id` uuid,`email` text NOT NULL,`password_hash` text NOT NULL,`name` text,`phone` text,`company_name` text,`kr_api_n` text,`plan` text DEFAULT "free",`is_active` numeric DEFAULT true,`created_at` datetime,`updated_at` datetime,`tenant_id` uuid NOT NULL,`role` text DEFAULT "user",PRIMARY KEY (`id`),CONSTRAINT `fk_users_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants`(`id`))
+
+2026/04/08 22:15:56 [32m
+[0m[33m[0.339ms] [34;1m[rows:0][0m INSERT INTO `users__temp`(`id`,`email`,`password_hash`,`name`,`phone`,`company_name`,`kr_api_n`,`plan`,`is_active`,`created_at`,`updated_at`,`tenant_id`,`role`) SELECT `id`,`email`,`password_hash`,`name`,`phone`,`company_name`,`kr_api_n`,`plan`,`is_active`,`created_at`,`updated_at`,`tenant_id`,`role` FROM `users`
+
+2026/04/08 22:15:56 [31;1m [35;1mdatabase table is locked
+[0m[33m[0.445ms] [34;1m[rows:0][0m DROP TABLE `users`
+2026/04/08 22:15:56 Failed to run migrations: failed to migrate: database table is locked

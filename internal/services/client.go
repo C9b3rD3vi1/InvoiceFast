@@ -20,9 +20,12 @@ func NewClientService(db *database.DB) *ClientService {
 	return &ClientService{db: db}
 }
 
-// CreateClient creates a new client
-func (s *ClientService) CreateClient(userID string, req *CreateClientRequest) (*models.Client, error) {
+// CreateClient creates a new client (tenant-scoped)
+func (s *ClientService) CreateClient(tenantID, userID string, req *CreateClientRequest) (*models.Client, error) {
 	// Validate inputs
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, fmt.Errorf("tenant ID is required")
+	}
 	if strings.TrimSpace(userID) == "" {
 		return nil, fmt.Errorf("user ID is required")
 	}
@@ -32,6 +35,7 @@ func (s *ClientService) CreateClient(userID string, req *CreateClientRequest) (*
 
 	client := &models.Client{
 		ID:           uuid.New().String(),
+		TenantID:     tenantID,
 		UserID:       userID,
 		Name:         strings.TrimSpace(req.Name),
 		Email:        strings.TrimSpace(req.Email),
@@ -78,17 +82,21 @@ func getValidPaymentTerms(terms int) int {
 	return terms
 }
 
-// GetClient retrieves a client by ID
-func (s *ClientService) GetClient(clientID, userID string) (*models.Client, error) {
-	if strings.TrimSpace(clientID) == "" || strings.TrimSpace(userID) == "" {
-		return nil, fmt.Errorf("client ID and user ID are required")
+// GetClient retrieves a client by ID (tenant-scoped)
+func (s *ClientService) GetClient(tenantID, clientID string) (*models.Client, error) {
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, fmt.Errorf("tenant ID is required")
+	}
+	if strings.TrimSpace(clientID) == "" {
+		return nil, fmt.Errorf("client ID is required")
 	}
 
 	var client models.Client
-	err := s.db.Preload("Invoices", func(db *gorm.DB) *gorm.DB {
-		return db.Order("created_at DESC")
-	}).Preload("Invoices.Items").Preload("Invoices.Payments").
-		First(&client, "id = ? AND user_id = ?", clientID, userID).Error
+	err := s.db.Scopes(database.TenantFilter(tenantID)).
+		Preload("Invoices", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at DESC")
+		}).Preload("Invoices.Items").Preload("Invoices.Payments").
+		First(&client, "id = ?", clientID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("client not found")
@@ -108,16 +116,16 @@ func (s *ClientService) GetClient(clientID, userID string) (*models.Client, erro
 	return &client, nil
 }
 
-// GetUserClients retrieves all clients for a user
-func (s *ClientService) GetUserClients(userID string, filter ClientFilter) ([]models.Client, int64, error) {
-	if strings.TrimSpace(userID) == "" {
-		return nil, 0, fmt.Errorf("user ID is required")
+// GetUserClients retrieves all clients for a tenant (tenant-scoped)
+func (s *ClientService) GetUserClients(tenantID string, filter ClientFilter) ([]models.Client, int64, error) {
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, 0, fmt.Errorf("tenant ID is required")
 	}
 
 	var clients []models.Client
 	var total int64
 
-	query := s.db.Model(&models.Client{}).Where("user_id = ?", userID)
+	query := s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Client{})
 
 	// Apply filters safely
 	if filter.Search != "" {
@@ -165,9 +173,9 @@ func (s *ClientService) GetUserClients(userID string, filter ClientFilter) ([]mo
 	return clients, total, nil
 }
 
-// UpdateClient updates a client
-func (s *ClientService) UpdateClient(clientID, userID string, req *UpdateClientRequest) (*models.Client, error) {
-	client, err := s.GetClient(clientID, userID)
+// UpdateClient updates a client (tenant-scoped)
+func (s *ClientService) UpdateClient(tenantID, clientID string, req *UpdateClientRequest) (*models.Client, error) {
+	client, err := s.GetClient(tenantID, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,20 +216,25 @@ func (s *ClientService) UpdateClient(clientID, userID string, req *UpdateClientR
 	return client, nil
 }
 
-// DeleteClient deletes a client
-func (s *ClientService) DeleteClient(clientID, userID string) error {
-	if strings.TrimSpace(clientID) == "" || strings.TrimSpace(userID) == "" {
-		return fmt.Errorf("client ID and user ID are required")
+// DeleteClient deletes a client (tenant-scoped)
+func (s *ClientService) DeleteClient(tenantID, clientID string) error {
+	if strings.TrimSpace(tenantID) == "" {
+		return fmt.Errorf("tenant ID is required")
+	}
+	if strings.TrimSpace(clientID) == "" {
+		return fmt.Errorf("client ID is required")
 	}
 
 	// Check if client has any invoices (including draft)
 	var count int64
-	s.db.Model(&models.Invoice{}).Where("client_id = ? AND user_id = ?", clientID, userID).Count(&count)
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Invoice{}).Where("client_id = ?", clientID).Count(&count)
 	if count > 0 {
 		return fmt.Errorf("cannot delete client with existing invoices (%d invoices)", count)
 	}
 
-	result := s.db.Where("id = ? AND user_id = ?", clientID, userID).Delete(&models.Client{})
+	result := s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("id = ?", clientID).Delete(&models.Client{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete client: %w", result.Error)
 	}
@@ -233,9 +246,9 @@ func (s *ClientService) DeleteClient(clientID, userID string) error {
 	return nil
 }
 
-// GetClientStats returns statistics for a client
-func (s *ClientService) GetClientStats(clientID, userID string) (*ClientStats, error) {
-	client, err := s.GetClient(clientID, userID)
+// GetClientStats returns statistics for a client (tenant-scoped)
+func (s *ClientService) GetClientStats(tenantID, clientID string) (*ClientStats, error) {
+	client, err := s.GetClient(tenantID, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -243,23 +256,27 @@ func (s *ClientService) GetClientStats(clientID, userID string) (*ClientStats, e
 	var stats ClientStats
 	stats.Client = *client
 
-	// Invoice counts
-	s.db.Model(&models.Invoice{}).Where("client_id = ?", clientID).Count(&stats.TotalInvoices)
-	s.db.Model(&models.Invoice{}).Where("client_id = ? AND status = ?", clientID, models.InvoiceStatusPaid).Count(&stats.PaidInvoices)
-	s.db.Model(&models.Invoice{}).Where("client_id = ? AND status = ?", clientID, models.InvoiceStatusOverdue).Count(&stats.OverdueInvoices)
+	// Invoice counts - tenant-scoped
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Invoice{}).Where("client_id = ?", clientID).Count(&stats.TotalInvoices)
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Invoice{}).Where("client_id = ? AND status = ?", clientID, models.InvoiceStatusPaid).Count(&stats.PaidInvoices)
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Invoice{}).Where("client_id = ? AND status = ?", clientID, models.InvoiceStatusOverdue).Count(&stats.OverdueInvoices)
 
 	// Calculate average payment time
 	var payments []models.Payment
-	s.db.Where("invoice_id IN ?",
-		s.db.Model(&models.Invoice{}).Select("id").Where("client_id = ?", clientID),
-	).Find(&payments)
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("invoice_id IN ?",
+			s.db.Model(&models.Invoice{}).Select("id").Where("client_id = ?", clientID),
+		).Find(&payments)
 
 	var totalDays float64
 	var paidCount int64
 	for _, p := range payments {
 		if p.Status == "completed" && p.CompletedAt.Valid {
 			var invoice models.Invoice
-			if err := s.db.First(&invoice, p.InvoiceID).Error; err == nil {
+			if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, p.InvoiceID).Error; err == nil {
 				days := p.CompletedAt.Time.Sub(invoice.CreatedAt).Hours() / 24
 				totalDays += days
 				paidCount++

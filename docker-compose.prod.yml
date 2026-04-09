@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  invoicefast:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: invoicefast:latest
+    container_name: invoicefast
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/invoicefast.db
+    volumes:
+      - invoicefast_data:/app/data
+      - invoicefast_templates:/app/templates
+      - invoicefast_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - invoicefast_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: invoicefast_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - invoicefast
+    networks:
+      - invoicefast_network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  invoicefast_data:
+  invoicefast_templates:
+  invoicefast_logs:
+
+networks:
+  invoicefast_network:
+    driver: bridge

@@ -1,0 +1,25 @@
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm">Total Invoices</h3>
+        <p class="text-3xl font-bold">{{.Stats.TotalInvoices}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm">Paid</h3>
+        <p class="text-3xl font-bold text-green-600">{{.Stats.PaidInvoices}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm">Pending</h3>
+        <p class="text-3xl font-bold text-yellow-600">{{.Stats.PendingInvoices}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm">Overdue</h3>
+        <p class="text-3xl font-bold text-red-600">{{.Stats.OverdueInvoices}}</p>
+    </div>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow">
+    <h2 class="text-xl font-bold mb-4">Recent Invoices</h2>
+    <div id="invoice-list" hx-get="/dashboard/invoices?status={{.Status}}" hx-trigger="load">
+        <p class="text-gray-500">Loading...</p>
+    </div>
+</div>

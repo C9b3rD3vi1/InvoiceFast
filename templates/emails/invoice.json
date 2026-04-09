@@ -1,0 +1,20 @@
+{
+  "name": "invoice",
+  "subject": "Invoice {{invoice_number}} from {{company_name}}",
+  "body_html": "\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Invoice</title>\n    <style>\n        body { font-family: 'Segoe UI', Tahoma, sans-serif; line-height: 1.6; color: #333; }\n        .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n        .header { background: {{brand_color}}; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }\n        .content { background: #f9f9f9; padding: 30px; }\n        .invoice-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }\n        .invoice-details h3 { margin-top: 0; color: {{brand_color}}; }\n        .btn { display: inline-block; padding: 12px 30px; background: {{brand_color}}; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }\n        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>INVOICE</h1>\n            <p>#{{invoice_number}}</p>\n        </div>\n        <div class=\"content\">\n            <p>Dear {{client_name}},</p>\n            <p>Thank you for your business. Please find your invoice below.</p>\n            \n            <div class=\"invoice-details\">\n                <h3>Invoice Details</h3>\n                <p><strong>Invoice Number:</strong> {{invoice_number}}</p>\n                <p><strong>Date:</strong> {{invoice_date}}</p>\n                <p><strong>Due Date:</strong> {{due_date}}</p>\n                <p><strong>Amount Due:</strong> {{currency}} {{total}}</p>\n            </div>\n            \n            <p>You can view and pay your invoice online:</p>\n            <a href=\"{{payment_link}}\" class=\"btn\">Pay Now</a>\n            \n            <p style=\"margin-top: 30px;\">If you have any questions, please don't hesitate to contact us.</p>\n            \n            <p>Best regards,<br>{{company_name}}</p>\n        </div>\n        <div class=\"footer\">\n            <p>{{company_name}} | {{company_email}} | {{company_phone}}</p>\n            <p>This email was sent to {{client_email}}</p>\n        </div>\n    </div>\n</body>\n</html>\n",
+  "body_text": "\nDear {{client_name}},\n\nThank you for your business. Please find your invoice below.\n\nInvoice Number: {{invoice_number}}\nDate: {{invoice_date}}\nDue Date: {{due_date}}\nAmount Due: {{currency}} {{total}}\n\nYou can view and pay your invoice online:\n{{payment_link}}\n\nIf you have any questions, please don't hesitate to contact us.\n\nBest regards,\n{{company_name}}\n",
+  "variables": [
+    "invoice_number",
+    "invoice_date",
+    "due_date",
+    "client_name",
+    "client_email",
+    "company_name",
+    "company_email",
+    "company_phone",
+    "total",
+    "currency",
+    "payment_link",
+    "brand_color"
+  ]
+}

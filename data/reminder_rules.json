@@ -1,0 +1,96 @@
+{
+  "due_7": {
+    "id": "due_7",
+    "name": "7 Days Before Due",
+    "days_before_due": 7,
+    "days_after_due": 0,
+    "channels": [
+      "email"
+    ],
+    "template": "reminder_7_days",
+    "enabled": true,
+    "late_fee_percent": 0.0
+  },
+  "due_3": {
+    "id": "due_3",
+    "name": "3 Days Before Due",
+    "days_before_due": 3,
+    "days_after_due": 0,
+    "channels": [
+      "email",
+      "whatsapp"
+    ],
+    "template": "reminder_3_days",
+    "enabled": true,
+    "late_fee_percent": 0.0
+  },
+  "due_today": {
+    "id": "due_today",
+    "name": "On Due Date",
+    "days_before_due": 0,
+    "days_after_due": 0,
+    "channels": [
+      "email",
+      "whatsapp"
+    ],
+    "template": "reminder_due_today",
+    "enabled": true,
+    "late_fee_percent": 0.0
+  },
+  "overdue_3": {
+    "id": "overdue_3",
+    "name": "3 Days Overdue",
+    "days_before_due": 0,
+    "days_after_due": 3,
+    "channels": [
+      "email",
+      "whatsapp"
+    ],
+    "template": "reminder_overdue_3",
+    "enabled": true,
+    "late_fee_percent": 0.0
+  },
+  "overdue_7": {
+    "id": "overdue_7",
+    "name": "7 Days Overdue",
+    "days_before_due": 0,
+    "days_after_due": 7,
+    "channels": [
+      "email",
+      "whatsapp",
+      "sms"
+    ],
+    "template": "reminder_overdue_7",
+    "enabled": true,
+    "late_fee_percent": 5.0
+  },
+  "overdue_14": {
+    "id": "overdue_14",
+    "name": "14 Days Overdue",
+    "days_before_due": 0,
+    "days_after_due": 14,
+    "channels": [
+      "email",
+      "whatsapp",
+      "sms"
+    ],
+    "template": "reminder_overdue_14",
+    "enabled": true,
+    "late_fee_percent": 10.0
+  },
+  "overdue_30": {
+    "id": "overdue_30",
+    "name": "30 Days Overdue",
+    "days_before_due": 0,
+    "days_after_due": 30,
+    "channels": [
+      "email",
+      "whatsapp",
+      "sms",
+      "call"
+    ],
+    "template": "reminder_overdue_30",
+    "enabled": true,
+    "late_fee_percent": 15.0
+  }
+}

@@ -1,0 +1,322 @@
+{{define "content"}}
+<!-- Hero Section -->
+<section class="relative overflow-hidden bg-gradient-to-br from-trust via-trust-light to-cyan-400 py-20 sm:py-32">
+    <div class="absolute inset-0 bg-[url('/static/images/pattern.svg')] opacity-10"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div class="text-center animate-fade-in">
+            <div class="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full text-white mb-6">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                <span class="text-sm font-medium">KRA e-TIMS Certified</span>
+            </div>
+
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-6 leading-tight">
+                Invoice Faster.<br/>
+                <span class="text-cyan-200">Get Paid Instantly.</span>
+            </h1>
+
+            <p class="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
+                Professional invoicing with <strong>M-Pesa integration</strong> and <strong>KRA e-TIMS compliance</strong> built-in. Create invoices in seconds, receive payments instantly.
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="/register.html" class="btn-success text-lg px-8 py-4">
+                    Start Free Trial
+                    <svg class="w-5 h-5 inline-block ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                    </svg>
+                </a>
+                <a href="/#features" class="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 font-medium px-8 py-4 rounded-lg transition-all text-lg">
+                    See How It Works
+                </a>
+            </div>
+
+            <p class="text-white/80 mt-6 text-sm">
+                No credit card required · 14-day free trial · Cancel anytime
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- Features Grid -->
+<section id="features" class="py-20 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+                Everything You Need to Get Paid
+            </h2>
+            <p class="text-xl text-slate-600 max-w-2xl mx-auto">
+                From creation to payment, InvoiceFast handles everything so you can focus on your business.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Feature 1: KRA e-TIMS -->
+            <div class="card p-8 hover:shadow-xl transition-shadow animate-slide-up">
+                <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center mb-6">
+                    <svg class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-3">Automated Tax Compliance</h3>
+                <p class="text-slate-600 mb-4">
+                    Automatically generate KRA-compliant e-TIMS invoices with ICN numbers and QR codes. Stay compliant without the hassle.
+                </p>
+                <ul class="space-y-2 text-slate-600">
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Automatic ICN generation
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        E-TIMS QR codes
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Real-time submission
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Feature 2: M-Pesa Integration -->
+            <div class="card p-8 hover:shadow-xl transition-shadow animate-slide-up" style="animation-delay: 0.1s;">
+                <div class="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center mb-6">
+                    <svg class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-3">Instant M-Pesa Payments</h3>
+                <p class="text-slate-600 mb-4">
+                    Accept M-Pesa payments directly from invoices. STK push to customer's phone, instant confirmation, automatic reconciliation.
+                </p>
+                <ul class="space-y-2 text-slate-600">
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        One-click STK push
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Auto-payment reconciliation
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Real-time status updates
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Feature 3: Professional Branding -->
+            <div class="card p-8 hover:shadow-xl transition-shadow animate-slide-up" style="animation-delay: 0.2s;">
+                <div class="w-14 h-14 bg-trust/10 rounded-xl flex items-center justify-center mb-6">
+                    <svg class="w-8 h-8 text-trust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a4 4 0 004-4v-4m-8 0V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-3">Professional PDF Branding</h3>
+                <p class="text-slate-600 mb-4">
+                    Create stunning, branded invoices that impress clients. Custom colors, logos, and templates that match your brand identity.
+                </p>
+                <ul class="space-y-2 text-slate-600">
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Custom brand colors
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Logo upload
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Multiple templates
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Pricing Section -->
+<section id="pricing" class="py-20 bg-slate-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+                Simple, Transparent Pricing
+            </h2>
+            <p class="text-xl text-slate-600 max-w-2xl mx-auto mb-8">
+                Choose the plan that fits your business needs.
+            </p>
+
+            <!-- Currency Toggle -->
+            <div class="inline-flex items-center gap-3 bg-white rounded-full p-1 shadow-sm border border-slate-200">
+                <button
+                    id="kes-toggle"
+                    class="px-6 py-2 rounded-full font-medium transition-all bg-trust text-white"
+                    hx-get="/api/v1/pricing?currency=KES"
+                    hx-target="#pricing-cards"
+                    hx-swap="outerHTML"
+                >
+                    KES
+                </button>
+                <button
+                    id="usd-toggle"
+                    class="px-6 py-2 rounded-full font-medium text-slate-600 hover:text-trust transition-all"
+                    hx-get="/api/v1/pricing?currency=USD"
+                    hx-target="#pricing-cards"
+                    hx-swap="outerHTML"
+                >
+                    USD
+                </button>
+            </div>
+        </div>
+
+        <div id="pricing-cards" class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Free Plan -->
+            <div class="card p-8 hover:shadow-xl transition-shadow">
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Free</h3>
+                <p class="text-slate-600 mb-6">For solo entrepreneurs</p>
+                <div class="mb-6">
+                    <span class="text-4xl font-bold text-slate-900" data-kes="0">KES 0</span>
+                    <span class="text-slate-600">/month</span>
+                </div>
+                <ul class="space-y-3 mb-8">
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        5 invoices/month
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Basic templates
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Email support
+                    </li>
+                </ul>
+                <a href="/register.html?plan=free" class="btn-outline w-full block text-center">Get Started</a>
+            </div>
+
+            <!-- Pro Plan -->
+            <div class="card p-8 border-2 border-trust relative hover:shadow-xl transition-shadow">
+                <div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-trust text-white px-4 py-1 rounded-full text-sm font-medium">
+                    Most Popular
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Pro</h3>
+                <p class="text-slate-600 mb-6">For growing businesses</p>
+                <div class="mb-6">
+                    <span class="text-4xl font-bold text-slate-900" data-kes="999">KES 999</span>
+                    <span class="text-slate-600">/month</span>
+                </div>
+                <ul class="space-y-3 mb-8">
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Unlimited invoices
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        M-Pesa integration
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        KRA e-TIMS compliance
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Custom branding
+                    </li>
+                </ul>
+                <a href="/register.html?plan=pro" class="btn-trust w-full block text-center">Start Free Trial</a>
+            </div>
+
+            <!-- Agency Plan -->
+            <div class="card p-8 hover:shadow-xl transition-shadow">
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Agency</h3>
+                <p class="text-slate-600 mb-6">For agencies & accountants</p>
+                <div class="mb-6">
+                    <span class="text-4xl font-bold text-slate-900" data-kes="2499">KES 2,499</span>
+                    <span class="text-slate-600">/month</span>
+                </div>
+                <ul class="space-y-3 mb-8">
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Everything in Pro
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Multi-client management
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        API access
+                    </li>
+                    <li class="flex items-center gap-2 text-slate-600">
+                        <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Priority support
+                    </li>
+                </ul>
+                <a href="/register.html?plan=agency" class="btn-outline w-full block text-center">Contact Sales</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA Section -->
+<section class="py-20 bg-trust">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold text-white mb-6">
+            Ready to Get Paid Faster?
+        </h2>
+        <p class="text-xl text-white/90 mb-8">
+            Join thousands of Kenyan businesses using InvoiceFast for professional invoicing and instant payments.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="/register.html" class="bg-white text-trust hover:bg-slate-100 font-bold px-8 py-4 rounded-lg transition-all text-lg">
+                Start Your Free Trial
+            </a>
+            <a href="/contact.html" class="border-2 border-white text-white hover:bg-white/10 font-bold px-8 py-4 rounded-lg transition-all text-lg">
+                Talk to Sales
+            </a>
+        </div>
+    </div>
+</section>
+{{end}}

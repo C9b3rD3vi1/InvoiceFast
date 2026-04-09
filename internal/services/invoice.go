@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
 
+	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
 
@@ -27,6 +29,7 @@ var (
 	ErrAlreadySent      = errors.New("invoice already sent")
 	ErrOverdueAmount    = errors.New("payment exceeds invoice amount")
 	ErrInvalidCurrency  = errors.New("invalid currency code")
+	ErrTenantRequired   = errors.New("tenant_id required for this operation")
 )
 
 var validCurrencies = map[string]bool{
@@ -35,22 +38,71 @@ var validCurrencies = map[string]bool{
 }
 
 type InvoiceService struct {
-	db *database.DB
+	db              *database.DB
+	emailService    *EmailService
+	whatsappService *WhatsAppService
+	exchangeService *ExchangeRateService
+	kraService      *KRAService
+	cfg             *config.Config
 }
 
 func NewInvoiceService(db *database.DB) *InvoiceService {
 	return &InvoiceService{db: db}
 }
 
-// CreateInvoice creates a new invoice with items
-func (s *InvoiceService) CreateInvoice(userID, clientID string, req *CreateInvoiceRequest) (*models.Invoice, error) {
+func NewInvoiceServiceWithNotifications(db *database.DB, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
+	return &InvoiceService{
+		db:              db,
+		emailService:    email,
+		whatsappService: whatsapp,
+		cfg:             cfg,
+	}
+}
+
+func NewInvoiceServiceWithExchange(db *database.DB, exchange *ExchangeRateService) *InvoiceService {
+	return &InvoiceService{
+		db:              db,
+		exchangeService: exchange,
+	}
+}
+
+func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
+	return &InvoiceService{
+		db:              db,
+		exchangeService: exchange,
+		emailService:    email,
+		whatsappService: whatsapp,
+		cfg:             cfg,
+	}
+}
+
+// NewInvoiceServiceWithKRAService creates invoice service with KRA integration
+func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, kra *KRAService, cfg *config.Config) *InvoiceService {
+	return &InvoiceService{
+		db:              db,
+		exchangeService: exchange,
+		emailService:    email,
+		whatsappService: whatsapp,
+		kraService:      kra,
+		cfg:             cfg,
+	}
+}
+
+// CreateInvoice creates a new invoice with items (tenant-scoped)
+func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *CreateInvoiceRequest) (*models.Invoice, error) {
+	// Validate tenant
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+
 	// Validate inputs early (fail fast)
 	if err := s.validateCreateRequest(userID, clientID, req); err != nil {
 		return nil, err
 	}
 
+	// Query with tenant isolation
 	client := &models.Client{}
-	if err := s.db.First(client, "id = ? AND user_id = ?", clientID, userID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(client, "id = ?", clientID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("client not found: %w", ErrInvoiceNotFound)
 		}
@@ -110,25 +162,40 @@ func (s *InvoiceService) CreateInvoice(userID, clientID string, req *CreateInvoi
 		total = 0
 	}
 
+	// Calculate KES equivalent for dual display
+	kesEquivalent := total
+	exchangeRate := 1.0
+	if currency != "KES" && s.exchangeService != nil {
+		rate, err := s.exchangeService.GetRate(currency, "KES")
+		if err == nil && rate > 0 {
+			kesEquivalent = total * rate
+			exchangeRate = rate
+		}
+	}
+
 	invoice := &models.Invoice{
-		ID:            uuid.New().String(),
-		UserID:        userID,
-		ClientID:      clientID,
-		InvoiceNumber: generateInvoiceNumber(userID),
-		Reference:     strings.TrimSpace(req.Reference),
-		Currency:      currency,
-		Subtotal:      math.Round(subtotal*100) / 100,
-		TaxRate:       taxRate,
-		TaxAmount:     math.Round(taxAmount*100) / 100,
-		Discount:      math.Round(discount*100) / 100,
-		Total:         math.Round(total*100) / 100,
-		Status:        models.InvoiceStatusDraft,
-		DueDate:       req.DueDate,
-		Notes:         strings.TrimSpace(req.Notes),
-		Terms:         strings.TrimSpace(req.Terms),
-		BrandColor:    req.BrandColor,
-		LogoURL:       req.LogoURL,
-		MagicToken:    uuid.New().String(),
+		ID:                  uuid.New().String(),
+		TenantID:            tenantID,
+		UserID:              userID,
+		ClientID:            clientID,
+		InvoiceNumber:       generateInvoiceNumber(userID),
+		Reference:           strings.TrimSpace(req.Reference),
+		Currency:            currency,
+		KESEquivalent:       math.Round(kesEquivalent*100) / 100,
+		ExchangeRate:        exchangeRate,
+		Subtotal:            math.Round(subtotal*100) / 100,
+		TaxRate:             taxRate,
+		TaxAmount:           math.Round(taxAmount*100) / 100,
+		Discount:            math.Round(discount*100) / 100,
+		Total:               math.Round(total*100) / 100,
+		Status:              models.InvoiceStatusDraft,
+		DueDate:             req.DueDate,
+		Notes:               strings.TrimSpace(req.Notes),
+		Terms:               strings.TrimSpace(req.Terms),
+		BrandColor:          req.BrandColor,
+		LogoURL:             req.LogoURL,
+		MagicToken:          uuid.New().String(),
+		MagicTokenExpiresAt: sql.NullTime{Time: time.Now().AddDate(0, 3, 0), Valid: true}, // 3 months expiry
 	}
 
 	// Use transaction for data integrity
@@ -175,15 +242,19 @@ func (s *InvoiceService) validateCreateRequest(userID, clientID string, req *Cre
 	return nil
 }
 
-// GetInvoiceByID retrieves an invoice by ID
-func (s *InvoiceService) GetInvoiceByID(invoiceID, userID string) (*models.Invoice, error) {
-	if strings.TrimSpace(invoiceID) == "" || strings.TrimSpace(userID) == "" {
+// GetInvoiceByID retrieves an invoice by ID (tenant-scoped)
+func (s *InvoiceService) GetInvoiceByID(tenantID, invoiceID string) (*models.Invoice, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+	if strings.TrimSpace(invoiceID) == "" {
 		return nil, ErrInvoiceNotFound
 	}
 
 	var invoice models.Invoice
-	err := s.db.Preload("Client").Preload("Items").Preload("Payments").
-		First(&invoice, "id = ? AND user_id = ?", invoiceID, userID).Error
+	err := s.db.Scopes(database.TenantFilter(tenantID)).
+		Preload("Client").Preload("Items").Preload("Payments").
+		First(&invoice, "id = ?", invoiceID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInvoiceNotFound
@@ -193,7 +264,7 @@ func (s *InvoiceService) GetInvoiceByID(invoiceID, userID string) (*models.Invoi
 	return &invoice, nil
 }
 
-// GetInvoiceByMagicToken retrieves an invoice by magic token (for client portal)
+// GetInvoiceByMagicToken retrieves an invoice by magic token (tenant-bound)
 func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, ErrInvoiceNotFound
@@ -208,17 +279,43 @@ func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, 
 		}
 		return nil, fmt.Errorf("failed to fetch invoice: %w", err)
 	}
+
+	// Check if token has expired
+	if invoice.MagicTokenExpiresAt.Valid && invoice.MagicTokenExpiresAt.Time.Before(time.Now()) {
+		return nil, errors.New("payment link has expired")
+	}
+
+	// Security: Verify invoice is accessible - must have valid tenant association
+	// The token alone is not sufficient - we need to ensure the invoice belongs to an active tenant
+	if invoice.TenantID == "" {
+		return nil, errors.New("invalid payment link - no tenant association")
+	}
+
+	// Check that the user/tenant is still active
+	var user models.User
+	// Tenant-scoped user lookup - filter by invoice's tenant to prevent cross-tenant access
+	if err := s.db.Scopes(database.TenantFilter(invoice.TenantID)).First(&user, "id = ?", invoice.UserID).Error; err != nil {
+		return nil, errors.New("invalid payment link - user not found")
+	}
+	if !user.IsActive {
+		return nil, errors.New("payment link inactive - contact administrator")
+	}
+
 	return &invoice, nil
 }
 
-// GetInvoiceByNumber retrieves an invoice by invoice number
-func (s *InvoiceService) GetInvoiceByNumber(invoiceNumber string) (*models.Invoice, error) {
+// GetInvoiceByNumber retrieves an invoice by invoice number (tenant-scoped)
+func (s *InvoiceService) GetInvoiceByNumber(tenantID, invoiceNumber string) (*models.Invoice, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
 	if strings.TrimSpace(invoiceNumber) == "" {
 		return nil, ErrInvoiceNotFound
 	}
 
 	var invoice models.Invoice
-	err := s.db.Preload("Client").Preload("Items").Preload("Payments").
+	err := s.db.Scopes(database.TenantFilter(tenantID)).
+		Preload("Client").Preload("Items").Preload("Payments").
 		First(&invoice, "invoice_number = ?", invoiceNumber).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -229,16 +326,16 @@ func (s *InvoiceService) GetInvoiceByNumber(invoiceNumber string) (*models.Invoi
 	return &invoice, nil
 }
 
-// GetUserInvoices retrieves all invoices for a user with filtering
-func (s *InvoiceService) GetUserInvoices(userID string, filter InvoiceFilter) ([]models.Invoice, int64, error) {
-	if strings.TrimSpace(userID) == "" {
-		return nil, 0, errors.New("user ID is required")
+// GetUserInvoices retrieves all invoices for a tenant with filtering (tenant-scoped)
+func (s *InvoiceService) GetUserInvoices(tenantID string, filter InvoiceFilter) ([]models.Invoice, int64, error) {
+	if tenantID == "" {
+		return nil, 0, ErrTenantRequired
 	}
 
 	var invoices []models.Invoice
 	var total int64
 
-	query := s.db.Model(&models.Invoice{}).Where("user_id = ?", userID)
+	query := s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{})
 
 	// Apply filters safely
 	if filter.Status != "" {
@@ -285,9 +382,13 @@ func (s *InvoiceService) GetUserInvoices(userID string, filter InvoiceFilter) ([
 	return invoices, total, nil
 }
 
-// UpdateInvoice updates an invoice
-func (s *InvoiceService) UpdateInvoice(invoiceID, userID string, req *UpdateInvoiceRequest) (*models.Invoice, error) {
-	invoice, err := s.GetInvoiceByID(invoiceID, userID)
+// UpdateInvoice updates an invoice (tenant-scoped)
+func (s *InvoiceService) UpdateInvoice(tenantID, invoiceID string, req *UpdateInvoiceRequest) (*models.Invoice, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return nil, err
 	}
@@ -339,9 +440,13 @@ func (s *InvoiceService) UpdateInvoice(invoiceID, userID string, req *UpdateInvo
 	return invoice, nil
 }
 
-// UpdateInvoiceItems updates invoice items
-func (s *InvoiceService) UpdateInvoiceItems(invoiceID, userID string, items []InvoiceItemRequest) (*models.Invoice, error) {
-	invoice, err := s.GetInvoiceByID(invoiceID, userID)
+// UpdateInvoiceItems updates invoice items (tenant-scoped)
+func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, items []InvoiceItemRequest) (*models.Invoice, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,9 +527,13 @@ func (s *InvoiceService) recalculateInvoiceTotals(invoice *models.Invoice) {
 	}
 }
 
-// SendInvoice marks invoice as sent and triggers notifications
-func (s *InvoiceService) SendInvoice(invoiceID, userID string) (*models.Invoice, error) {
-	invoice, err := s.GetInvoiceByID(invoiceID, userID)
+// SendInvoice marks invoice as sent, triggers notifications, and submits to KRA e-TIMS (tenant-scoped)
+func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*models.Invoice, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return nil, err
 	}
@@ -437,6 +546,77 @@ func (s *InvoiceService) SendInvoice(invoiceID, userID string) (*models.Invoice,
 	// Edge case: Cannot send if cancelled
 	if invoice.Status == models.InvoiceStatusCancelled {
 		return nil, errors.New("cannot send cancelled invoice")
+	}
+
+	// Load client and user for notifications
+	var client models.Client
+	var user models.User
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
+	s.db.First(&user, "id = ?", userID)
+
+	// Submit to KRA e-TIMS if configured (non-blocking, async)
+	// KRA ICN will be updated after successful submission
+	if s.kraService != nil && invoice.KRAICN == "" {
+		tenantID := invoice.TenantID
+		invoiceID := invoice.ID
+		invoiceNum := invoice.InvoiceNumber
+		createdAt := invoice.CreatedAt
+		subtotal := invoice.Subtotal
+		discount := invoice.Discount
+		taxRate := invoice.TaxRate
+		taxAmount := invoice.TaxAmount
+		total := invoice.Total
+		currency := invoice.Currency
+
+		go func() {
+			// Load fresh data for KRA submission
+			var cli models.Client
+			var usr models.User
+			s.db.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID)
+			s.db.First(&usr, "id = ?", userID)
+
+			// Build KRA data using the service's format
+			items := make([]KRAItem, 0)
+			s.db.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items)
+
+			kraData := &KRAInvoiceData{
+				InvoiceNumber: invoiceNum,
+				InvoiceDate:   createdAt.Format("2006-01-02"),
+				InvoiceTime:   createdAt.Format("15:04:05"),
+				Seller: KRASeller{
+					RegistrationNumber: usr.KRAPIN,
+					BusinessName:       usr.CompanyName,
+					ContactMobile:      usr.Phone,
+					ContactEmail:       usr.Email,
+				},
+				Buyer: KRABuyer{
+					CustomerName:       cli.Name,
+					ContactMobile:      cli.Phone,
+					ContactEmail:       cli.Email,
+					RegistrationNumber: cli.KRAPIN,
+				},
+				Items:             items,
+				SubTotal:          subtotal,
+				TotalExcludingVAT: subtotal - discount,
+				VATRate:           taxRate,
+				VATAmount:         taxAmount,
+				TotalIncludingVAT: total,
+				Currency:          currency,
+			}
+
+			kraResp, err := s.kraService.SubmitInvoice(kraData)
+			if err != nil {
+				log.Printf("[KRA] Failed to submit invoice %s: %v", invoiceNum, err)
+				return
+			}
+
+			// Update invoice with KRA response
+			s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+				"kra_icn":     kraResp.ICN,
+				"kra_qr_code": kraResp.QRCode,
+			})
+			log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoiceNum, kraResp.ICN)
+		}()
 	}
 
 	invoice.Status = models.InvoiceStatusSent
@@ -456,12 +636,69 @@ func (s *InvoiceService) SendInvoice(invoiceID, userID string) (*models.Invoice,
 		Details:    fmt.Sprintf(`{"invoice_number": "%s"}`, invoice.InvoiceNumber),
 	})
 
+	// Send email notification (async, don't fail if email fails)
+	go s.sendInvoiceNotifications(invoice, userID)
+
 	return invoice, nil
 }
 
-// RecordPayment records a payment for an invoice
-func (s *InvoiceService) RecordPayment(invoiceID string, payment *models.Payment) error {
-	invoice, err := s.GetInvoiceByID(invoiceID, payment.UserID)
+// sendInvoiceNotifications sends email and WhatsApp notifications for an invoice
+func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userID string) {
+	if s.emailService == nil {
+		return
+	}
+
+	// Load client and user for notifications (tenant-scoped)
+	var client models.Client
+	var user models.User
+	tenantID := invoice.TenantID
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", userID)
+
+	// Build invoice link
+	invoiceLink := fmt.Sprintf("%s/invoice/%s", s.getBaseURL(), invoice.MagicToken)
+
+	// Send email notification
+	emailData := &InvoiceEmailData{
+		CompanyName:   user.CompanyName,
+		CompanyEmail:  user.Email,
+		ClientName:    client.Name,
+		ClientEmail:   client.Email,
+		InvoiceNumber: invoice.InvoiceNumber,
+		InvoiceLink:   invoiceLink,
+		Amount:        invoice.Total,
+		Currency:      invoice.Currency,
+		DueDate:       invoice.DueDate.Format("02 Jan 2006"),
+	}
+
+	if err := s.emailService.SendInvoiceEmail(emailData); err != nil {
+		log.Printf("Failed to send invoice email for %s: %v", invoice.InvoiceNumber, err)
+	}
+
+	// Send WhatsApp notification if configured
+	if s.whatsappService != nil && client.Phone != "" {
+		amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
+		if err := s.whatsappService.SendInvoice(client.Phone, invoice.InvoiceNumber, amount, user.CompanyName, invoiceLink); err != nil {
+			log.Printf("Failed to send WhatsApp for %s: %v", invoice.InvoiceNumber, err)
+		}
+	}
+}
+
+// getBaseURL returns the base URL for the application
+func (s *InvoiceService) getBaseURL() string {
+	if s.cfg != nil {
+		return s.cfg.Server.BaseURL
+	}
+	return "https://invoice.simuxtech.com"
+}
+
+// RecordPayment records a payment for an invoice (tenant-scoped)
+func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *models.Payment) error {
+	if tenantID == "" {
+		return ErrTenantRequired
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return err
 	}
@@ -504,9 +741,13 @@ func (s *InvoiceService) RecordPayment(invoiceID string, payment *models.Payment
 	return nil
 }
 
-// CancelInvoice cancels an invoice
-func (s *InvoiceService) CancelInvoice(invoiceID, userID string) error {
-	invoice, err := s.GetInvoiceByID(invoiceID, userID)
+// CancelInvoice cancels an invoice (tenant-scoped)
+func (s *InvoiceService) CancelInvoice(tenantID, invoiceID, userID string) error {
+	if tenantID == "" {
+		return ErrTenantRequired
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return err
 	}
@@ -529,10 +770,10 @@ func (s *InvoiceService) CancelInvoice(invoiceID, userID string) error {
 	return nil
 }
 
-// GetDashboardStats returns dashboard statistics for a user
-func (s *InvoiceService) GetDashboardStats(userID string, period string) (*DashboardStats, error) {
-	if strings.TrimSpace(userID) == "" {
-		return nil, errors.New("user ID is required")
+// GetDashboardStats returns dashboard statistics for a tenant (tenant-scoped)
+func (s *InvoiceService) GetDashboardStats(tenantID, period string) (*DashboardStats, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
 	}
 
 	var stats DashboardStats
@@ -554,40 +795,40 @@ func (s *InvoiceService) GetDashboardStats(userID string, period string) (*Dashb
 	}
 
 	// Total revenue (all time paid)
-	s.db.Model(&models.Invoice{}).
-		Where("user_id = ? AND status = ?", userID, models.InvoiceStatusPaid).
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
+		Where("status = ?", models.InvoiceStatusPaid).
 		Select("COALESCE(SUM(total), 0)").
 		Scan(&stats.TotalRevenue)
 
 	// Revenue this period
-	s.db.Model(&models.Invoice{}).
-		Where("user_id = ? AND status = ? AND paid_at >= ?", userID, models.InvoiceStatusPaid, startDate).
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
+		Where("status = ? AND paid_at >= ?", models.InvoiceStatusPaid, startDate).
 		Select("COALESCE(SUM(total), 0)").
 		Scan(&stats.RevenueThisPeriod)
 
 	// Outstanding (unpaid + partially paid)
-	s.db.Model(&models.Invoice{}).
-		Where("user_id = ? AND status IN ?", userID, []string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed), string(models.InvoiceStatusPartiallyPaid), string(models.InvoiceStatusOverdue)}).
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
+		Where("status IN ?", []string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed), string(models.InvoiceStatusPartiallyPaid), string(models.InvoiceStatusOverdue)}).
 		Select("COALESCE(SUM(total - paid_amount), 0)").
 		Scan(&stats.Outstanding)
 
 	// Count by status
-	s.db.Model(&models.Invoice{}).Where("user_id = ? AND status = ?", userID, models.InvoiceStatusDraft).Count(&stats.DraftCount)
-	s.db.Model(&models.Invoice{}).Where("user_id = ? AND status = ?", userID, models.InvoiceStatusSent).Count(&stats.SentCount)
-	s.db.Model(&models.Invoice{}).Where("user_id = ? AND status = ?", userID, models.InvoiceStatusPaid).Count(&stats.PaidCount)
-	s.db.Model(&models.Invoice{}).Where("user_id = ? AND status = ?", userID, models.InvoiceStatusOverdue).Count(&stats.OverdueCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusDraft).Count(&stats.DraftCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusSent).Count(&stats.SentCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusPaid).Count(&stats.PaidCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusOverdue).Count(&stats.OverdueCount)
 
 	// Total clients
-	s.db.Model(&models.Client{}).Where("user_id = ?", userID).Count(&stats.TotalClients)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Client{}).Count(&stats.TotalClients)
 
 	// Total invoices
-	s.db.Model(&models.Invoice{}).Where("user_id = ?", userID).Count(&stats.TotalInvoices)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Count(&stats.TotalInvoices)
 
 	// Recent invoices
-	s.db.Preload("Client").
+	s.db.Scopes(database.TenantFilter(tenantID)).Preload("Client").
 		Order("created_at DESC").
 		Limit(5).
-		Find(&stats.RecentInvoices, "user_id = ?", userID)
+		Find(&stats.RecentInvoices)
 
 	return &stats, nil
 }
@@ -604,9 +845,10 @@ func (s *InvoiceService) GenerateInvoicePDF(invoice *models.Invoice) ([]byte, er
 }
 
 func (s *InvoiceService) renderInvoiceHTML(invoice *models.Invoice) (string, error) {
-	// Get user's template
+	// Get user's template (tenant-scoped)
 	var template models.Template
-	if err := s.db.First(&template, "user_id = ? AND is_default = ?", invoice.UserID, true).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(invoice.TenantID)).
+		First(&template, "is_default = ?", true).Error; err != nil {
 		// Use default classic template
 		template.HTML = getDefaultTemplate()
 	}
@@ -694,4 +936,97 @@ type DashboardStats struct {
 	TotalClients      int64            `json:"total_clients"`
 	TotalInvoices     int64            `json:"total_invoices"`
 	RecentInvoices    []models.Invoice `json:"recent_invoices"`
+}
+
+// Internal types for KRA conversion
+type kraInvoice struct {
+	ID            string
+	InvoiceNumber string
+	Currency      string
+	Subtotal      float64
+	TaxRate       float64
+	TaxAmount     float64
+	Discount      float64
+	Total         float64
+	PaidAmount    float64
+	CreatedAt     time.Time
+	DueDate       time.Time
+	Status        string
+	Items         []kraInvoiceItem
+}
+
+type kraInvoiceItem struct {
+	ID          string
+	Description string
+	Quantity    float64
+	Unit        string
+	UnitPrice   float64
+	Total       float64
+}
+
+type kraUser struct {
+	ID          string
+	Email       string
+	Phone       string
+	CompanyName string
+	KRAPIN      string
+}
+
+type kraClient struct {
+	ID      string
+	Name    string
+	Email   string
+	Phone   string
+	Address string
+	KRAPIN  string
+}
+
+func internalInvoiceToKRA(invoice *models.Invoice) *kraInvoice {
+	items := make([]kraInvoiceItem, len(invoice.Items))
+	for i, item := range invoice.Items {
+		items[i] = kraInvoiceItem{
+			ID:          item.ID,
+			Description: item.Description,
+			Quantity:    item.Quantity,
+			Unit:        item.Unit,
+			UnitPrice:   item.UnitPrice,
+			Total:       item.Total,
+		}
+	}
+	return &kraInvoice{
+		ID:            invoice.ID,
+		InvoiceNumber: invoice.InvoiceNumber,
+		Currency:      invoice.Currency,
+		Subtotal:      invoice.Subtotal,
+		TaxRate:       invoice.TaxRate,
+		TaxAmount:     invoice.TaxAmount,
+		Discount:      invoice.Discount,
+		Total:         invoice.Total,
+		PaidAmount:    invoice.PaidAmount,
+		CreatedAt:     invoice.CreatedAt,
+		DueDate:       invoice.DueDate,
+		Status:        string(invoice.Status),
+		Items:         items,
+	}
+}
+
+func internalUserToKRA(user *models.User) *kraUser {
+	return &kraUser{
+		ID:          user.ID,
+		Email:       user.Email,
+		Phone:       user.Phone,
+		CompanyName: user.CompanyName,
+		KRAPIN:      user.KRAPIN,
+	}
+}
+
+func internalClientToKRA(client *models.Client) *kraClient {
+	return &kraClient{
+		ID:      client.ID,
+		Name:    client.Name,
+		Email:   client.Email,
+		Phone:   client.Phone,
+		Address: client.Address,
+		KRAPIN:  client.KRAPIN,
+	}
 }

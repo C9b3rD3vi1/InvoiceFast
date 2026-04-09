@@ -120,13 +120,12 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 
 	log.Printf("📧 Sending due soon reminder for invoice %s", invoice.InvoiceNumber)
 
-	// Load client
+	// Load client and user (tenant-scoped)
 	var client models.Client
-	s.db.First(&client, invoice.ClientID)
-
-	// Load user
 	var user models.User
-	s.db.First(&user, invoice.UserID)
+	tenantID := invoice.TenantID
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", invoice.UserID)
 
 	// Send email
 	if defaultReminderConfig.EnableEmail && client.Email != "" {
@@ -174,13 +173,19 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 
 	log.Printf("📧 Sending overdue reminder for invoice %s (day %d)", invoice.InvoiceNumber, daysOverdue)
 
-	// Load client
+	// Load client with tenant scoping
 	var client models.Client
-	s.db.First(&client, invoice.ClientID)
+	if err := s.db.Where("id = ? AND tenant_id = ?", invoice.ClientID, invoice.TenantID).First(&client).Error; err != nil {
+		log.Printf("⚠️ Client not found for reminder: %v", err)
+		return nil
+	}
 
-	// Load user
+	// Load user with tenant scoping
 	var user models.User
-	s.db.First(&user, invoice.UserID)
+	if err := s.db.Where("id = ? AND tenant_id = ?", invoice.UserID, invoice.TenantID).First(&user).Error; err != nil {
+		log.Printf("⚠️ User not found for reminder: %v", err)
+		return nil
+	}
 
 	balanceDue := invoice.Total - invoice.PaidAmount
 

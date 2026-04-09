@@ -1,0 +1,28 @@
+{
+  "name": "payment_confirmed",
+  "language": "en_US",
+  "category": "TRANSACTIONAL",
+  "components": [
+    {
+      "type": "body",
+      "parameters": [
+        {
+          "type": "text",
+          "parameter_name": "client_name"
+        },
+        {
+          "type": "text",
+          "parameter_name": "invoice_number"
+        },
+        {
+          "type": "text",
+          "parameter_name": "amount_paid"
+        },
+        {
+          "type": "text",
+          "parameter_name": "receipt_number"
+        }
+      ]
+    }
+  ]
+}
