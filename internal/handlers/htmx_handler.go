@@ -102,7 +102,7 @@ func (h *HTMXHandler) Dashboard(c *fiber.Ctx) error {
 	}
 
 	// For non-HTMX requests, render the full page
-	return c.Render("layouts/dashboard-shell", data)
+	return c.Render("layouts/dashboard-shell.html", data)
 }
 
 // InvoiceListHTMX renders invoice list with HTMX support
