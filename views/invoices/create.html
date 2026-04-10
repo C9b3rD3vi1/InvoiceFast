@@ -1,0 +1,506 @@
+<div class="max-w-5xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Create Invoice</h1>
+                <p class="text-slate-500 text-sm">Create a KRA-compliant tax invoice</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <!-- Currency Toggle -->
+                <div class="flex items-center bg-slate-100 rounded-lg p-1">
+                    <button type="button" id="currency-kes" onclick="setCurrency('KES')" class="currency-btn px-4 py-2 text-sm font-medium rounded-md bg-trust text-white transition-all">
+                        KES
+                    </button>
+                    <button type="button" id="currency-usd" onclick="setCurrency('USD')" class="currency-btn px-4 py-2 text-sm font-medium rounded-md text-slate-600 hover:text-slate-900 transition-all">
+                        USD
+                    </button>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs text-slate-500 block">Exchange Rate</span>
+                    <span class="font-semibold text-slate-900">1 USD = KES {{.ExchangeRate}}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form id="invoice-form" 
+          hx-post="/htmx/invoices" 
+          hx-target="#form-response" 
+          hx-swap="innerHTML" 
+          hx-indicator="#submit-spinner"
+          hx-disabled-elt="button[type=submit]"
+          class="space-y-6">
+        
+        <!-- Client Selection Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div class="flex items-center gap-2 mb-4">
+                <svg class="w-5 h-5 text-trust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a4 4 0 11-8 0 4 4 0 018 0zM7 10a4 4 0 11-8 0 4 4 0 018 0z"/>
+                </svg>
+                <h2 class="text-lg font-semibold text-slate-900">Client Information</h2>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Client Search -->
+                <div class="md:col-span-2 relative">
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Select Client *</label>
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        <input type="text" 
+                               id="client-search"
+                               name="client_search"
+                               hx-get="/htmx/clients/search?q"
+                               hx-trigger="keyup changed delay:300ms"
+                               hx-target="#client-results"
+                               hx-vals='{"exclude": ""}'
+                               placeholder="Search by name or email..."
+                               autocomplete="off"
+                               class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust focus:border-transparent">
+                    </div>
+                    <div id="client-results" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-60 overflow-y-auto">
+                        <!-- HTMX populated -->
+                    </div>
+                    <input type="hidden" name="client_id" id="client-id">
+                </div>
+                
+                <!-- Client KRA PIN (PII - decrypted on selection) -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Client KRA PIN</label>
+                    <input type="text" id="client-kra-pin" readonly placeholder="Select client" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg text-slate-500 font-mono text-sm">
+                    <input type="hidden" name="client_kra_pin" id="client-kra-pin-hidden">
+                </div>
+            </div>
+
+            <!-- Client Compliance Metadata -->
+            <div id="client-metadata" class="hidden mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div class="flex items-center gap-4 text-sm">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span class="text-emerald-700">KRA PIN Verified</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                        <span class="text-green-700">WhatsApp Enabled</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Client Toggle -->
+            <div class="mt-4">
+                <button type="button" onclick="toggleNewClient()" class="text-sm text-trust hover:underline flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add New Client
+                </button>
+                <div id="new-client-fields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-slate-50 rounded-lg">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Client Name *</label>
+                        <input type="text" name="new_client_name" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Email *</label>
+                        <input type="email" name="new_client_email" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Phone *</label>
+                        <input type="tel" name="new_client_phone" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust" placeholder="2547xxxxxxx">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">KRA PIN</label>
+                        <input type="text" name="new_client_kra_pin" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust" placeholder="P051xxxxxxxA">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Address</label>
+                        <input type="text" name="new_client_address" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoice Details -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div class="flex items-center gap-2 mb-4">
+                <svg class="w-5 h-5 text-trust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h2 class="text-lg font-semibold text-slate-900">Invoice Details</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Invoice Number</label>
+                    <input type="text" name="invoice_number" value="{{.NextInvoiceNumber}}" readonly class="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-500 font-mono">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Currency</label>
+                    <select name="currency" id="currency-select" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                        <option value="KES">KES - Kenyan Shilling</option>
+                        <option value="USD">USD - US Dollar</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Issue Date *</label>
+                    <input type="date" name="issue_date" value="{{.Today}}" required class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Due Date *</label>
+                    <input type="date" name="due_date" value="{{.DueDate}}" required class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                </div>
+            </div>
+        </div>
+
+        <!-- Line Items Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-trust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    </svg>
+                    <h2 class="text-lg font-semibold text-slate-900">Line Items</h2>
+                </div>
+                <button type="button" 
+                        hx-get="/htmx/invoices/line-item?index"
+                        hx-target="#line-items-body"
+                        hx-swap="beforeend"
+                        class="text-sm text-trust hover:underline flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Item
+                </button>
+            </div>
+
+            <!-- Desktop Table -->
+            <div class="hidden md:block overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Description</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-24">Qty</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-32">Unit Price</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-32">Tax</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-32">Total</th>
+                            <th class="px-4 py-3 w-10"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="line-items-body">
+                        <!-- Initial line item -->
+                        <tr class="line-item border-b border-slate-100" data-index="0">
+                            <td class="px-4 py-3">
+                                <input type="text" name="items[0][description]" placeholder="Item description" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust">
+                            </td>
+                            <td class="px-4 py-3">
+                                <input type="number" name="items[0][quantity]" value="1" min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust" oninput="recalculateLine(this)">
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="relative">
+                                    <span class="currency-symbol absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">KES</span>
+                                    <input type="number" name="items[0][unit_price]" value="0" step="0.01" min="0" class="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust" oninput="recalculateLine(this)">
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <select name="items[0][tax_rate]" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust" onchange="recalculateLine(this)">
+                                    <option value="0">No Tax</option>
+                                    <option value="16" selected>VAT 16%</option>
+                                    <option value="8">Excise 8%</option>
+                                </select>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="item-total font-semibold text-slate-900">KES 0</span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <button type="button" onclick="removeLineItem(this)" class="text-red-500 hover:text-red-700 p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Mobile Cards -->
+            <div class="md:hidden space-y-4" id="line-items-cards">
+                <div class="line-item-card p-4 border border-slate-200 rounded-lg" data-index="0">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Description</label>
+                            <input type="text" name="items[0][description]" placeholder="Item description" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">Qty</label>
+                                <input type="number" name="items[0][quantity]" value="1" min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">Unit Price</label>
+                                <input type="number" name="items[0][unit_price]" value="0" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Tax</label>
+                            <select name="items[0][tax_rate]" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <option value="0">No Tax</option>
+                                <option value="16" selected>VAT 16%</option>
+                            </select>
+                        </div>
+                        <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+                            <span class="text-sm font-medium text-slate-500">Total</span>
+                            <span class="item-total font-semibold text-slate-900">KES 0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Totals Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Notes -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Notes (Optional)</label>
+                    <textarea name="notes" rows="4" placeholder="Additional terms, bank details, or notes..." class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust text-sm"></textarea>
+                </div>
+                
+                <!-- Summary -->
+                <div class="space-y-3">
+                    <div class="flex justify-between text-slate-600">
+                        <span>Subtotal</span>
+                        <span id="subtotal" class="font-semibold">KES 0</span>
+                    </div>
+                    <div class="flex justify-between text-slate-600">
+                        <span>VAT (16%)</span>
+                        <span id="vat" class="font-semibold">KES 0</span>
+                    </div>
+                    <div class="flex justify-between text-lg font-bold text-slate-900 pt-3 border-t border-slate-200">
+                        <span>Total</span>
+                        <span id="total">KES 0</span>
+                    </div>
+                    
+                    <!-- KRA Compliance Display -->
+                    <div id="kra-compliance-box" class="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                            <span class="font-semibold text-emerald-800">KRA Compliance Total</span>
+                        </div>
+                        <p id="kra-total" class="text-2xl font-bold text-emerald-700">KES 0</p>
+                        <p class="text-xs text-emerald-600 mt-1">This amount will be submitted to KRA e-TIMS</p>
+                        <input type="hidden" name="kes_equivalent" id="kes-equivalent" value="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center justify-between gap-4">
+            <a href="/dashboard/invoices" class="px-6 py-2.5 text-slate-700 font-medium hover:bg-slate-100 rounded-lg transition-colors">
+                Cancel
+            </a>
+            <div class="flex items-center gap-3">
+                <button type="submit" 
+                        name="status" 
+                        value="draft" 
+                        class="px-6 py-2.5 bg-white border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors">
+                    Save Draft
+                </button>
+                <button type="submit" 
+                        name="status" 
+                        value="sent" 
+                        class="px-6 py-2.5 bg-trust text-white font-semibold rounded-lg hover:bg-trust-dark transition-colors flex items-center gap-2">
+                    <span id="submit-spinner" class="htmx-indicator hidden">
+                        <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                    </span>
+                    Create & Send
+                </button>
+            </div>
+        </div>
+
+        <!-- Response Container -->
+        <div id="form-response"></div>
+    </form>
+</div>
+
+<script>
+    // Configuration
+    const EXCHANGE_RATE = {{.ExchangeRate}};
+    let currentCurrency = 'KES';
+    let lineItemIndex = 1;
+
+    // Currency Toggle
+    function setCurrency(currency) {
+        currentCurrency = currency;
+        const kesBtn = document.getElementById('currency-kes');
+        const usdBtn = document.getElementById('currency-usd');
+        
+        if (currency === 'KES') {
+            kesBtn.classList.add('bg-trust', 'text-white');
+            kesBtn.classList.remove('text-slate-600');
+            usdBtn.classList.remove('bg-trust', 'text-white');
+            usdBtn.classList.add('text-slate-600');
+        } else {
+            usdBtn.classList.add('bg-trust', 'text-white');
+            usdBtn.classList.remove('text-slate-600');
+            kesBtn.classList.remove('bg-trust', 'text-white');
+            kesBtn.classList.add('text-slate-600');
+        }
+        
+        document.getElementById('currency-select').value = currency;
+        updateCurrencySymbols();
+        recalculateTotals();
+    }
+
+    function updateCurrencySymbols() {
+        const symbol = currentCurrency === 'KES' ? 'KES' : '$';
+        document.querySelectorAll('.currency-symbol').forEach(el => {
+            el.textContent = symbol;
+        });
+    }
+
+    // Client Selection
+    function selectClient(id, name, email, phone, kraPin) {
+        document.getElementById('client-id').value = id;
+        document.getElementById('client-search').value = name;
+        document.getElementById('client-results').classList.add('hidden');
+        
+        // Set PII data (decrypted)
+        if (kraPin) {
+            const maskedPin = '****' + kraPin.slice(-5);
+            document.getElementById('client-kra-pin').value = maskedPin;
+            document.getElementById('client-kra-pin-hidden').value = kraPin;
+        }
+        
+        // Show compliance metadata
+        const metadata = document.getElementById('client-metadata');
+        if (phone) {
+            metadata.classList.remove('hidden');
+        }
+    }
+
+    function toggleNewClient() {
+        document.getElementById('new-client-fields').classList.toggle('hidden');
+    }
+
+    // Line Item Management
+    function recalculateLine(el) {
+        const row = el.closest('.line-item') || el.closest('.line-item-card');
+        if (!row) {
+            recalculateTotals();
+            return;
+        }
+        
+        const qty = parseFloat(row.querySelector('[name$="[quantity]"]')?.value) || 0;
+        const price = parseFloat(row.querySelector('[name$="[unit_price]"]')?.value) || 0;
+        const taxRate = parseFloat(row.querySelector('[name$="[tax_rate]"]')?.value) || 0;
+        
+        const subtotal = qty * price;
+        const tax = subtotal * (taxRate / 100);
+        const total = subtotal + tax;
+        
+        const totalEl = row.querySelector('.item-total');
+        if (totalEl) {
+            const symbol = currentCurrency === 'KES' ? 'KES ' : '$ ';
+            totalEl.textContent = symbol + total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+        
+        recalculateTotals();
+    }
+
+    function recalculateTotals() {
+        let subtotal = 0;
+        let totalTax = 0;
+        
+        document.querySelectorAll('.line-item, .line-item-card').forEach(row => {
+            const qty = parseFloat(row.querySelector('[name$="[quantity]"]')?.value) || 0;
+            const price = parseFloat(row.querySelector('[name$="[unit_price]"]')?.value) || 0;
+            const taxRate = parseFloat(row.querySelector('[name$="[tax_rate]"]')?.value) || 0;
+            
+            const lineSubtotal = qty * price;
+            const lineTax = lineSubtotal * (taxRate / 100);
+            
+            subtotal += lineSubtotal;
+            totalTax += lineTax;
+        });
+        
+        const grandTotal = subtotal + totalTax;
+        
+        // Update display
+        const symbol = currentCurrency === 'KES' ? 'KES ' : '$ ';
+        document.getElementById('subtotal').textContent = symbol + subtotal.toLocaleString();
+        document.getElementById('vat').textContent = symbol + totalTax.toLocaleString();
+        document.getElementById('total').textContent = symbol + grandTotal.toLocaleString();
+        
+        // Calculate KES equivalent for KRA compliance
+        let kesAmount = grandTotal;
+        if (currentCurrency === 'USD') {
+            kesAmount = grandTotal * EXCHANGE_RATE;
+        }
+        document.getElementById('kra-total').textContent = 'KES ' + kesAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('kes-equivalent').value = kesAmount.toFixed(2);
+    }
+
+    function removeLineItem(btn) {
+        const tableRow = btn.closest('.line-item');
+        const cardRow = btn.closest('.line-item-card');
+        
+        const totalItems = document.querySelectorAll('.line-item, .line-item-card').length;
+        
+        if (totalItems > 1) {
+            if (tableRow) tableRow.remove();
+            if (cardRow) cardRow.remove();
+            recalculateTotals();
+        }
+    }
+
+    // HTMX handlers
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail.target.id === 'line-items-body' || evt.detail.target.id === 'line-items-cards') {
+            // Update index for next item
+            lineItemIndex++;
+            
+            // Update name attributes with new index
+            const newItems = evt.detail.target.querySelectorAll('.line-item, .line-item-card');
+            newItems.forEach((item, idx) => {
+                item.setAttribute('data-index', idx);
+                item.querySelectorAll('input, select').forEach(input => {
+                    const name = input.getAttribute('name');
+                    if (name) {
+                        input.setAttribute('name', name.replace(/\[\d+\]/, '[' + idx + ']'));
+                    }
+                });
+            });
+            
+            recalculateTotals();
+        }
+        
+        // Handle client results
+        if (evt.detail.target.id === 'client-results') {
+            const results = evt.detail.target;
+            if (results.children.length > 0) {
+                results.classList.remove('hidden');
+            }
+        }
+    });
+
+    // Close dropdowns on outside click
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#client-search') && !e.target.closest('#client-results')) {
+            document.getElementById('client-results').classList.add('hidden');
+        }
+    });
+
+    // Initialize
+    setCurrency('KES');
+</script>

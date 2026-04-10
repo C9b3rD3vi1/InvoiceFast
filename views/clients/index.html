@@ -1,0 +1,159 @@
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Clients</h1>
+            <p class="text-slate-500 text-sm">Manage your business contacts and customer data</p>
+        </div>
+        <button hx-get="/dashboard/clients/new-form" 
+                hx-target="#client-modal" 
+                hx-swap="innerHTML"
+                class="inline-flex items-center gap-2 bg-trust text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-trust-dark transition-all">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+            </svg>
+            Add Client
+        </button>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-4">
+            <div class="flex-1 max-w-md">
+                <div class="relative">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input type="text" 
+                           id="client-search"
+                           hx-get="/dashboard/clients" 
+                           hx-trigger="keyup changed delay:500ms"
+                           hx-target="#clients-table-body"
+                           placeholder="Search clients by name, email or phone..."
+                           class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust text-sm">
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <select class="px-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-trust">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clients Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Client</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Contact</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">KRA PIN</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Outstanding</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clients-table-body" hx-get="/htmx/clients" hx-trigger="load">
+                    <!-- Loading -->
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center">
+                            <div class="flex items-center justify-center gap-3 text-slate-500">
+                                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                <span>Loading clients...</span>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center justify-between">
+        <p class="text-sm text-slate-500">Showing <span class="font-medium">1-10</span> of <span class="font-medium">48</span> clients</p>
+        <div class="flex items-center gap-2">
+            <button class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50" disabled>Previous</button>
+            <button class="px-4 py-2 text-sm font-medium text-white bg-trust rounded-lg hover:bg-trust-dark">1</button>
+            <button class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">2</button>
+            <button class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">3</button>
+            <button class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">Next</button>
+        </div>
+    </div>
+</div>
+
+<!-- Client Profile Slide-Over Panel -->
+<div id="client-slideover" class="fixed inset-0 z-50 hidden">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-slate-900/50" onclick="closeSlideover()"></div>
+    
+    <!-- Panel -->
+    <div class="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300">
+        <div id="slideover-content" class="h-full flex flex-col">
+            <!-- Loading -->
+            <div class="flex-1 flex items-center justify-center">
+                <svg class="animate-spin h-8 w-8 text-trust" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Client Modal -->
+<div id="client-modal"></div>
+
+<script>
+    // Open client profile slideover
+    function openClientProfile(clientId) {
+        const slideover = document.getElementById('client-slideover');
+        slideover.classList.remove('hidden');
+        
+        // Fetch client details via HTMX
+        htmx.ajax('GET', '/htmx/clients/' + clientId + '/profile', {
+            target: '#slideover-content',
+            swap: 'innerHTML'
+        });
+    }
+
+    // Close slideover
+    function closeSlideover() {
+        document.getElementById('client-slideover').classList.add('hidden');
+    }
+
+    // Reveal KRA PIN (with audit logging)
+    function revealKRAPin(button, clientId, maskedPin) {
+        const originalText = button.innerHTML;
+        button.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>';
+        
+        htmx.ajax('GET', '/htmx/clients/' + clientId + '/kra-pin', {
+            target: '#kra-pin-' + clientId,
+            swap: 'innerHTML',
+            afterSwap: function() {
+                // Log audit event (handled server-side)
+                console.log('KRA PIN revealed for client:', clientId);
+            }
+        });
+    }
+
+    // Open WhatsApp with pre-filled message
+    function openWhatsApp(phone, clientName, balance) {
+        const message = encodeURIComponent(`Hello ${clientName},\n\nThis is a reminder about your outstanding balance of KES ${balance}.\n\nPlease settle at your earliest convenience.\n\nRegards,\nInvoiceFast`);
+        const url = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${message}`;
+        window.open(url, '_blank');
+    }
+
+    // Close modal on outside click
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('fixed') && e.target.id === 'client-slideover') {
+            closeSlideover();
+        }
+    });
+</script>

@@ -1,0 +1,275 @@
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Payments & Reconciliation</h1>
+            <p class="text-slate-500 text-sm">Track M-Pesa transactions and reconcile with invoices</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button hx-get="/dashboard/payments/export" class="inline-flex items-center gap-2 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                </svg>
+                Export
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-slate-900">156</p>
+                    <p class="text-sm text-slate-500">Successful</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-slate-900">12</p>
+                    <p class="text-sm text-slate-500">Pending</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-slate-900">8</p>
+                    <p class="text-sm text-slate-500">Failed</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-slate-900">4</p>
+                    <p class="text-sm text-slate-500">Unreconciled</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+        <div class="border-b border-slate-200">
+            <nav class="flex gap-6 px-6" aria-label="Tabs">
+                <button onclick="switchTab('all')" class="tab-btn py-4 border-b-2 border-trust text-trust font-medium text-sm">
+                    All Transactions
+                </button>
+                <button onclick="switchTab('unreconciled')" class="tab-btn py-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 font-medium text-sm">
+                    Unreconciled
+                </button>
+                <button onclick="switchTab('manual')" class="tab-btn py-4 border-b-2 border-transparent text-slate-500 hover:text-slate-700 font-medium text-sm">
+                    Manual Match
+                </button>
+            </nav>
+        </div>
+
+        <!-- All Transactions Tab -->
+        <div id="tab-all" class="p-6">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Merchant ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Phone</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Invoice</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Callback Time</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-body" hx-get="/htmx/payments" hx-trigger="load">
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-slate-500">
+                                <svg class="animate-spin h-5 w-5 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                Loading transactions...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Unreconciled Tab -->
+        <div id="tab-unreconciled" class="hidden p-6">
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <div>
+                        <p class="font-medium text-yellow-800">4 Unreconciled Payments</p>
+                        <p class="text-sm text-yellow-700">These payments have no matching invoice. Link them to open invoices to reconcile.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Select</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Merchant ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Phone</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Received</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unreconciled-body">
+                        <tr class="border-b border-slate-100">
+                            <td class="px-4 py-3">
+                                <input type="checkbox" class="rounded border-slate-300 text-trust focus:ring-trust">
+                            </td>
+                            <td class="px-4 py-3 font-mono text-sm text-slate-900">MBA234567890</td>
+                            <td class="px-4 py-3 text-slate-900">254712345678</td>
+                            <td class="px-4 py-3 font-semibold text-slate-900">KES 15,000</td>
+                            <td class="px-4 py-3 text-slate-600 text-sm">Jan 15, 2026 14:32:15</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="px-4 py-3">
+                                <input type="checkbox" class="rounded border-slate-300 text-trust focus:ring-trust">
+                            </td>
+                            <td class="px-4 py-3 font-mono text-sm text-slate-900">MBA234567891</td>
+                            <td class="px-4 py-3 text-slate-900">254723456789</td>
+                            <td class="px-4 py-3 font-semibold text-slate-900">KES 8,500</td>
+                            <td class="px-4 py-3 text-slate-600 text-sm">Jan 16, 2026 09:15:42</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="px-4 py-3">
+                                <input type="checkbox" class="rounded border-slate-300 text-trust focus:ring-trust">
+                            </td>
+                            <td class="px-4 py-3 font-mono text-sm text-slate-900">MBA234567892</td>
+                            <td class="px-4 py-3 text-slate-900">254734567890</td>
+                            <td class="px-4 py-3 font-semibold text-slate-900">KES 23,000</td>
+                            <td class="px-4 py-3 text-slate-600 text-sm">Jan 17, 2026 11:45:33</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+                <button hx-get="/htmx/payments/manual-match-form" 
+                        hx-target="#match-modal"
+                        hx-swap="innerHTML"
+                        class="inline-flex items-center gap-2 bg-trust text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-trust-dark">
+                    Match to Invoice
+                </button>
+            </div>
+        </div>
+
+        <!-- Manual Match Tab -->
+        <div id="tab-manual" class="hidden p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Unreconciled Payments -->
+                <div class="bg-white border border-slate-200 rounded-lg">
+                    <div class="p-4 border-b border-slate-200">
+                        <h3 class="font-semibold text-slate-900">Unreconciled Payments</h3>
+                    </div>
+                    <div class="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                        <label class="flex items-center gap-3 p-4 hover:bg-slate-50 cursor-pointer">
+                            <input type="radio" name="payment-select" class="text-trust focus:ring-trust">
+                            <div class="flex-1">
+                                <p class="font-mono text-sm text-slate-900">MBA234567890</p>
+                                <p class="text-sm text-slate-500">KES 15,000 • 254712345678</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-4 hover:bg-slate-50 cursor-pointer">
+                            <input type="radio" name="payment-select" class="text-trust focus:ring-trust">
+                            <div class="flex-1">
+                                <p class="font-mono text-sm text-slate-900">MBA234567891</p>
+                                <p class="text-sm text-slate-500">KES 8,500 • 254723456789</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Open Invoices -->
+                <div class="bg-white border border-slate-200 rounded-lg">
+                    <div class="p-4 border-b border-slate-200">
+                        <h3 class="font-semibold text-slate-900">Open Invoices</h3>
+                    </div>
+                    <div class="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                        <label class="flex items-center gap-3 p-4 hover:bg-slate-50 cursor-pointer">
+                            <input type="radio" name="invoice-select" class="text-trust focus:ring-trust">
+                            <div class="flex-1">
+                                <p class="font-medium text-slate-900">INV-2026-001</p>
+                                <p class="text-sm text-slate-500">Acme Corporation • KES 15,000</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-4 hover:bg-slate-50 cursor-pointer">
+                            <input type="radio" name="invoice-select" class="text-trust focus:ring-trust">
+                            <div class="flex-1">
+                                <p class="font-medium text-slate-900">INV-2026-002</p>
+                                <p class="text-sm text-slate-500">Tech Solutions • KES 8,500</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-4 hover:bg-slate-50 cursor-pointer">
+                            <input type="radio" name="invoice-select" class="text-trust focus:ring-trust">
+                            <div class="flex-1">
+                                <p class="font-medium text-slate-900">INV-2026-003</p>
+                                <p class="text-sm text-slate-500">Jinja Coffee • KES 23,000</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <button class="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50">
+                    Cancel
+                </button>
+                <button class="px-5 py-2.5 bg-trust text-white rounded-lg font-semibold hover:bg-trust-dark">
+                    Link & Reconcile
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Match Modal -->
+<div id="match-modal"></div>
+
+<script>
+    // Tab switching
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('border-trust', 'text-trust');
+            btn.classList.add('border-transparent', 'text-slate-500');
+        });
+        event.target.classList.remove('border-transparent', 'text-slate-500');
+        event.target.classList.add('border-trust', 'text-trust');
+
+        document.getElementById('tab-all').classList.add('hidden');
+        document.getElementById('tab-unreconciled').classList.add('hidden');
+        document.getElementById('tab-manual').classList.add('hidden');
+        
+        document.getElementById('tab-' + tabName).classList.remove('hidden');
+    }
+</script>
