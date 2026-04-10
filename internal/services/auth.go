@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -317,6 +318,7 @@ type AuthService struct {
 	db           *database.DB
 	cfg          *config.Config
 	emailService *EmailService
+	auditService *AuditService
 }
 
 type Claims struct {
@@ -332,8 +334,8 @@ type AuthResponse struct {
 	User         *models.User `json:"user"`
 }
 
-func NewAuthService(db *database.DB, cfg *config.Config, emailSvc *EmailService) *AuthService {
-	return &AuthService{db: db, cfg: cfg, emailService: emailSvc}
+func NewAuthService(db *database.DB, cfg *config.Config, emailSvc *EmailService, auditSvc *AuditService) *AuthService {
+	return &AuthService{db: db, cfg: cfg, emailService: emailSvc, auditService: auditSvc}
 }
 
 // Register creates a new user account
@@ -396,13 +398,22 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	refreshToken, err := s.generateRefreshToken(user.ID)
+	refreshToken, err := s.GenerateRefreshTokenWithTenant(user.ID, user.TenantID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Seed default templates
 	s.db.SeedDefaultTemplates(user.ID)
+
+	// Audit log registration
+	if s.auditService != nil {
+		_ = s.auditService.LogAction(context.Background(), user.TenantID, user.ID, AuditActionUserRegister, AuditEntityUser, user.ID, map[string]interface{}{
+			"email":   user.Email,
+			"company": user.CompanyName,
+			"phone":   user.Phone,
+		})
+	}
 
 	return &AuthResponse{
 		AccessToken:  accessToken,
@@ -435,9 +446,14 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	refreshToken, err := s.generateRefreshToken(user.ID)
+	refreshToken, err := s.GenerateRefreshTokenWithTenant(user.ID, user.TenantID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Audit log successful login
+	if s.auditService != nil {
+		_ = s.auditService.LogLoginAttempt(context.Background(), user.TenantID, user.Email, "", true, "")
 	}
 
 	return &AuthResponse{
@@ -471,13 +487,13 @@ func (s *AuthService) RefreshToken(tenantID, refreshToken string) (*AuthResponse
 		return nil, fmt.Errorf("failed to delete refresh token: %w", err)
 	}
 
-	// Generate new tokens
+	// Generate new tokens - use tenantID from request to ensure consistency
 	accessToken, err := s.generateAccessToken(&user)
 	if err != nil {
 		return nil, err
 	}
 
-	newRefreshToken, err := s.generateRefreshToken(user.ID)
+	newRefreshToken, err := s.GenerateRefreshTokenWithTenant(user.ID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -709,12 +725,22 @@ func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
 }
 
 func (s *AuthService) generateRefreshToken(userID string) (string, error) {
+	return s.GenerateRefreshTokenWithTenant(userID, "")
+}
+
+func (s *AuthService) GenerateRefreshTokenWithTenant(userID, tenantID string) (string, error) {
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	token := base64.URLEncoding.EncodeToString(bytes)
 
+	// SECURITY: TenantID must be required to prevent cross-tenant token usage
+	if tenantID == "" {
+		tenantID = userID // Fallback: use userID as tenantID for self-tenant tokens
+	}
+
 	refreshToken := &models.RefreshToken{
 		ID:        uuid.New().String(),
+		TenantID:  tenantID,
 		UserID:    userID,
 		Token:     token,
 		ExpiresAt: time.Now().Add(s.cfg.JWT.RefreshExpiry),
