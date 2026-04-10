@@ -7,6 +7,7 @@
     <meta name="description" content="Professional invoicing with M-Pesa integration and KRA e-TIMS compliance">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/auth.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -77,8 +78,15 @@
                         <p class="text-slate-500 mt-1">Start invoicing in minutes</p>
                     </div>
 
-                    <form id="registerForm" action="/api/v1/auth/register" method="POST">
+                    <form id="registerForm" hx-post="/api/v1/auth/register" hx-indicator=".loading" hx-target="#errorMessage">
                         <div class="space-y-5">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
+                                <input type="text" name="name" required 
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="John Doe">
+                            </div>
+                            
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-2">Business Name</label>
                                 <input type="text" name="company_name" required 
@@ -101,18 +109,73 @@
                             </div>
                             
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
-                                <input type="password" name="password" required minlength="8"
+                                <label class="block text-sm font-medium text-slate-700 mb-2">KRA PIN (Optional)</label>
+                                <input type="text" name="kra_pin" 
                                     class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="Min 8 characters">
+                                    placeholder="A0000000000">
                             </div>
                             
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                                <input type="password" name="password" required minlength="8" id="regPassword"
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="Min 8 chars with uppercase, number, special">
+                                <p class="text-xs text-slate-500 mt-1">Must have: uppercase, lowercase, number, special char (!@#$%...)</p>
+                            </div>
+                            
+                            <div id="errorMessage" class="text-red-600 text-sm text-center hidden"></div>
+                            
                             <button type="submit" 
-                                class="w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all">
-                                Create Account
+                                class="loading w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center justify-center">
+                                <span class="btn-text">Create Account</span>
+                                <span class="loading spinner hidden">
+                                    <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
                             </button>
                         </div>
                     </form>
+                    
+                    <script>
+                        document.getElementById('registerForm').addEventListener('htmx:afterRequest', function(evt) {
+                            const errorDiv = document.getElementById('errorMessage');
+                            if (evt.detail.xhr.status === 200 || evt.detail.xhr.status === 201) {
+                                try {
+                                    const data = JSON.parse(evt.detail.xhr.response);
+                                    if (data.access_token) {
+                                        localStorage.setItem('accessToken', data.access_token);
+                                    }
+                                    if (data.refresh_token) {
+                                        localStorage.setItem('refreshToken', data.refresh_token);
+                                    }
+                                    window.location.href = '/dashboard.html';
+                                } catch(e) {
+                                    window.location.href = '/dashboard.html';
+                                }
+                            } else if (evt.detail.xhr.status === 400) {
+                                try {
+                                    const data = JSON.parse(evt.detail.xhr.response);
+                                    errorDiv.textContent = data.error || 'Registration failed';
+                                } catch(e) {
+                                    errorDiv.textContent = 'Registration failed';
+                                }
+                                errorDiv.classList.remove('hidden');
+                            } else {
+                                errorDiv.textContent = 'Registration failed. Please try again.';
+                                errorDiv.classList.remove('hidden');
+                            }
+                            document.querySelector('.spinner').classList.add('hidden');
+                            document.querySelector('.btn-text').classList.remove('hidden');
+                        });
+                        
+                        document.getElementById('registerForm').addEventListener('htmx:beforeRequest', function(evt) {
+                            document.querySelector('.spinner').classList.remove('hidden');
+                            document.querySelector('.btn-text').classList.add('hidden');
+                            document.getElementById('errorMessage').classList.add('hidden');
+                        });
+                    </script>
                     
                     <div class="mt-6 text-center">
                         <p class="text-slate-600">Already have an account? 
