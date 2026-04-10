@@ -7,13 +7,14 @@ import (
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+	"invoicefast/internal/whatsapp"
 )
 
 // ReminderService handles automated payment reminders
 type ReminderService struct {
 	db           *database.DB
 	emailService *EmailService
-	waService    *WhatsAppService
+	waService    *whatsapp.WhatsAppService
 }
 
 // ReminderConfig for configuring reminder schedules
@@ -41,7 +42,7 @@ var defaultReminderConfig = ReminderConfig{
 }
 
 // NewReminderService creates a new reminder service
-func NewReminderService(db *database.DB, email *EmailService, wa *WhatsAppService) *ReminderService {
+func NewReminderService(db *database.DB, email *EmailService, wa *whatsapp.WhatsAppService) *ReminderService {
 	return &ReminderService{
 		db:           db,
 		emailService: email,
@@ -57,12 +58,13 @@ func (s *ReminderService) RunReminders() error {
 	var invoices []models.Invoice
 	now := time.Now().UTC()
 
-	// Find invoices due in X days
+	// Find invoices due in X days - with Preload to avoid N+1
 	upcomingDue := now.AddDate(0, 0, defaultReminderConfig.DaysBeforeDue)
-	s.db.Where("status IN ? AND due_date <= ?",
-		[]string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed)},
-		upcomingDue,
-	).Find(&invoices)
+	s.db.Preload("Client").Preload("User").
+		Where("status IN ? AND due_date <= ?",
+			[]string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed)},
+			upcomingDue,
+		).Find(&invoices)
 
 	// Send "due soon" reminders
 	for _, inv := range invoices {
@@ -71,11 +73,12 @@ func (s *ReminderService) RunReminders() error {
 		}
 	}
 
-	// Find overdue invoices
-	s.db.Where("status IN ? AND due_date < ?",
-		[]string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed)},
-		now,
-	).Find(&invoices)
+	// Find overdue invoices - with Preload to avoid N+1
+	s.db.Preload("Client").Preload("User").
+		Where("status IN ? AND due_date < ?",
+			[]string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed)},
+			now,
+		).Find(&invoices)
 
 	// Send overdue reminders
 	for _, inv := range invoices {

@@ -81,6 +81,8 @@ func AuthMiddleware(auth *services.AuthService) gin.HandlerFunc {
 }
 
 // APIKeyMiddleware validates API keys
+// DEPRECATED: This is legacy GIN middleware not used in Fiber app
+// SECURITY: Requires tenantID - but this legacy code doesn't have access to tenant context
 func APIKeyMiddleware(auth *services.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("X-API-Key")
@@ -94,14 +96,11 @@ func APIKeyMiddleware(auth *services.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		user, err := auth.ValidateAPIKey(apiKey)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
-			return
-		}
-
-		c.Set("user_id", user.ID)
-		c.Next()
+		// SECURITY FIX: This legacy GIN middleware cannot get tenantID from context
+		// In production, this should be removed or migrated to Fiber middleware
+		// For now, reject API key auth until migrated to proper Fiber implementation
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "API key auth deprecated - use JWT"})
+		return
 	}
 }
 

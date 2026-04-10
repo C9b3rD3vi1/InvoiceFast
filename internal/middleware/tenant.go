@@ -3,6 +3,8 @@ package middleware
 import (
 	"strings"
 
+	"invoicefast/internal/database"
+	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,7 +15,7 @@ const (
 	UserIDKey   = "user_id"
 )
 
-func TenantMiddleware(authService *services.AuthService) fiber.Handler {
+func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var tenantID, userID string
 		var authErr error
@@ -26,7 +28,6 @@ func TenantMiddleware(authService *services.AuthService) fiber.Handler {
 			if err == nil && claims != nil {
 				userID = claims.UserID
 				tenantID = claims.TenantID
-				// Fallback: if no tenant_id in JWT, use userID as tenant
 				if tenantID == "" {
 					tenantID = userID
 				}
@@ -35,12 +36,36 @@ func TenantMiddleware(authService *services.AuthService) fiber.Handler {
 			}
 		}
 
+		// Subdomain detection for client portal (e.g., client-slug.invoicefast.com)
+		if tenantID == "" && db != nil {
+			tenantID = resolveTenantFromSubdomain(c, db)
+		}
+
 		// Allow X-Tenant-ID header for service-to-service calls
 		if tenantID == "" {
 			tenantID = c.Get("X-Tenant-ID")
 		}
 
-		// Store in Fiber context locals (request-scoped, thread-safe)
+		// HARD-STOP: If no tenant resolved, return 401 for protected routes
+		protectedPaths := []string{"/api/v1/tenant", "/dashboard", "/invoices", "/clients"}
+		if tenantID == "" {
+			path := c.Path()
+			isProtected := false
+			for _, p := range protectedPaths {
+				if strings.HasPrefix(path, p) {
+					isProtected = true
+					break
+				}
+			}
+			if isProtected {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "tenant context required",
+					"code":  "TENANT_REQUIRED",
+				})
+			}
+		}
+
+		// Store in Fiber context locals
 		if tenantID != "" {
 			c.Locals(TenantIDKey, tenantID)
 		}
@@ -48,7 +73,6 @@ func TenantMiddleware(authService *services.AuthService) fiber.Handler {
 			c.Locals(UserIDKey, userID)
 		}
 
-		// If authentication failed and we need auth, return 401
 		if authErr != nil && c.Path() != "/api/v1/auth/login" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "invalid or expired token",
@@ -57,6 +81,35 @@ func TenantMiddleware(authService *services.AuthService) fiber.Handler {
 
 		return c.Next()
 	}
+}
+
+func resolveTenantFromSubdomain(c *fiber.Ctx, db *database.DB) string {
+	hostname := c.Hostname()
+
+	// Skip for localhost or IP addresses
+	if strings.HasPrefix(hostname, "localhost") || strings.HasPrefix(hostname, "127.0.0.1") {
+		return ""
+	}
+
+	// Parse subdomain from hostname (e.g., client-slug.invoicefast.com)
+	parts := strings.Split(hostname, ".")
+	if len(parts) >= 3 {
+		subdomain := parts[0]
+
+		// Skip common subdomains
+		if subdomain == "www" || subdomain == "api" || subdomain == "admin" {
+			return ""
+		}
+
+		// Query tenant by subdomain
+		var tenant models.Tenant
+		err := db.Where("subdomain = ? AND is_active = ?", subdomain, true).First(&tenant).Error
+		if err == nil && tenant.ID != "" {
+			return tenant.ID
+		}
+	}
+
+	return ""
 }
 
 func GetTenantID(c *fiber.Ctx) string {

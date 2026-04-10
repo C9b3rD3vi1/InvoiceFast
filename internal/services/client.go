@@ -156,13 +156,24 @@ func (s *ClientService) GetUserClients(tenantID string, filter ClientFilter) ([]
 		return nil, 0, fmt.Errorf("failed to fetch clients: %w", err)
 	}
 
-	// Calculate totals for each client
-	for i := range clients {
-		var invoices []models.Invoice
-		s.db.Model(&models.Invoice{}).Where("client_id = ?", clients[i].ID).Find(&invoices)
+	// PERFORMANCE FIX: Use Preload to fetch all invoices in single query instead of N+1
+	// SECURITY: Added tenant filter to prevent cross-tenant data leakage
+	var invoices []models.Invoice
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Find(&invoices).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch invoices: %w", err)
+	}
 
+	// Build invoice lookup map for O(1) access
+	invoiceMap := make(map[string][]models.Invoice)
+	for _, inv := range invoices {
+		invoiceMap[inv.ClientID] = append(invoiceMap[inv.ClientID], inv)
+	}
+
+	// Calculate totals using the preloaded data
+	for i := range clients {
+		clientInvoices := invoiceMap[clients[i].ID]
 		var totalBilled, totalPaid float64
-		for _, inv := range invoices {
+		for _, inv := range clientInvoices {
 			totalBilled += inv.Total
 			totalPaid += inv.PaidAmount
 		}

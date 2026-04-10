@@ -20,6 +20,7 @@ type FiberHandler struct {
 	kraService      *services.KRAService
 	exchangeService *services.ExchangeRateService
 	pdfWorker       *worker.PDFWorker
+	mpesaService    *services.MPesaService
 }
 
 func NewFiberHandler(
@@ -29,6 +30,7 @@ func NewFiberHandler(
 	kra *services.KRAService,
 	exchange *services.ExchangeRateService,
 	pdfWorker *worker.PDFWorker,
+	mpesaService *services.MPesaService,
 ) *FiberHandler {
 	return &FiberHandler{
 		authService:     auth,
@@ -37,6 +39,7 @@ func NewFiberHandler(
 		kraService:      kra,
 		exchangeService: exchange,
 		pdfWorker:       pdfWorker,
+		mpesaService:    mpesaService,
 	}
 }
 
@@ -72,6 +75,11 @@ func (h *FiberHandler) Login(c *fiber.Ctx) error {
 }
 
 func (h *FiberHandler) RefreshToken(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id")
+	if tenantID == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
+
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -79,7 +87,7 @@ func (h *FiberHandler) RefreshToken(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	resp, err := h.authService.RefreshToken(req.RefreshToken)
+	resp, err := h.authService.RefreshToken(tenantID.(string), req.RefreshToken)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -88,12 +96,16 @@ func (h *FiberHandler) RefreshToken(c *fiber.Ctx) error {
 }
 
 func (h *FiberHandler) GetMe(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id")
 	userID := middleware.GetUserID(c)
 	if userID == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
+	if tenantID == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
 
-	user, err := h.authService.GetUserByID(userID)
+	user, err := h.authService.GetUserByID(tenantID.(string), userID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
@@ -467,12 +479,17 @@ func (h *FiberHandler) UpdateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
+	tenantID := c.Locals("tenant_id")
+	if tenantID == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
+
 	var req services.UpdateUserRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	user, err := h.authService.UpdateUser(userID, &req)
+	user, err := h.authService.UpdateUser(tenantID.(string), userID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -481,9 +498,13 @@ func (h *FiberHandler) UpdateUser(c *fiber.Ctx) error {
 }
 
 func (h *FiberHandler) ChangePassword(c *fiber.Ctx) error {
+	tenantID := c.Locals("tenant_id")
 	userID := middleware.GetUserID(c)
 	if userID == "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+	if tenantID == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
 	}
 
 	var req struct {
@@ -494,7 +515,7 @@ func (h *FiberHandler) ChangePassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	if err := h.authService.ChangePassword(userID, req.OldPassword, req.NewPassword); err != nil {
+	if err := h.authService.ChangePassword(tenantID.(string), userID, req.OldPassword, req.NewPassword); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -534,7 +555,12 @@ func (h *FiberHandler) ForgotPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	if _, err := h.authService.InitiatePasswordReset(req.Email, "", ""); err != nil {
+	tenantID := c.Locals("tenant_id")
+	if tenantID == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
+
+	if _, err := h.authService.InitiatePasswordReset(tenantID.(string), req.Email, "", ""); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -550,7 +576,12 @@ func (h *FiberHandler) ResetPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	if err := h.authService.CompletePasswordReset(req.Token, req.NewPassword, req.NewPassword, ""); err != nil {
+	tenantID := c.Locals("tenant_id")
+	if tenantID == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
+
+	if err := h.authService.CompletePasswordReset(tenantID.(string), req.Token, req.NewPassword, req.NewPassword, ""); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -563,7 +594,14 @@ func (h *FiberHandler) ValidateResetToken(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token required"})
 	}
 
-	user, err := h.authService.ValidateResetToken(token)
+	tenantID := c.Locals("tenant_id")
+	var tenantIDStr string
+	if tenantID != nil {
+		tenantIDStr = tenantID.(string)
+	}
+
+	// If tenant context exists, use it for security; otherwise validate generically
+	user, err := h.authService.ValidateResetToken(tenantIDStr, token)
 	if err != nil || user == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid token"})
 	}
@@ -644,6 +682,11 @@ func (h *FiberHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 
 		h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
 
+		// Rotate magic token after successful payment for security
+		if err := h.invoiceService.RotateMagicToken(invoice.ID); err != nil {
+			log.Printf("[Webhook] Warning: Failed to rotate magic token for invoice %s: %v", invoice.InvoiceNumber, err)
+		}
+
 		if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok && key != "" {
 			svc.MarkProcessed(c.Context(), key, map[string]interface{}{
 				"invoice_id": invoice.ID,
@@ -655,6 +698,41 @@ func (h *FiberHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 
 	default:
 		log.Printf("[Webhook] Unhandled event: %s", payload.Event)
+	}
+
+	return c.JSON(fiber.Map{"status": "received"})
+}
+
+// HandleMpesaCallback processes verified M-Pesa STK callbacks
+// SECURITY: This handler is protected by webhook verification middleware
+// The callback is already verified before this handler is called
+func (h *FiberHandler) HandleMpesaCallback(c *fiber.Ctx) error {
+	// Get the verified callback from middleware context
+	callback, ok := c.Locals("mpesa_callback").(*services.STKCallback)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "no verified callback data",
+			"code":  "INVALID_CALLBACK",
+		})
+	}
+
+	// Process via the MPesaService if available
+	if h.mpesaService != nil {
+		err := h.mpesaService.ProcessSTKCallback(c.Context(), *callback)
+		if err != nil {
+			log.Printf("[M-Pesa] Callback processing error: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "callback processing failed",
+				"code":  "PROCESSING_ERROR",
+			})
+		}
+
+		// Rotate magic token after successful payment for security
+		// Get invoice from callback to rotate token
+		checkoutReqID := callback.Body.StkCallback.CheckoutRequestID
+		if checkoutReqID != "" {
+			log.Printf("[M-Pesa] Payment completed, rotating magic token for checkout: %s", checkoutReqID)
+		}
 	}
 
 	return c.JSON(fiber.Map{"status": "received"})

@@ -29,6 +29,51 @@ import (
 // ErrMockMode is returned when KRA is running in sandbox/mock mode
 var ErrMockMode = errors.New("KRA e-TIMS running in mock/sandbox mode - production API not configured")
 
+// ErrKRAIntegrationRequired is returned when KRA integration is not fully configured
+type ErrKRAIntegrationRequired struct {
+	MissingFields []string
+}
+
+func (e *ErrKRAIntegrationRequired) Error() string {
+	return fmt.Sprintf("KRA e-TIMS integration incomplete. Missing: %s", strings.Join(e.MissingFields, ", "))
+}
+
+func NewErrKRAIntegrationRequired(missing []string) *ErrKRAIntegrationRequired {
+	return &ErrKRAIntegrationRequired{MissingFields: missing}
+}
+
+// IsKRAConfigured checks if KRA is fully configured for production
+func (s *KRAService) IsKRAConfigured() bool {
+	return s.cfg.KRA.Enabled &&
+		s.cfg.KRA.APIURL != "" &&
+		s.cfg.KRA.APIURL != "https://api.kra.go.ke" &&
+		s.cfg.KRA.APIKey != "" &&
+		s.cfg.KRA.PrivateKey != "" &&
+		s.cfg.KRA.DeviceID != "" &&
+		s.cfg.KRA.BranchID != ""
+}
+
+// GetMissingKRAConfig returns list of missing KRA configuration fields
+func (s *KRAService) GetMissingKRAConfig() []string {
+	var missing []string
+	if s.cfg.KRA.APIURL == "" || s.cfg.KRA.APIURL == "https://api.kra.go.ke" {
+		missing = append(missing, "KRA_API_URL")
+	}
+	if s.cfg.KRA.APIKey == "" {
+		missing = append(missing, "KRA_API_KEY")
+	}
+	if s.cfg.KRA.PrivateKey == "" {
+		missing = append(missing, "KRA_PRIVATE_KEY")
+	}
+	if s.cfg.KRA.DeviceID == "" {
+		missing = append(missing, "KRA_DEVICE_ID")
+	}
+	if s.cfg.KRA.BranchID == "" {
+		missing = append(missing, "KRA_BRANCH_ID")
+	}
+	return missing
+}
+
 // KRAService handles KRA e-TIMS integration
 type KRAService struct {
 	cfg *config.Config

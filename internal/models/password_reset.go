@@ -7,25 +7,26 @@ import (
 
 // Password reset errors
 var (
-	ErrTokenExpired     = errors.New("password reset token has expired")
-	ErrTokenUsed        = errors.New("password reset token has already been used")
-	ErrTokenInvalid     = errors.New("invalid password reset token")
-	ErrPasswordWeak     = errors.New("password does not meet strength requirements")
+	ErrTokenExpired        = errors.New("password reset token has expired")
+	ErrTokenUsed           = errors.New("password reset token has already been used")
+	ErrTokenInvalid        = errors.New("invalid password reset token")
+	ErrPasswordWeak        = errors.New("password does not meet strength requirements")
 	ErrPasswordCompromised = errors.New("password has been compromised in a data breach")
 )
 
 // PasswordResetToken represents a password reset token
 type PasswordResetToken struct {
-	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
-	Token     string    `json:"-" gorm:"uniqueIndex;not null"` // Hashed token (stored)
-	RawToken  string    `json:"token,omitempty"`               // Raw token (only on creation)
-	Email     string    `json:"email" gorm:"index;not null"`
-	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
+	ID        string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID  string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID    string     `json:"user_id" gorm:"type:uuid;index;not null"`
+	Token     string     `json:"-" gorm:"uniqueIndex;not null"` // Hashed token (stored)
+	RawToken  string     `json:"token,omitempty"`               // Raw token (only on creation)
+	Email     string     `json:"email" gorm:"index;not null"`
+	ExpiresAt time.Time  `json:"expires_at" gorm:"not null"`
 	UsedAt    *time.Time `json:"used_at"`
-	CreatedAt time.Time `json:"created_at"`
-	IPAddress string    `json:"ip_address"` // For audit trail
-	UserAgent string    `json:"user_agent"`
+	CreatedAt time.Time  `json:"created_at"`
+	IPAddress string     `json:"ip_address"` // For audit trail
+	UserAgent string     `json:"user_agent"`
 }
 
 // ResetTokenType is an enum for reset types
@@ -59,23 +60,23 @@ func (t *PasswordResetToken) CanBeUsed() error {
 
 // EmailVerificationToken represents an email verification token
 type EmailVerificationToken struct {
-	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
-	Token     string    `json:"-" gorm:"uniqueIndex;not null"`
-	RawToken  string    `json:"token,omitempty"`
-	Email     string    `json:"email" gorm:"index;not null"`
-	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
+	ID        string     `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID    string     `json:"user_id" gorm:"type:uuid;index;not null"`
+	Token     string     `json:"-" gorm:"uniqueIndex;not null"`
+	RawToken  string     `json:"token,omitempty"`
+	Email     string     `json:"email" gorm:"index;not null"`
+	ExpiresAt time.Time  `json:"expires_at" gorm:"not null"`
 	UsedAt    *time.Time `json:"used_at"`
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type MagicLinkToken struct {
-	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
-	Token     string    `json:"-" gorm:"uniqueIndex;not null"`
-	RawToken  string    `json:"token,omitempty"`
-	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
+	ID        string     `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID    string     `json:"user_id" gorm:"type:uuid;index;not null"`
+	Token     string     `json:"-" gorm:"uniqueIndex;not null"`
+	RawToken  string     `json:"token,omitempty"`
+	ExpiresAt time.Time  `json:"expires_at" gorm:"not null"`
 	UsedAt    *time.Time `json:"used_at"`
-	CreatedAt time.Time `json:"created_at"`
-	Purpose   string    `json:"purpose"` // "login", "password_reset", "email_verify"
+	CreatedAt time.Time  `json:"created_at"`
+	Purpose   string     `json:"purpose"` // "login", "password_reset", "email_verify"
 }

@@ -3,6 +3,7 @@ package routes
 import (
 	"time"
 
+	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/services"
@@ -26,9 +27,9 @@ func AuthRoutes(app *fiber.App, h *handlers.FiberHandler, rateLimiter *middlewar
 }
 
 // DashboardRoutes configures dashboard and tenant routes
-func DashboardRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService, rateLimiter *middleware.FiberRateLimiter) fiber.Router {
+func DashboardRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService, rateLimiter *middleware.FiberRateLimiter, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant")
-	group.Use(middleware.TenantMiddleware(authService))
+	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(rateLimiter.Limit(100, time.Minute))
 
 	// User management

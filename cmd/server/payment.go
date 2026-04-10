@@ -68,16 +68,25 @@ func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *servic
 		}()
 	}
 
-	// Find invoice with tenant isolation
+	// SECURITY HARD-STOP: Enforce tenant isolation
 	tenantID := middleware.GetTenantID(c)
-	var invoice models.Invoice
-
-	query := db.DB
-	if tenantID != "" {
-		query = query.Where("tenant_id = ?", tenantID)
+	if tenantID == "" {
+		// Log security event for potential attack
+		log.Printf("[SECURITY] Payment webhook attempted without tenant_id from IP: %s, Reference: %s",
+			c.IP(), req.Reference)
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "tenant context required",
+			"code":  "TENANT_REQUIRED",
+		})
 	}
 
-	err := query.Preload("Client").Preload("Items").Preload("Payments").
+	// Find invoice with strict tenant scoping
+	var invoice models.Invoice
+
+	err := db.DB.Scopes(database.TenantFilter(tenantID)).
+		Preload("Client").
+		Preload("Items").
+		Preload("Payments").
 		First(&invoice, "invoice_number = ?", req.InvoiceNumber).Error
 
 	if err != nil {

@@ -89,6 +89,16 @@ func decrypt(ciphertext string) string {
 	return string(plaintext)
 }
 
+// EncryptValue provides public encryption using AES-256-GCM
+func EncryptValue(plaintext string) string {
+	return encrypt(plaintext)
+}
+
+// DecryptValue provides public decryption using AES-256-GCM
+func DecryptValue(ciphertext string) string {
+	return decrypt(ciphertext)
+}
+
 func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.ID == "" {
 		u.ID = uuid.New().String()

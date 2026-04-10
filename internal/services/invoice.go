@@ -14,6 +14,7 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+	"invoicefast/internal/whatsapp"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -40,7 +41,7 @@ var validCurrencies = map[string]bool{
 type InvoiceService struct {
 	db              *database.DB
 	emailService    *EmailService
-	whatsappService *WhatsAppService
+	whatsappService *whatsapp.WhatsAppService
 	exchangeService *ExchangeRateService
 	kraService      *KRAService
 	cfg             *config.Config
@@ -50,7 +51,7 @@ func NewInvoiceService(db *database.DB) *InvoiceService {
 	return &InvoiceService{db: db}
 }
 
-func NewInvoiceServiceWithNotifications(db *database.DB, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
+func NewInvoiceServiceWithNotifications(db *database.DB, email *EmailService, whatsapp *whatsapp.WhatsAppService, cfg *config.Config) *InvoiceService {
 	return &InvoiceService{
 		db:              db,
 		emailService:    email,
@@ -66,7 +67,7 @@ func NewInvoiceServiceWithExchange(db *database.DB, exchange *ExchangeRateServic
 	}
 }
 
-func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
+func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *whatsapp.WhatsAppService, cfg *config.Config) *InvoiceService {
 	return &InvoiceService{
 		db:              db,
 		exchangeService: exchange,
@@ -77,7 +78,7 @@ func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, em
 }
 
 // NewInvoiceServiceWithKRAService creates invoice service with KRA integration
-func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, kra *KRAService, cfg *config.Config) *InvoiceService {
+func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *whatsapp.WhatsAppService, kra *KRAService, cfg *config.Config) *InvoiceService {
 	return &InvoiceService{
 		db:              db,
 		exchangeService: exchange,
@@ -302,6 +303,19 @@ func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, 
 	}
 
 	return &invoice, nil
+}
+
+// RotateMagicToken generates a new magic token for an invoice
+// SECURITY: Call this after successful payment to invalidate the old token
+func (s *InvoiceService) RotateMagicToken(invoiceID string) error {
+	newToken := uuid.New().String()
+	// Token expires in 24 hours from rotation (can be extended if needed)
+	expiresAt := time.Now().Add(24 * time.Hour)
+
+	return s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+		"magic_token":            newToken,
+		"magic_token_expires_at": expiresAt,
+	}).Error
 }
 
 // GetInvoiceByNumber retrieves an invoice by invoice number (tenant-scoped)
@@ -549,10 +563,11 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 	}
 
 	// Load client and user for notifications
+	// SECURITY: Added TenantFilter to prevent IDOR
 	var client models.Client
 	var user models.User
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
-	s.db.First(&user, "id = ?", userID)
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", userID)
 
 	// Submit to KRA e-TIMS if configured (non-blocking, async)
 	// KRA ICN will be updated after successful submission
@@ -570,10 +585,11 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 
 		go func() {
 			// Load fresh data for KRA submission
+			// SECURITY: Added TenantFilter to prevent IDOR
 			var cli models.Client
 			var usr models.User
 			s.db.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID)
-			s.db.First(&usr, "id = ?", userID)
+			s.db.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", userID)
 
 			// Build KRA data using the service's format
 			items := make([]KRAItem, 0)
@@ -678,7 +694,13 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 	// Send WhatsApp notification if configured
 	if s.whatsappService != nil && client.Phone != "" {
 		amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
-		if err := s.whatsappService.SendInvoice(client.Phone, invoice.InvoiceNumber, amount, user.CompanyName, invoiceLink); err != nil {
+		data := map[string]string{
+			"company": user.CompanyName,
+			"invoice": invoice.InvoiceNumber,
+			"amount":  amount,
+			"link":    invoiceLink,
+		}
+		if err := s.whatsappService.SendInvoiceNotification(client.Phone, data); err != nil {
 			log.Printf("Failed to send WhatsApp for %s: %v", invoice.InvoiceNumber, err)
 		}
 	}

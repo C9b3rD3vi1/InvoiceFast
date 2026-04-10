@@ -199,10 +199,11 @@ func (w *PDFWorker) executeTask(ctx context.Context, task *PDFTask) {
 		return
 	}
 
+	// Create tenant-scoped path: /static/uploads/invoices/{tenant_id}/
+	pdfDir := fmt.Sprintf("./static/uploads/invoices/%s", task.TenantID)
 	pdfFilename := fmt.Sprintf("invoice_%s.pdf", task.InvoiceNum)
-	pdfPath := fmt.Sprintf("./data/pdfs/%s", pdfFilename)
 
-	if err := w.savePDF(pdfPath, output.Content); err != nil {
+	if err := w.savePDF(pdfDir, pdfFilename, output.Content); err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("failed to save PDF: %v", err)
 		w.completeTask(ctx, task, result)
@@ -210,19 +211,19 @@ func (w *PDFWorker) executeTask(ctx context.Context, task *PDFTask) {
 	}
 
 	result.Status = "completed"
-	result.PDFURL = pdfPath
+	result.PDFURL = fmt.Sprintf("/static/uploads/invoices/%s/%s", task.TenantID, pdfFilename)
 	w.completeTask(ctx, task, result)
 }
 
-func (w *PDFWorker) savePDF(path string, content []byte) error {
-	// Ensure directory exists
-	dir := "./data/pdfs"
+func (w *PDFWorker) savePDF(dir, filename string, content []byte) error {
+	// Ensure tenant directory exists
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Printf("[PDFWorker] Failed to create directory: %v", err)
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	// Write file to disk
+	path := fmt.Sprintf("%s/%s", dir, filename)
 	if err := os.WriteFile(path, content, 0644); err != nil {
 		log.Printf("[PDFWorker] Failed to save PDF: %v", err)
 		return fmt.Errorf("failed to save PDF: %w", err)

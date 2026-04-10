@@ -2,6 +2,10 @@ package services
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -259,10 +263,27 @@ func (s *IntasendService) GetPaymentStatus(paymentID string) (*IntasendPaymentSt
 }
 
 // VerifyWebhookSignature verifies the webhook signature from Intasend
-func (s *IntasendService) VerifyWebhookSignature(payload []byte, signature string) bool {
-	// In production, use crypto/hmac to verify the signature
-	// For now, just check if signature exists
-	return signature != ""
+// SECURITY: This implements real HMAC-SHA256 verification
+func (s *IntasendService) VerifyWebhookSignature(payload []byte, signature string) error {
+	if s.cfg.WebhookSecret == "" {
+		return fmt.Errorf("webhook secret not configured")
+	}
+
+	if signature == "" {
+		return fmt.Errorf("missing webhook signature")
+	}
+
+	// Compute HMAC-SHA256 of the payload
+	mac := hmac.New(sha256.New, []byte(s.cfg.WebhookSecret))
+	mac.Write(payload)
+	expectedMAC := hex.EncodeToString(mac.Sum(nil))
+
+	// Use constant-time comparison to prevent timing attacks
+	if subtle.ConstantTimeCompare([]byte(signature), []byte(expectedMAC)) != 1 {
+		return fmt.Errorf("invalid webhook signature")
+	}
+
+	return nil
 }
 
 // normalizePhoneNumber converts phone to format Intasend expects (254...)

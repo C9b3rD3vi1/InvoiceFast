@@ -2,34 +2,58 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/recover"
-
+	"github.com/joho/godotenv"
 	"invoicefast/internal/cache"
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
+	appLogger "invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
+	"invoicefast/internal/models"
 	"invoicefast/internal/routes"
 	"invoicefast/internal/services"
 	"invoicefast/internal/worker"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/template/html/v2"
 )
 
 func main() {
+	// Load .env file if exists (won't fail if missing)
+	_ = godotenv.Load()
+
 	cfg := config.Load()
+
+	logSvc := appLogger.LoadFromConfig(cfg)
+	logSvc.Info(context.Background(), "InvoiceFast: Starting server",
+		"mode", cfg.Server.Mode,
+		"port", cfg.Server.Port,
+	)
+
+	// Initialize encryption BEFORE any database operations
+	// CRITICAL: Must be called before models are created/loaded
+	encryptionKey := os.Getenv("ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		logSvc.Fatal(context.Background(), "InvoiceFast: ENCRYPTION_KEY not set")
+	}
+	if err := models.InitEncryption(encryptionKey); err != nil {
+		logSvc.Fatal(context.Background(), "InvoiceFast: Encryption initialization failed", "error", err.Error())
+	}
 
 	db, err := database.New(&cfg.Database)
 	if err != nil {
-		log.Fatalf("Database error: %v", err)
+		logSvc.Fatal(context.Background(), "InvoiceFast: Database error", "error", err.Error())
 	}
 
 	// Graceful shutdown channel
@@ -47,6 +71,9 @@ func main() {
 	}
 	defer db.Close()
 
+	// Initialize template engine
+	engine := html.New("./views", ".html")
+
 	if err := db.Migrate(); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
@@ -58,13 +85,26 @@ func main() {
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
 		ErrorHandler: customErrorHandler,
+		Views:        engine,
 	})
 
 	app.Use(recover.New())
-	app.Use(logger.New(logger.Config{
-		Format:     "[${time}] ${status} - ${method} ${path} ${latency}\n",
-		TimeFormat: "2006-01-02 15:04:05",
-	}))
+
+	// HTTPS redirect in production
+	if cfg.Server.Mode == "production" {
+		app.Use(func(c *fiber.Ctx) error {
+			if c.Protocol() == "http" {
+				// Only redirect if Host is not localhost
+				host := c.Hostname()
+				if !strings.HasPrefix(host, "localhost") && !strings.HasPrefix(host, "127.0.0.1") {
+					return c.Status(fiber.StatusMovedPermanently).Redirect("https://" + c.Hostname() + c.OriginalURL())
+				}
+			}
+			return c.Next()
+		})
+	}
+
+	logSvc.Info(context.Background(), "InvoiceFast: Server initialized")
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
@@ -73,10 +113,12 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	authService := services.NewAuthService(db, cfg)
+	app.Use(middleware.LayoutMiddleware())
+
 	invoiceService := services.NewInvoiceService(db)
 	clientService := services.NewClientService(db)
 	kraService := services.NewKRAServiceWithDB(cfg, db)
+	settingsService := services.NewSettingsService(db)
 	exchangeRateService := services.NewExchangeRateService(db)
 	exchangeRateService.StartCronJob()
 
@@ -90,13 +132,16 @@ func main() {
 		emailService = services.NewEmailService(cfg)
 	}
 
-	var whatsappService *services.WhatsAppService
-	if cfg.WhatsApp.Enabled {
-		whatsappService = services.NewWhatsAppService(cfg)
-	}
+	authService := services.NewAuthService(db, cfg, emailService)
+
+	// WhatsApp service - now in internal/whatsapp package
+	// var whatsappService *services.WhatsAppService
+	// if cfg.WhatsApp.Enabled {
+	// 	whatsappService = services.NewWhatsAppService(cfg, db)
+	// }
 
 	// Build invoice service with all features: exchange rates + notifications + KRA
-	invoiceService = services.NewInvoiceServiceWithKRAService(db, exchangeRateService, emailService, whatsappService, kraService, cfg)
+	invoiceService = services.NewInvoiceServiceWithKRAService(db, exchangeRateService, emailService, nil, kraService, cfg)
 
 	// Payment service for M-Pesa integration
 	paymentService := services.NewPaymentService(db, cfg)
@@ -107,7 +152,7 @@ func main() {
 		intasendService = services.NewIntasendService(&cfg.Intasend)
 	}
 
-	reminderService := services.NewReminderService(db, emailService, whatsappService)
+	reminderService := services.NewReminderService(db, emailService, nil)
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
@@ -148,8 +193,21 @@ func main() {
 		defer pdfWorker.Stop()
 	}
 
-	handler := handlers.NewFiberHandler(authService, invoiceService, clientService, kraService, exchangeRateService, pdfWorker)
-	publicHandler := handlers.NewPublicHandler(invoiceService, authService, paymentService, intasendService)
+	// Initialize M-Pesa service first (needed for handler)
+	var mpesaService *services.MPesaService
+	if cfg.MPesa.Enabled {
+		mpesaService = services.NewMPesaService(cfg, db, redisCache)
+	}
+
+	// Create webhook verifier for middleware
+	webhookVerifier := middleware.NewWebhookVerifierMiddleware(services.NewWebhookVerifier(cfg))
+
+	handler := handlers.NewFiberHandler(authService, invoiceService, clientService, kraService, exchangeRateService, pdfWorker, mpesaService)
+
+	// HTMX handler for SPA-like dashboard
+	htmxHandler := handlers.NewHTMXHandler(invoiceService, clientService, kraService, settingsService, paymentService, pdfWorker, exchangeRateService)
+
+	publicHandler := handlers.NewPublicHandler(invoiceService, authService, paymentService, mpesaService, intasendService)
 	rateLimiter := middleware.NewFiberRateLimiter()
 
 	// Serve static assets from /static directory
@@ -158,50 +216,58 @@ func main() {
 	app.Static("/js", "./static/js")
 	app.Static("/images", "./static/images")
 
+	// Subdomain routing for branded client portal
+	app.Use(func(c *fiber.Ctx) error {
+		hostname := c.Hostname()
+
+		// Check if this is a subdomain request (e.g., clientname.invoicefast.com)
+		if strings.Contains(hostname, ".") {
+			parts := strings.Split(hostname, ".")
+			if len(parts) >= 3 {
+				subdomain := parts[0]
+
+				// Skip if it's just localhost or known domains
+				if subdomain != "www" && subdomain != "api" && !strings.HasPrefix(hostname, "localhost") {
+					log.Printf("[Subdomain] Detected: %s -> subdomain: %s", hostname, subdomain)
+
+					// Look up tenant by subdomain
+					var tenant models.Tenant
+					if err := db.Where("subdomain = ? AND is_active = ?", subdomain, true).First(&tenant).Error; err == nil {
+						// Store tenant info in context
+						c.Locals("tenant_id", tenant.ID)
+						c.Locals("tenant_subdomain", subdomain)
+						c.Locals("tenant_brand_color", "#2563eb") // Default brand color
+
+						// Check for custom brand settings
+						if tenant.Settings != "" {
+							var settings map[string]interface{}
+							if json.Unmarshal([]byte(tenant.Settings), &settings) == nil {
+								if color, ok := settings["brand_color"].(string); ok {
+									c.Locals("tenant_brand_color", color)
+								}
+								if logo, ok := settings["logo_url"].(string); ok {
+									c.Locals("tenant_logo_url", logo)
+								}
+							}
+						}
+
+						// Route to branded portal
+						return c.Redirect("/portal/branded")
+					}
+				}
+			}
+		}
+
+		return c.Next()
+	})
+
 	// Public routes (landing, auth, portal)
 	routes.PublicRoutes(app, publicHandler)
-	routes.PublicAPIRoutes(app, publicHandler)
+	routes.PublicAPIRoutes(app, publicHandler, rateLimiter)
 	routes.PublicAuthRoutes(app, publicHandler, rateLimiter)
 
-	// Legacy page routes (for backward compatibility)
-	app.Get("/pricing.html", func(c *fiber.Ctx) error {
-		return c.Render("pricing.html", fiber.Map{
-			"Title": "Pricing",
-			"Page":  "pricing",
-		}, "base")
-	})
-	app.Get("/contact.html", func(c *fiber.Ctx) error {
-		return c.Render("contact.html", fiber.Map{
-			"Title": "Contact",
-			"Page":  "contact",
-		}, "base")
-	})
-	app.Get("/forgot-password.html", func(c *fiber.Ctx) error {
-		return c.Render("forgot-password.html", fiber.Map{
-			"Title": "Reset Password",
-			"Page":  "forgot",
-		})
-	})
-	app.Get("/privacy.html", func(c *fiber.Ctx) error {
-		return c.Render("privacy.html", fiber.Map{
-			"Title": "Privacy Policy",
-			"Page":  "privacy",
-		})
-	})
-	app.Get("/terms.html", func(c *fiber.Ctx) error {
-		return c.Render("terms.html", fiber.Map{
-			"Title": "Terms of Service",
-			"Page":  "terms",
-		})
-	})
-	app.Get("/invoice.html", func(c *fiber.Ctx) error {
-		return c.Render("invoice.html", fiber.Map{
-			"Title": "Invoice",
-			"Page":  "invoice",
-		})
-	})
-
-	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc)
+	// Setup all API routes via routes directory
+	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc, db, htmxHandler, publicHandler, webhookVerifier)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -252,54 +318,46 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 
 func setupRoutes(app *fiber.App, cfg *config.Config,
 	handler *handlers.FiberHandler, rateLimiter *middleware.FiberRateLimiter,
-	authService *services.AuthService, idempotencySvc *services.IdempotencyService) {
+	authService *services.AuthService, idempotencySvc *services.IdempotencyService, db *database.DB, htmxHandler *handlers.HTMXHandler,
+	publicHandler *handlers.PublicHandler, webhookVerifier *middleware.WebhookVerifierMiddleware) {
 
-	// Swagger disabled - requires additional configuration
-	// app.Get("/api/docs/*", swagger.HandlerDefault(app))
+	// HTMX routes for dashboard SPA-like experience
+	app.Get("/htmx/dashboard", htmxHandler.Dashboard)
+	app.Get("/htmx/invoices", htmxHandler.InvoiceList)
+	app.Get("/htmx/invoices/search", htmxHandler.InvoiceSearch)
+	app.Get("/htmx/invoices/poll", htmxHandler.InvoiceStatusPoll)
+	app.Get("/htmx/invoices/:id", htmxHandler.InvoiceRow)
+	app.Get("/htmx/invoices/:id/kra-sync", htmxHandler.SyncToKRA)
+	app.Get("/htmx/invoices/line-item", htmxHandler.AddLineItem)
+	app.Post("/htmx/invoices", htmxHandler.CreateInvoicePOST)
+	app.Get("/htmx/invoices/calc", htmxHandler.CalculateExchange)
 
-	authGroup := app.Group("/api/v1/auth")
-	authGroup.Post("/register", rateLimiter.Limit(10, time.Minute), handler.Register)
-	authGroup.Post("/login", rateLimiter.Limit(10, time.Minute), handler.Login)
-	authGroup.Post("/refresh", handler.RefreshToken)
-	authGroup.Post("/forgot-password", rateLimiter.Limit(5, time.Minute), handler.ForgotPassword)
-	authGroup.Post("/reset-password", handler.ResetPassword)
-	authGroup.Get("/validate-reset-token", handler.ValidateResetToken)
+	// Client routes
+	app.Get("/htmx/clients", htmxHandler.GetClients)
+	app.Get("/htmx/clients/search", htmxHandler.SearchClientsHTMX)
+	app.Post("/htmx/clients", htmxHandler.CreateClientPOST)
+	app.Get("/htmx/clients/:id/profile", htmxHandler.GetClientProfile)
+	app.Get("/htmx/clients/:id/kra-pin", htmxHandler.RevealKRAPin)
+	app.Get("/htmx/payments", htmxHandler.GetPayments)
 
-	publicGroup := app.Group("/api/v1")
-	publicGroup.Get("/invoice/:token", handler.GetInvoiceByToken)
-	publicGroup.Post("/webhook/intasend",
-		middleware.IdempotencyMiddleware(idempotencySvc),
-		handler.HandleIntasendWebhook)
+	// Settings HTMX routes
+	app.Post("/htmx/settings/mpesa", htmxHandler.SaveSettingsMpesa)
+	app.Post("/htmx/settings/mpesa/test", htmxHandler.TestMpesaConnection)
+	app.Post("/htmx/settings/kra", htmxHandler.SaveSettingsKRA)
 
-	tenantGroup := app.Group("/api/v1/tenant")
-	tenantGroup.Use(middleware.TenantMiddleware(authService))
-	tenantGroup.Use(rateLimiter.Limit(100, time.Minute))
-	{
-		tenantGroup.Get("/me", handler.GetMe)
-		tenantGroup.Put("/me", handler.UpdateUser)
-		tenantGroup.Post("/change-password", handler.ChangePassword)
-		tenantGroup.Post("/logout", handler.Logout)
-		tenantGroup.Post("/api-keys", handler.GenerateAPIKey)
+	// Dashboard routes (with shell layout)
+	app.Get("/dashboard", htmxHandler.Dashboard)
+	app.Get("/dashboard/invoices", htmxHandler.RenderInvoices)
+	app.Get("/dashboard/invoices/new", htmxHandler.RenderCreateInvoice)
+	app.Get("/dashboard/clients", htmxHandler.RenderClients)
+	app.Get("/dashboard/payments", htmxHandler.RenderPayments)
+	app.Get("/dashboard/settings", htmxHandler.RenderSettings)
 
-		tenantGroup.Post("/clients", handler.CreateClient)
-		tenantGroup.Get("/clients", handler.GetClients)
-		tenantGroup.Get("/clients/:id", handler.GetClient)
-		tenantGroup.Put("/clients/:id", handler.UpdateClient)
-		tenantGroup.Delete("/clients/:id", handler.DeleteClient)
-		tenantGroup.Get("/clients/:id/stats", handler.GetClientStats)
-
-		tenantGroup.Post("/invoices", handler.CreateInvoice)
-		tenantGroup.Get("/invoices", handler.GetInvoices)
-		tenantGroup.Get("/invoices/:id", handler.GetInvoice)
-		tenantGroup.Put("/invoices/:id", handler.UpdateInvoice)
-		tenantGroup.Put("/invoices/:id/items", handler.UpdateInvoiceItems)
-		tenantGroup.Post("/invoices/:id/send", handler.SendInvoice)
-		tenantGroup.Post("/invoices/:id/cancel", handler.CancelInvoice)
-		tenantGroup.Post("/invoices/:id/pay", handler.RequestPayment)
-		tenantGroup.Get("/invoices/:id/pdf", handler.GetInvoicePDF)
-		tenantGroup.Get("/invoices/:id/status", handler.GetInvoiceStatus)
-
-		tenantGroup.Get("/dashboard", handler.GetDashboard)
-		tenantGroup.Get("/rates", handler.GetExchangeRates)
-	}
+	// Routes via routes directory
+	routes.DashboardRoutes(app, handler, authService, rateLimiter, db)
+	routes.InvoiceRoutes(app, handler, authService, db)
+	routes.ClientRoutes(app, handler, authService, db)
+	routes.PaymentRoutes(app, handler, idempotencySvc, rateLimiter, webhookVerifier)
+	routes.PaymentAPIRoutes(app, publicHandler, rateLimiter)
+	routes.PublicInvoiceRoutes(app, handler, rateLimiter)
 }

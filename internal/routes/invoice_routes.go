@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/services"
@@ -9,9 +10,9 @@ import (
 )
 
 // InvoiceRoutes configures invoice routes
-func InvoiceRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService) fiber.Router {
+func InvoiceRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/invoices")
-	group.Use(middleware.TenantMiddleware(authService))
+	group.Use(middleware.TenantMiddleware(authService, db))
 
 	// Invoice CRUD
 	group.Post("/", h.CreateInvoice)
@@ -33,9 +34,9 @@ func InvoiceRoutes(app *fiber.App, h *handlers.FiberHandler, authService *servic
 }
 
 // ClientRoutes configures client routes
-func ClientRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService) fiber.Router {
+func ClientRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/clients")
-	group.Use(middleware.TenantMiddleware(authService))
+	group.Use(middleware.TenantMiddleware(authService, db))
 
 	// Client CRUD
 	group.Post("/", h.CreateClient)

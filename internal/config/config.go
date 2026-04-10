@@ -12,6 +12,7 @@ type Config struct {
 	Server    ServerConfig
 	Database  DatabaseConfig
 	Intasend  IntasendConfig
+	MPesa     MPesaConfig
 	JWT       JWTConfig
 	Mail      MailConfig
 	RateLimit RateLimitConfig
@@ -59,6 +60,19 @@ type IntasendConfig struct {
 	// Timeouts for external calls
 	ConnectTimeout time.Duration
 	ReadTimeout    time.Duration
+}
+
+type MPesaConfig struct {
+	Enabled            bool
+	ConsumerKey        string
+	ConsumerSecret     string
+	BusinessShortCode  string
+	PassKey            string
+	SecurityCredential string // SHA256 hash of online checkout password - for callback verification
+	CallbackURL        string
+	Environment        string // "sandbox" or "production"
+	QueueTimeout       time.Duration
+	ResultURL          string
 }
 
 type JWTConfig struct {
@@ -184,6 +198,18 @@ func Load() *Config {
 			WebhookSecret:  getEnv("INTASEND_WEBHOOK_SECRET", ""),
 			ConnectTimeout: getDurationEnv("INTASEND_CONNECT_TIMEOUT", 10*time.Second),
 			ReadTimeout:    getDurationEnv("INTASEND_READ_TIMEOUT", 30*time.Second),
+		},
+		MPesa: MPesaConfig{
+			Enabled:            getBoolEnv("MPESA_ENABLED", false),
+			ConsumerKey:        getEnv("MPESA_CONSUMER_KEY", ""),
+			ConsumerSecret:     getEnv("MPESA_CONSUMER_SECRET", ""),
+			BusinessShortCode:  getEnv("MPESA_BUSINESS_SHORT_CODE", ""),
+			PassKey:            getEnv("MPESA_PASS_KEY", ""),
+			SecurityCredential: getEnv("MPESA_SECURITY_CREDENTIAL", ""), // SHA256 hash of online checkout password
+			CallbackURL:        getEnv("MPESA_CALLBACK_URL", ""),
+			Environment:        getEnv("MPESA_ENVIRONMENT", "sandbox"),
+			QueueTimeout:       getDurationEnv("MPESA_QUEUE_TIMEOUT", 30*time.Second),
+			ResultURL:          getEnv("MPESA_RESULT_URL", ""),
 		},
 		JWT: JWTConfig{
 			Secret:        getEnv("JWT_SECRET", "dev-secret-change-in-production-min-32-chars!"),
