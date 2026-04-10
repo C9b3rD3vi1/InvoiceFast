@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -21,6 +22,7 @@ type FiberHandler struct {
 	exchangeService *services.ExchangeRateService
 	pdfWorker       *worker.PDFWorker
 	mpesaService    *services.MPesaService
+	auditService    *services.AuditService
 }
 
 func NewFiberHandler(
@@ -31,6 +33,7 @@ func NewFiberHandler(
 	exchange *services.ExchangeRateService,
 	pdfWorker *worker.PDFWorker,
 	mpesaService *services.MPesaService,
+	auditService *services.AuditService,
 ) *FiberHandler {
 	return &FiberHandler{
 		authService:     auth,
@@ -40,6 +43,7 @@ func NewFiberHandler(
 		exchangeService: exchange,
 		pdfWorker:       pdfWorker,
 		mpesaService:    mpesaService,
+		auditService:    auditService,
 	}
 }
 
@@ -66,11 +70,19 @@ func (h *FiberHandler) Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
+	// Get IP for audit logging
+	ip := c.IP()
+
 	resp, err := h.authService.Login(req.Email, req.Password)
 	if err != nil {
+		// Audit log failed login
+		if h.auditService != nil {
+			_ = h.auditService.LogLoginAttempt(context.Background(), "", req.Email, ip, false, err.Error())
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// Audit log handled in service for successful login
 	return c.JSON(resp)
 }
 

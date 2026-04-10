@@ -132,7 +132,10 @@ func main() {
 		emailService = services.NewEmailService(cfg)
 	}
 
-	authService := services.NewAuthService(db, cfg, emailService)
+	// Audit service for comprehensive logging
+	auditService := services.NewAuditService(db)
+
+	authService := services.NewAuthService(db, cfg, emailService, auditService)
 
 	// WhatsApp service - now in internal/whatsapp package
 	// var whatsappService *services.WhatsAppService
@@ -202,7 +205,7 @@ func main() {
 	// Create webhook verifier for middleware
 	webhookVerifier := middleware.NewWebhookVerifierMiddleware(services.NewWebhookVerifier(cfg))
 
-	handler := handlers.NewFiberHandler(authService, invoiceService, clientService, kraService, exchangeRateService, pdfWorker, mpesaService)
+	handler := handlers.NewFiberHandler(authService, invoiceService, clientService, kraService, exchangeRateService, pdfWorker, mpesaService, auditService)
 
 	// HTMX handler for SPA-like dashboard
 	htmxHandler := handlers.NewHTMXHandler(invoiceService, clientService, kraService, settingsService, paymentService, pdfWorker, exchangeRateService)
