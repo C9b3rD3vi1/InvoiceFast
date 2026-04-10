@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"invoicefast/internal/models"
@@ -42,13 +43,47 @@ func (h *HTMXHandler) Dashboard(c *fiber.Ctx) error {
 	tenantID := c.Locals("tenant_id")
 	userID := c.Locals("user_id")
 
+	// Get user info from context (set by middleware)
+	userName := c.Locals("user_name")
+	userEmail := c.Locals("user_email")
+	tenantName := c.Locals("tenant_name")
+
+	if userName == nil {
+		userName = "User"
+	}
+	if tenantName == nil {
+		tenantName = "My Business"
+	}
+
+	// Generate initials from name
+	initials := "U"
+	if sn, ok := userName.(string); ok && len(sn) > 0 {
+		parts := strings.Split(sn, " ")
+		var initParts []string
+		for _, p := range parts {
+			if len(p) > 0 {
+				initParts = append(initParts, strings.ToUpper(p[:1]))
+			}
+		}
+		if len(initParts) > 0 {
+			initials = strings.Join(initParts, "")
+			if len(initials) > 2 {
+				initials = initials[:2]
+			}
+		}
+	}
+
 	data := fiber.Map{
-		"Title":       "Dashboard",
-		"Stats":       map[string]int{"TotalInvoices": 24, "PaidInvoices": 18, "PendingInvoices": 4, "OverdueInvoices": 2},
-		"UserID":      userID,
-		"TenantID":    tenantID,
-		"Status":      "all",
-		"LastUpdated": time.Now().Format("15:04:05"),
+		"Title":        "Dashboard",
+		"Stats":        map[string]int{"TotalInvoices": 24, "PaidInvoices": 18, "PendingInvoices": 4, "OverdueInvoices": 2},
+		"UserID":       userID,
+		"TenantID":     tenantID,
+		"Status":       "all",
+		"LastUpdated":  time.Now().Format("15:04:05"),
+		"UserName":     userName,
+		"UserEmail":    userEmail,
+		"TenantName":   tenantName,
+		"UserInitials": initials,
 		"Metrics": map[string]string{
 			"TotalUnpaid":    "KES 89,000",
 			"MonthlyRevenue": "KES 234,500",
@@ -66,14 +101,8 @@ func (h *HTMXHandler) Dashboard(c *fiber.Ctx) error {
 		return c.Render("components/dashboard-content", data)
 	}
 
-	// Pass shell layout data
-	data["Title"] = "Dashboard"
-	data["TenantName"] = "Business Demo"
-	data["UserInitials"] = "JD"
-	data["UserName"] = "John Demo"
-	data["UserEmail"] = "john@demo.com"
-
-	return c.Render("dashboard/index", data)
+	// For non-HTMX requests, render the full page
+	return c.Render("layouts/dashboard-shell", data)
 }
 
 // InvoiceListHTMX renders invoice list with HTMX support
