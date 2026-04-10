@@ -1,239 +1,270 @@
-2026/02/28 15:31:58 Database connected: max_open=25, max_idle=10, lifetime=5m0s
-2026/02/28 15:31:58 Running database migrations...
+2026/04/09 16:58:41 WARNING: Using default JWT secret. Set JWT_SECRET environment variable for security.
+2026/04/09 16:58:41 WARNING: Using default encryption key. Set ENCRYPTION_KEY environment variable for security.
+2026/04/09 16:58:41 Database connected: SQLite (single connection mode)
+2026/04/09 16:58:41 Running database migrations...
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:67
-[0m[33m[0.066ms] [34;1m[rows:0][0m PRAGMA journal_mode=WAL
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:64
+[0m[33m[0.035ms] [34;1m[rows:0][0m PRAGMA journal_mode=WAL
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:72
-[0m[33m[0.040ms] [34;1m[rows:0][0m PRAGMA busy_timeout = 5000
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:69
+[0m[33m[0.028ms] [34;1m[rows:0][0m PRAGMA busy_timeout = 5000
 
-2026/02/28 15:31:58 [34;1m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[35m[warn] [0mModel invoicefast/internal/models.User don't match BeforeCreateInterface, should be `BeforeCreate(*gorm.DB) error`. Please see https://gorm.io/docs/hooks.html
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.073ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="tenants"
 
-2026/02/28 15:31:58 [34;1m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[35m[warn] [0mModel invoicefast/internal/models.Client don't match BeforeCreateInterface, should be `BeforeCreate(*gorm.DB) error`. Please see https://gorm.io/docs/hooks.html
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.194ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "tenants" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [34;1m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[35m[warn] [0mModel invoicefast/internal/models.Invoice don't match BeforeCreateInterface, should be `BeforeCreate(*gorm.DB) error`. Please see https://gorm.io/docs/hooks.html
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.075ms] [34;1m[rows:-][0m SELECT * FROM `tenants` LIMIT 1
 
-2026/02/28 15:31:58 [34;1m
-[0m[35m[warn] [0mModel invoicefast/internal/models.InvoiceItem don't match BeforeCreateInterface, should be `BeforeCreate(*gorm.DB) error`. Please see https://gorm.io/docs/hooks.html
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.082ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "tenants" AND name = "idx_tenants_subdomain"
 
-2026/02/28 15:31:58 [34;1m
-[0m[35m[warn] [0mModel invoicefast/internal/models.Payment don't match BeforeCreateInterface, should be `BeforeCreate(*gorm.DB) error`. Please see https://gorm.io/docs/hooks.html
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.040ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="users"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.205ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="users"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.153ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "users" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.248ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "users" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.109ms] [34;1m[rows:-][0m SELECT * FROM `users` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.130ms] [34;1m[rows:-][0m SELECT * FROM `users` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.105ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "users" AND (sql LIKE "%CONSTRAINT ""fk_users_tenant"" %" OR sql LIKE "%CONSTRAINT fk_users_tenant %" OR sql LIKE "%CONSTRAINT `fk_users_tenant`%" OR sql LIKE "%CONSTRAINT [fk_users_tenant]%" OR sql LIKE "%CONSTRAINT 	fk_users_tenant	%")
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.105ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "users" AND name = "idx_users_email"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.046ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "users" AND name = "idx_users_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.025ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="clients"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.043ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "users" AND name = "idx_users_email"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.192ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "clients" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.054ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="clients"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.112ms] [34;1m[rows:-][0m SELECT * FROM `clients` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.170ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "clients" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.032ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "clients" AND name = "idx_clients_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.078ms] [34;1m[rows:-][0m SELECT * FROM `clients` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.023ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="invoices"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.057ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "clients" AND name = "idx_clients_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.147ms] [34;1m[rows:5][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "invoices" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.030ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "clients" AND name = "idx_clients_user_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.177ms] [34;1m[rows:-][0m SELECT * FROM `invoices` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.027ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="invoices"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.204ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "invoices" AND (sql LIKE "%CONSTRAINT ""fk_clients_invoices"" %" OR sql LIKE "%CONSTRAINT fk_clients_invoices %" OR sql LIKE "%CONSTRAINT `fk_clients_invoices`%" OR sql LIKE "%CONSTRAINT [fk_clients_invoices]%" OR sql LIKE "%CONSTRAINT 	fk_clients_invoices	%")
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.120ms] [34;1m[rows:6][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "invoices" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.024ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "invoices" AND (sql LIKE "%CONSTRAINT ""fk_invoices_user"" %" OR sql LIKE "%CONSTRAINT fk_invoices_user %" OR sql LIKE "%CONSTRAINT `fk_invoices_user`%" OR sql LIKE "%CONSTRAINT [fk_invoices_user]%" OR sql LIKE "%CONSTRAINT 	fk_invoices_user	%")
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.110ms] [34;1m[rows:-][0m SELECT * FROM `invoices` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.019ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.099ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "invoices" AND (sql LIKE "%CONSTRAINT ""fk_invoices_user"" %" OR sql LIKE "%CONSTRAINT fk_invoices_user %" OR sql LIKE "%CONSTRAINT `fk_invoices_user`%" OR sql LIKE "%CONSTRAINT [fk_invoices_user]%" OR sql LIKE "%CONSTRAINT 	fk_invoices_user	%")
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.015ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_client_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.059ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "invoices" AND (sql LIKE "%CONSTRAINT ""fk_clients_invoices"" %" OR sql LIKE "%CONSTRAINT fk_clients_invoices %" OR sql LIKE "%CONSTRAINT `fk_clients_invoices`%" OR sql LIKE "%CONSTRAINT [fk_clients_invoices]%" OR sql LIKE "%CONSTRAINT 	fk_clients_invoices	%")
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.015ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_invoice_number"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.042ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.015ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_magic_token"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.525ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_user_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.039ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="invoice_items"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.051ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_client_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.186ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "invoice_items" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.029ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_invoice_number"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.165ms] [34;1m[rows:-][0m SELECT * FROM `invoice_items` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.052ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoices" AND name = "idx_invoices_magic_token"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.026ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "invoice_items" AND (sql LIKE "%CONSTRAINT ""fk_invoices_items"" %" OR sql LIKE "%CONSTRAINT fk_invoices_items %" OR sql LIKE "%CONSTRAINT `fk_invoices_items`%" OR sql LIKE "%CONSTRAINT [fk_invoices_items]%" OR sql LIKE "%CONSTRAINT 	fk_invoices_items	%")
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.025ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="invoice_items"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.018ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoice_items" AND name = "idx_invoice_items_invoice_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.115ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "invoice_items" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.011ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="payments"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.044ms] [34;1m[rows:-][0m SELECT * FROM `invoice_items` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.121ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "payments" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.055ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "invoice_items" AND (sql LIKE "%CONSTRAINT ""fk_invoices_items"" %" OR sql LIKE "%CONSTRAINT fk_invoices_items %" OR sql LIKE "%CONSTRAINT `fk_invoices_items`%" OR sql LIKE "%CONSTRAINT [fk_invoices_items]%" OR sql LIKE "%CONSTRAINT 	fk_invoices_items	%")
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.120ms] [34;1m[rows:-][0m SELECT * FROM `payments` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.028ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "invoice_items" AND name = "idx_invoice_items_invoice_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.025ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "payments" AND (sql LIKE "%CONSTRAINT ""fk_invoices_payments"" %" OR sql LIKE "%CONSTRAINT fk_invoices_payments %" OR sql LIKE "%CONSTRAINT `fk_invoices_payments`%" OR sql LIKE "%CONSTRAINT [fk_invoices_payments]%" OR sql LIKE "%CONSTRAINT 	fk_invoices_payments	%")
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.023ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="payments"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.018ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payments_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.125ms] [34;1m[rows:6][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "payments" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.015ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payments_invoice_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.083ms] [34;1m[rows:-][0m SELECT * FROM `payments` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.016ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="reminders"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.090ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "table" AND tbl_name = "payments" AND (sql LIKE "%CONSTRAINT ""fk_invoices_payments"" %" OR sql LIKE "%CONSTRAINT fk_invoices_payments %" OR sql LIKE "%CONSTRAINT `fk_invoices_payments`%" OR sql LIKE "%CONSTRAINT [fk_invoices_payments]%" OR sql LIKE "%CONSTRAINT 	fk_invoices_payments	%")
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.129ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "reminders" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.042ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payments_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.108ms] [34;1m[rows:-][0m SELECT * FROM `reminders` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.050ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payment_tenant_ref"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.017ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "reminders" AND name = "idx_reminders_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.053ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payments_user_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.014ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "reminders" AND name = "idx_reminders_invoice_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.041ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payments_invoice_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.012ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="templates"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.034ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "payments" AND name = "idx_payments_reference"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.091ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "templates" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.031ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="reminders"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.093ms] [34;1m[rows:-][0m SELECT * FROM `templates` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.121ms] [34;1m[rows:4][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "reminders" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.019ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "templates" AND name = "idx_templates_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.041ms] [34;1m[rows:-][0m SELECT * FROM `reminders` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.011ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="refresh_tokens"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.035ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "reminders" AND name = "idx_reminders_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.108ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "refresh_tokens" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.029ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "reminders" AND name = "idx_reminders_user_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.090ms] [34;1m[rows:-][0m SELECT * FROM `refresh_tokens` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.024ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "reminders" AND name = "idx_reminders_invoice_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.018ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "refresh_tokens" AND name = "idx_refresh_tokens_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.024ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="templates"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.014ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "refresh_tokens" AND name = "idx_refresh_tokens_token"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.133ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "templates" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.012ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="audit_logs"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.056ms] [34;1m[rows:-][0m SELECT * FROM `templates` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.112ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "audit_logs" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.067ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "templates" AND name = "idx_templates_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.104ms] [34;1m[rows:-][0m SELECT * FROM `audit_logs` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.037ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "templates" AND name = "idx_templates_user_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.022ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "audit_logs" AND name = "idx_audit_logs_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.031ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="refresh_tokens"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.014ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="api_keys"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.160ms] [34;1m[rows:4][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "refresh_tokens" AND sql IS NOT NULL order by type = "table" desc
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.115ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "api_keys" AND sql IS NOT NULL order by type = "table" desc
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.047ms] [34;1m[rows:-][0m SELECT * FROM `refresh_tokens` LIMIT 1
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.098ms] [34;1m[rows:-][0m SELECT * FROM `api_keys` LIMIT 1
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.044ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "refresh_tokens" AND name = "idx_refresh_tokens_tenant_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.039ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "api_keys" AND name = "idx_api_keys_user_id"
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.046ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "refresh_tokens" AND name = "idx_refresh_tokens_user_id"
 
-2026/02/28 15:31:58 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:77
-[0m[33m[0.048ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "api_keys" AND name = "idx_api_keys_key"
-2026/02/28 15:31:58 Migrations completed successfully
-[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
- - using env:	export GIN_MODE=release
- - using code:	gin.SetMode(gin.ReleaseMode)
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.033ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "refresh_tokens" AND name = "idx_refresh_tokens_token"
 
-[GIN-debug] GET    /health                   --> main.setupRouter.healthCheckHandler.func19 (6 handlers)
-[GIN-debug] POST   /api/v1/auth/register     --> invoicefast/internal/handlers.(*Handler).Register-fm (7 handlers)
-[GIN-debug] POST   /api/v1/auth/login        --> invoicefast/internal/handlers.(*Handler).Login-fm (7 handlers)
-[GIN-debug] POST   /api/v1/auth/refresh      --> invoicefast/internal/handlers.(*Handler).RefreshToken-fm (6 handlers)
-[GIN-debug] GET    /api/v1/invoice/:token    --> invoicefast/internal/handlers.(*Handler).GetInvoiceByToken-fm (6 handlers)
-[GIN-debug] POST   /api/v1/webhook/intasend  --> main.setupRouter.func3 (6 handlers)
-[GIN-debug] GET    /                         --> main.setupRouter.func4 (6 handlers)
-[GIN-debug] GET    /login                    --> main.setupRouter.func5 (6 handlers)
-[GIN-debug] GET    /register                 --> main.setupRouter.func6 (6 handlers)
-[GIN-debug] GET    /forgot-password          --> main.setupRouter.func7 (6 handlers)
-[GIN-debug] GET    /privacy                  --> main.setupRouter.func8 (6 handlers)
-[GIN-debug] GET    /terms                    --> main.setupRouter.func9 (6 handlers)
-[GIN-debug] GET    /invoice/:token           --> main.setupRouter.func10 (6 handlers)
-[GIN-debug] GET    /app                      --> main.setupRouter.func11 (6 handlers)
-[GIN-debug] GET    /api/v1/me                --> invoicefast/internal/handlers.(*Handler).GetMe-fm (8 handlers)
-[GIN-debug] PUT    /api/v1/me                --> invoicefast/internal/handlers.(*Handler).UpdateUser-fm (8 handlers)
-[GIN-debug] POST   /api/v1/change-password   --> invoicefast/internal/handlers.(*Handler).ChangePassword-fm (8 handlers)
-[GIN-debug] POST   /api/v1/logout            --> invoicefast/internal/handlers.(*Handler).Logout-fm (8 handlers)
-[GIN-debug] POST   /api/v1/api-keys          --> invoicefast/internal/handlers.(*Handler).GenerateAPIKey-fm (8 handlers)
-[GIN-debug] POST   /api/v1/clients           --> invoicefast/internal/handlers.(*Handler).CreateClient-fm (8 handlers)
-[GIN-debug] GET    /api/v1/clients           --> invoicefast/internal/handlers.(*Handler).GetClients-fm (8 handlers)
-[GIN-debug] GET    /api/v1/clients/:id       --> invoicefast/internal/handlers.(*Handler).GetClient-fm (8 handlers)
-[GIN-debug] PUT    /api/v1/clients/:id       --> invoicefast/internal/handlers.(*Handler).UpdateClient-fm (8 handlers)
-[GIN-debug] DELETE /api/v1/clients/:id       --> invoicefast/internal/handlers.(*Handler).DeleteClient-fm (8 handlers)
-[GIN-debug] GET    /api/v1/clients/:id/stats --> invoicefast/internal/handlers.(*Handler).GetClientStats-fm (8 handlers)
-[GIN-debug] POST   /api/v1/invoices          --> invoicefast/internal/handlers.(*Handler).CreateInvoice-fm (8 handlers)
-[GIN-debug] GET    /api/v1/invoices          --> invoicefast/internal/handlers.(*Handler).GetInvoices-fm (8 handlers)
-[GIN-debug] GET    /api/v1/invoices/:id      --> invoicefast/internal/handlers.(*Handler).GetInvoice-fm (8 handlers)
-[GIN-debug] PUT    /api/v1/invoices/:id      --> invoicefast/internal/handlers.(*Handler).UpdateInvoice-fm (8 handlers)
-[GIN-debug] PUT    /api/v1/invoices/:id/items --> invoicefast/internal/handlers.(*Handler).UpdateInvoiceItems-fm (8 handlers)
-[GIN-debug] POST   /api/v1/invoices/:id/send --> invoicefast/internal/handlers.(*Handler).SendInvoice-fm (8 handlers)
-[GIN-debug] POST   /api/v1/invoices/:id/cancel --> invoicefast/internal/handlers.(*Handler).CancelInvoice-fm (8 handlers)
-[GIN-debug] POST   /api/v1/invoices/:id/pay  --> main.setupRouter.func14 (8 handlers)
-[GIN-debug] GET    /api/v1/dashboard         --> invoicefast/internal/handlers.(*Handler).GetDashboard-fm (8 handlers)
-2026/02/28 15:31:58 Starting InvoiceFast server on :8082 (mode: debug)
-2026/02/28 15:32:28 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:32:58 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:33:28 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:33:58 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:34:28 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:34:58 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:35:28 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:35:58 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:36:28 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:36:58 [DB] Open=1 Idle=1 InUse=0 WaitCount=0
-2026/02/28 15:37:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:37:58 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:38:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:38:58 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:39:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:39:58 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:40:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:40:58 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:41:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:41:58 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:42:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:42:58 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
-2026/02/28 15:43:28 [DB] Open=0 Idle=0 InUse=0 WaitCount=0
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.023ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="audit_logs"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.121ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "audit_logs" AND sql IS NOT NULL order by type = "table" desc
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.037ms] [34;1m[rows:-][0m SELECT * FROM `audit_logs` LIMIT 1
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.035ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "audit_logs" AND name = "idx_audit_logs_tenant_id"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.041ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "audit_logs" AND name = "idx_audit_logs_user_id"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.026ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="api_keys"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.129ms] [34;1m[rows:4][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "api_keys" AND sql IS NOT NULL order by type = "table" desc
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.041ms] [34;1m[rows:-][0m SELECT * FROM `api_keys` LIMIT 1
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.049ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "api_keys" AND name = "idx_api_keys_tenant_id"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.057ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "api_keys" AND name = "idx_api_keys_user_id"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.040ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "api_keys" AND name = "idx_api_keys_key"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.039ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="exchange_rates"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.147ms] [34;1m[rows:2][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "exchange_rates" AND sql IS NOT NULL order by type = "table" desc
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.067ms] [34;1m[rows:-][0m SELECT * FROM `exchange_rates` LIMIT 1
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.110ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "exchange_rates" AND name = "idx_exchange_rates_currency"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.922ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type='table' AND name="kra_queue_items"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.158ms] [34;1m[rows:3][0m SELECT sql FROM sqlite_master WHERE type IN ("table","index") AND tbl_name = "kra_queue_items" AND sql IS NOT NULL order by type = "table" desc
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.052ms] [34;1m[rows:-][0m SELECT * FROM `kra_queue_items` LIMIT 1
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.043ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "kra_queue_items" AND name = "idx_kra_queue_items_tenant_id"
+
+2026/04/09 16:58:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/database/database.go:74
+[0m[33m[0.030ms] [34;1m[rows:-][0m SELECT count(*) FROM sqlite_master WHERE type = "index" AND tbl_name = "kra_queue_items" AND name = "idx_kra_queue_items_invoice_id"
+2026/04/09 16:58:41 Migrations completed successfully
+2026/04/09 16:58:41.787929 app.go:997: [Warn] failed to load views: template: auth/login:111: unexpected <define> in command
+2026/04/09 16:58:41 Starting InvoiceFast on :8082 (mode: debug)
+
+ ┌───────────────────────────────────────────────────┐ 
+ │                    InvoiceFast                    │ 
+ │                  Fiber v2.52.12                   │ 
+ │               http://127.0.0.1:8082               │ 
+ │       (bound on host 0.0.0.0 and port 8082)       │ 
+ │                                                   │ 
+ │ Handlers ............ 97  Processes ........... 1 │ 
+ │ Prefork ....... Disabled  PID ............ 112729 │ 
+ └───────────────────────────────────────────────────┘ 
+
+[2026-04-09 16:58:48] 200 - GET /  268.196452ms
+[2026-04-09 17:00:15] 200 - GET /     217.597µs
+[2026-04-09 17:02:11] 500 - GET /register.html     192.448µs
+[2026-04-09 17:02:12] 404 - GET /favicon.ico      84.225µs
+[2026-04-09 17:02:25] 200 - GET /      752.88µs
+[2026-04-09 17:02:29] 404 - GET /favicon.ico     137.788µs
+
+2026/04/09 17:03:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/services/kra.go:634
+[0m[33m[0.657ms] [34;1m[rows:0][0m SELECT * FROM `kra_queue_items` WHERE status = "pending" AND (next_retry_at IS NULL OR next_retry_at <= "2026-04-09 17:03:41.788") ORDER BY created_at ASC LIMIT 50
+[2026-04-09 17:03:52] 500 - GET /login.html      252.91µs
+[2026-04-09 17:03:59] 500 - GET /login.html     102.054µs
+[2026-04-09 17:04:00] 404 - GET /favicon.ico      93.269µs
+[2026-04-09 17:04:05] 500 - GET /login.html     100.848µs
+[2026-04-09 17:04:05] 404 - GET /favicon.ico      47.135µs
+[2026-04-09 17:08:41] 500 - GET /login.html     189.384µs
+
+2026/04/09 17:08:41 [32m/home/c9b3rd3vi1/Golang/InvoiceFast/internal/services/kra.go:634
+[0m[33m[0.444ms] [34;1m[rows:0][0m SELECT * FROM `kra_queue_items` WHERE status = "pending" AND (next_retry_at IS NULL OR next_retry_at <= "2026-04-09 17:08:41.791") ORDER BY created_at ASC LIMIT 50
