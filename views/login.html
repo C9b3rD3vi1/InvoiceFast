@@ -127,9 +127,9 @@
                                     if (data.refresh_token) {
                                         localStorage.setItem('refreshToken', data.refresh_token);
                                     }
-                                    window.location.href = '/dashboard.html';
+                                    window.location.href = '/dashboard';
                                 } catch(e) {
-                                    window.location.href = '/dashboard.html';
+                                    window.location.href = '/dashboard';
                                 }
                             } else if (evt.detail.xhr.status === 401) {
                                 errorDiv.textContent = 'Invalid email or password';

@@ -150,9 +150,9 @@
                                     if (data.refresh_token) {
                                         localStorage.setItem('refreshToken', data.refresh_token);
                                     }
-                                    window.location.href = '/dashboard.html';
+                                    window.location.href = '/login.html';
                                 } catch(e) {
-                                    window.location.href = '/dashboard.html';
+                                    window.location.href = '/login.html';
                                 }
                             } else if (evt.detail.xhr.status === 400) {
                                 try {
