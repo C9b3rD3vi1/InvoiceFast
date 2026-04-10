@@ -265,3 +265,24 @@ type KRAQueueItem struct {
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
+
+// NotificationLog for tracking notification delivery
+type NotificationLog struct {
+	ID          string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID    string    `json:"tenant_id" gorm:"type:uuid;index"`
+	UserID      string    `json:"user_id" gorm:"type:uuid;index"`
+	InvoiceID   string    `json:"invoice_id" gorm:"type:uuid;index"`
+	ClientID    string    `json:"client_id" gorm:"type:uuid;index"`
+	Type        string    `json:"type"`     // email, whatsapp, sms
+	Provider    string    `json:"provider"` // twilio, metas
+	To          string    `json:"to"`       // phone or email
+	Status      string    `json:"status"`   // pending, sent, delivered, failed
+	ErrorCode   string    `json:"error_code"`
+	ErrorMsg    string    `json:"error_msg"`
+	ExternalID  string    `json:"external_id"` // provider message ID
+	RetryCount  int       `json:"retry_count" gorm:"default:0"`
+	SentAt      time.Time `json:"sent_at"`
+	DeliveredAt time.Time `json:"delivered_at"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}

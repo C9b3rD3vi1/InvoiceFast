@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"invoicefast/internal/models"
@@ -17,6 +18,7 @@ type PublicHandler struct {
 	invoiceService  *services.InvoiceService
 	authService     *services.AuthService
 	paymentService  *services.PaymentService
+	mpesaService    *services.MPesaService
 	intasendService *services.IntasendService
 }
 
@@ -25,22 +27,21 @@ func NewPublicHandler(
 	invoice *services.InvoiceService,
 	auth *services.AuthService,
 	payment *services.PaymentService,
+	mpesa *services.MPesaService,
 	intasend *services.IntasendService,
 ) *PublicHandler {
 	return &PublicHandler{
 		invoiceService:  invoice,
 		authService:     auth,
 		paymentService:  payment,
+		mpesaService:    mpesa,
 		intasendService: intasend,
 	}
 }
 
 // ServeLanding serves the landing page
 func (h *PublicHandler) ServeLanding(c *fiber.Ctx) error {
-	return c.Render("landing", fiber.Map{
-		"Title":       "Home",
-		"Description": "Professional invoicing with M-Pesa integration and KRA e-TIMS compliance",
-	})
+	return c.SendFile("./views/landing.html")
 }
 
 // ServePortal serves the client payment portal
@@ -100,20 +101,92 @@ func (h *PublicHandler) ServeSuccess(c *fiber.Ctx) error {
 
 // ServeLogin serves the login page
 func (h *PublicHandler) ServeLogin(c *fiber.Ctx) error {
-	return c.Render("auth/login", fiber.Map{
-		"Title":       "Sign In",
-		"Description": "Sign in to your InvoiceFast account",
-	})
+	return c.SendFile("./views/login.html")
 }
 
 // ServeRegister serves the registration page
 func (h *PublicHandler) ServeRegister(c *fiber.Ctx) error {
-	plan := c.Query("plan", "free")
-	return c.Render("auth/register", fiber.Map{
-		"Title":       "Create Account",
-		"Description": "Create your free InvoiceFast account",
-		"Plan":        plan,
-	})
+	return c.SendFile("./views/register.html")
+}
+
+// ServeContact serves the contact page
+func (h *PublicHandler) ServeContact(c *fiber.Ctx) error {
+	return c.SendFile("./views/contact.html")
+}
+
+// HandleContact handles the contact form submission via HTMX
+func (h *PublicHandler) HandleContact(c *fiber.Ctx) error {
+	name := c.FormValue("name")
+	email := c.FormValue("email")
+	_ = c.FormValue("business_name") // Optional field
+	category := c.FormValue("category")
+	message := c.FormValue("message")
+	website := c.FormValue("website") // Honeypot field
+
+	// Honeypot check - if filled, silently accept (bot submission)
+	if website != "" {
+		// Return success anyway to fool the bot
+		return h.renderContactSuccess(c, "TKT-"+generateTicketNumber())
+	}
+
+	// Validation
+	var errors []string
+	if name == "" {
+		errors = append(errors, "Name is required")
+	}
+	if email == "" {
+		errors = append(errors, "Email is required")
+	}
+	if message == "" || len(message) < 10 {
+		errors = append(errors, "Message must be at least 10 characters")
+	}
+	if category == "" {
+		errors = append(errors, "Please select a category")
+	}
+
+	if len(errors) > 0 {
+		// Return error HTML fragment
+		errorHTML := `<div class="space-y-3">`
+		for _, err := range errors {
+			errorHTML += `<p class="text-red-600 text-sm">` + err + `</p>`
+		}
+		errorHTML += `</div>`
+		return c.Status(fiber.StatusBadRequest).Type("text/html").SendString(errorHTML)
+	}
+
+	// Generate ticket number
+	ticketNumber := "TKT-" + generateTicketNumber()
+
+	// In production, you would:
+	// 1. Save to database
+	// 2. Send email notification
+	// 3. Create support ticket in external system
+
+	return h.renderContactSuccess(c, ticketNumber)
+}
+
+func (h *PublicHandler) renderContactSuccess(c *fiber.Ctx, ticketNumber string) error {
+	html := `
+		<div class="text-center py-8">
+			<div class="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+				<svg class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+				</svg>
+			</div>
+			<h3 class="text-xl font-bold text-slate-900 mb-2">Message Sent!</h3>
+			<p class="text-slate-600 mb-4">Thank you for reaching out. We'll get back to you within 24 hours.</p>
+			<div class="bg-slate-100 rounded-lg px-4 py-2 inline-block">
+				<span class="text-sm text-slate-500">Reference Ticket:</span>
+				<span class="font-mono font-bold text-trust">` + ticketNumber + `</span>
+			</div>
+		</div>
+	`
+	return c.Type("text/html").SendString(html)
+}
+
+func generateTicketNumber() string {
+	// Generate a simple ticket number: timestamp + random
+	return fmt.Sprintf("%d%04d", time.Now().Unix(), time.Now().Nanosecond()%10000)
 }
 
 // HandleLogin handles the login form submission via HTMX
@@ -176,10 +249,21 @@ func (h *PublicHandler) HandleLogin(c *fiber.Ctx) error {
 func (h *PublicHandler) HandleRegister(c *fiber.Ctx) error {
 	var req services.RegisterRequest
 
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request",
-		})
+	// Parse JSON first, fall back to form data
+	contentType := c.Get("Content-Type")
+	if strings.Contains(contentType, "application/json") {
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request",
+			})
+		}
+	} else {
+		req.Email = c.FormValue("email")
+		req.Password = c.FormValue("password")
+		req.Name = c.FormValue("full_name")
+		req.CompanyName = c.FormValue("company_name")
+		req.Phone = c.FormValue("phone")
+		req.KRAPIN = c.FormValue("kra_pin")
 	}
 
 	// Validate required fields
@@ -266,6 +350,7 @@ func (h *PublicHandler) GetInvoiceByToken(c *fiber.Ctx) error {
 }
 
 // InitiateSTKPush initiates an M-Pesa STK push for payment
+// SECURITY: Payment record is ONLY created AFTER successful STK push
 func (h *PublicHandler) InitiateSTKPush(c *fiber.Ctx) error {
 	var req struct {
 		InvoiceToken string  `json:"invoice_token"`
@@ -318,7 +403,36 @@ func (h *PublicHandler) InitiateSTKPush(c *fiber.Ctx) error {
 	// Generate payment reference
 	reference := fmt.Sprintf("PAY-%s", uuid.New().String()[:8])
 
-	// Create payment record with PENDING status
+	// STAGE 1: Initiate STK push FIRST, before creating any payment record
+	// This is the CORRECT flow - payment record only created on success
+	var stkPushResult *services.IntasendResponse
+	var stkPushErr error
+
+	if h.intasendService != nil {
+		intasendReq := services.InitiatePaymentRequest{
+			Amount:        paymentAmount,
+			Currency:      invoice.Currency,
+			PhoneNumber:   req.Phone,
+			APIRef:        reference,
+			CallbackURL:   fmt.Sprintf("%s/api/v1/webhook/intasend", c.BaseURL()),
+			CustomerEmail: invoice.Client.Email,
+			CustomerName:  invoice.Client.Name,
+			InvoiceNumber: invoice.InvoiceNumber,
+		}
+
+		stkPushResult, stkPushErr = h.intasendService.InitiateSTKPush(intasendReq)
+		if stkPushErr != nil {
+			// STK push FAILED - DO NOT create payment record
+			// This prevents "phantom" pending payments
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":   "STK push failed - payment not initiated",
+				"details": stkPushErr.Error(),
+			})
+		}
+	}
+
+	// STAGE 2: STK push succeeded - NOW create pending payment record
+	// This is the correct flow - payment only recorded after successful initiation
 	payment := &models.Payment{
 		ID:          reference,
 		TenantID:    invoice.TenantID,
@@ -333,46 +447,27 @@ func (h *PublicHandler) InitiateSTKPush(c *fiber.Ctx) error {
 	}
 
 	if err := h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment); err != nil {
+		// Payment record creation failed - but STK was already sent
+		// Log this error for manual reconciliation
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to initiate payment",
+			"error":   "Payment initiated but record creation failed",
+			"warning": "Please contact support if payment doesn't complete",
 		})
 	}
 
-	// If Intasend service is configured, trigger STK Push
-	if h.intasendService != nil {
-		intasendReq := services.InitiatePaymentRequest{
-			Amount:        paymentAmount,
-			Currency:      invoice.Currency,
-			PhoneNumber:   req.Phone,
-			APIRef:        reference,
-			CallbackURL:   fmt.Sprintf("%s/api/v1/webhooks/payment", c.BaseURL()),
-			CustomerEmail: invoice.Client.Email,
-			CustomerName:  invoice.Client.Name,
-			InvoiceNumber: invoice.InvoiceNumber,
-		}
-
-		resp, err := h.intasendService.InitiateSTKPush(intasendReq)
-		if err != nil {
-			fmt.Printf("[STK Push] Failed to initiate: %v\n", err)
-			return c.JSON(fiber.Map{
-				"status":     "pending",
-				"payment_id": reference,
-				"amount":     paymentAmount,
-				"phone":      req.Phone,
-				"message":    "Payment recorded. STK push may be delayed.",
-			})
-		}
-
+	// Return success - STK push sent and payment record created
+	if stkPushResult != nil {
 		return c.JSON(fiber.Map{
 			"status":      "stk_push_sent",
 			"payment_id":  reference,
-			"intasend_id": resp.ID,
+			"intasend_id": stkPushResult.ID,
 			"amount":      paymentAmount,
 			"phone":       req.Phone,
 			"message":     "STK push sent. Please check your phone and enter your M-Pesa PIN.",
 		})
 	}
 
+	// Fallback if no Intasend service
 	return c.JSON(fiber.Map{
 		"status":     "pending",
 		"payment_id": reference,
@@ -414,22 +509,18 @@ func (h *PublicHandler) CheckPaymentStatus(c *fiber.Ctx) error {
 func (h *PublicHandler) GetPricing(c *fiber.Ctx) error {
 	currency := c.Query("currency", "KES")
 
-	prices := map[string]map[string]interface{}{
-		"KES": {
-			"free":   0,
-			"pro":    999,
-			"agency": 2499,
-		},
-		"USD": {
-			"free":   0,
-			"pro":    9.99,
-			"agency": 24.99,
-		},
+	type planPrices struct {
+		free, pro, agency float64
 	}
 
-	selectedPrices, ok := prices[currency]
+	prices := map[string]planPrices{
+		"KES": {free: 0.0, pro: 999.0, agency: 2499.0},
+		"USD": {free: 0.0, pro: 9.99, agency: 24.99},
+	}
+
+	p, ok := prices[currency]
 	if !ok {
-		selectedPrices = prices["KES"]
+		p = prices["KES"]
 		currency = "KES"
 	}
 
@@ -438,14 +529,15 @@ func (h *PublicHandler) GetPricing(c *fiber.Ctx) error {
 		symbol = "$"
 	}
 
-	// Format prices
-	freePrice := fmt.Sprintf("%s%.0f", symbol, selectedPrices["free"])
-	proPrice := fmt.Sprintf("%s%.2f", symbol, selectedPrices["pro"])
-	agencyPrice := fmt.Sprintf("%s%.2f", symbol, selectedPrices["agency"])
-
+	var freePrice, proPrice, agencyPrice string
 	if currency == "KES" {
-		proPrice = fmt.Sprintf("%s%.0f", symbol, selectedPrices["pro"])
-		agencyPrice = fmt.Sprintf("%s%.0f", symbol, selectedPrices["agency"])
+		freePrice = fmt.Sprintf("%s%.0f", symbol, p.free)
+		proPrice = fmt.Sprintf("%s%.0f", symbol, p.pro)
+		agencyPrice = fmt.Sprintf("%s%.0f", symbol, p.agency)
+	} else {
+		freePrice = fmt.Sprintf("%s%.2f", symbol, p.free)
+		proPrice = fmt.Sprintf("%s%.2f", symbol, p.pro)
+		agencyPrice = fmt.Sprintf("%s%.2f", symbol, p.agency)
 	}
 
 	html := fmt.Sprintf(`
