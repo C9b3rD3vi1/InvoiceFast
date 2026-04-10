@@ -33,7 +33,6 @@ var (
 	ErrPasswordCompromised = errors.New("this password has been found in a data breach. please choose a different password")
 )
 
-// commonPasswords list (top 100) - in production, use a proper compromised password checker
 var commonPasswords = map[string]bool{
 	"password": true, "12345678": true, "123456789": true, "password123": true,
 	"123456": true, "qwerty": true, "12345": true, "1234567890": true,
@@ -42,91 +41,61 @@ var commonPasswords = map[string]bool{
 	"admin": true, "welcome": true, "123654": true, "666666": true,
 }
 
-// ValidatePasswordStrength validates password strength
 func ValidatePasswordStrength(password string) error {
 	if len(password) < 8 {
 		return errors.New("password must be at least 8 characters")
 	}
-
 	if len(password) > 128 {
 		return errors.New("password must be at most 128 characters")
 	}
-
-	// Check for uppercase
-	hasUpper := false
+	hasUpper, hasLower, hasNumber, hasSpecial := false, false, false, false
+	specialChars := "!@#$%^&*()_+-=[]{}|;:,.<>?"
 	for _, c := range password {
 		if c >= 'A' && c <= 'Z' {
 			hasUpper = true
-			break
+		}
+		if c >= 'a' && c <= 'z' {
+			hasLower = true
+		}
+		if c >= '0' && c <= '9' {
+			hasNumber = true
+		}
+		if strings.Contains(specialChars, string(c)) {
+			hasSpecial = true
 		}
 	}
 	if !hasUpper {
 		return errors.New("password must contain at least one uppercase letter")
 	}
-
-	// Check for lowercase
-	hasLower := false
-	for _, c := range password {
-		if c >= 'a' && c <= 'z' {
-			hasLower = true
-			break
-		}
-	}
 	if !hasLower {
 		return errors.New("password must contain at least one lowercase letter")
-	}
-
-	// Check for number
-	hasNumber := false
-	for _, c := range password {
-		if c >= '0' && c <= '9' {
-			hasNumber = true
-			break
-		}
 	}
 	if !hasNumber {
 		return errors.New("password must contain at least one number")
 	}
-
-	// Check for special character
-	specialChars := "!@#$%^&*()_+-=[]{}|;:,.<>?"
-	hasSpecial := false
-	for _, c := range password {
-		if strings.Contains(specialChars, string(c)) {
-			hasSpecial = true
-			break
-		}
-	}
 	if !hasSpecial {
 		return errors.New("password must contain at least one special character")
 	}
-
-	// Check common passwords
 	if commonPasswords[strings.ToLower(password)] {
 		return ErrPasswordCompromised
 	}
-
 	return nil
 }
 
-// InitiatePasswordReset initiates the password reset process
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup and prevent IDOR
 func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgent string) (*models.PasswordResetToken, error) {
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
 
-	// SECURITY: Use TenantFilter to prevent cross-tenant enumeration
 	var user models.User
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "email = ?", email).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // Return nil without error (security: don't reveal existence)
+			return nil, nil
 		}
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
-	// Check rate limiting (max 3 per hour) - WITH ERROR HANDLING
 	var recentCount int64
 	oneHourAgo := time.Now().Add(-1 * time.Hour)
 	if err := s.db.Model(&models.PasswordResetToken{}).
@@ -139,19 +108,17 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 		return nil, errors.New("rate limit exceeded: too many reset requests")
 	}
 
-	// Invalidate existing tokens - WITH TENANT SCOPE
 	if err := s.db.Where("tenant_id = ? AND user_id = ? AND expires_at > ?", tenantID, user.ID, time.Now()).
 		Delete(&models.PasswordResetToken{}).Error; err != nil {
 		return nil, fmt.Errorf("failed to invalidate tokens: %w", err)
 	}
 
-	// Generate new token
 	rawToken := secureRandomToken()
 	tokenHash := hashToken(rawToken, s.cfg.JWT.Secret)
 
 	resetToken := &models.PasswordResetToken{
 		ID:        uuid.New().String(),
-		TenantID:  tenantID, // SECURITY: Store tenant_id to prevent cross-tenant token usage
+		TenantID:  tenantID,
 		UserID:    user.ID,
 		Token:     tokenHash,
 		RawToken:  rawToken,
@@ -166,33 +133,20 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 		return nil, fmt.Errorf("failed to create reset token: %w", err)
 	}
 
-	// Send password reset email
-	if s.emailService != nil {
-		resetToken := rawToken // The raw token to include in email
-		_ = resetToken         // Email sending is handled via the PasswordResetService in production
-	}
-
 	return resetToken, nil
 }
 
-// CompletePasswordReset completes the password reset
-// SECURITY: Accepts tenantID to validate token belongs to correct tenant
 func (s *AuthService) CompletePasswordReset(tenantID, token, newPassword, confirmPassword, ipAddress string) error {
 	if tenantID == "" {
 		return errors.New("tenant_id is required")
 	}
-
-	// Validate passwords match
 	if newPassword != confirmPassword {
 		return errors.New("passwords do not match")
 	}
-
-	// Validate password strength
 	if err := ValidatePasswordStrength(newPassword); err != nil {
 		return err
 	}
 
-	// Find token - SECURITY: Must match tenant_id to prevent cross-tenant token usage
 	tokenHash := hashToken(token, s.cfg.JWT.Secret)
 	var resetToken models.PasswordResetToken
 
@@ -203,43 +157,32 @@ func (s *AuthService) CompletePasswordReset(tenantID, token, newPassword, confir
 		return fmt.Errorf("database error: %w", err)
 	}
 
-	// Check expiry
 	if resetToken.IsExpired() {
-		return ErrTokenExpired
+		return errors.New("token expired")
 	}
-
-	// Check if used
 	if resetToken.UsedAt != nil {
-		return ErrTokenUsed
+		return errors.New("token already used")
 	}
 
-	// Find user - SECURITY: Must use tenant filter
 	var user models.User
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", resetToken.UserID).Error; err != nil {
 		return fmt.Errorf("user not found: %w", err)
 	}
 
-	// Hash new password
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Update in transaction
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// Update user password
 		if err := tx.Model(&user).Update("password_hash", string(passwordHash)).Error; err != nil {
 			return err
 		}
-
-		// Mark token as used
 		now := time.Now()
 		resetToken.UsedAt = &now
 		if err := tx.Save(&resetToken).Error; err != nil {
 			return err
 		}
-
-		// Create audit log
 		auditLog := &models.AuditLog{
 			ID:         uuid.New().String(),
 			UserID:     user.ID,
@@ -257,7 +200,6 @@ func (s *AuthService) CompletePasswordReset(tenantID, token, newPassword, confir
 		return fmt.Errorf("failed to complete reset: %w", err)
 	}
 
-	// Invalidate all refresh tokens (log out all devices) - with error handling
 	if err := s.db.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
 		log.Printf("[AUTH] Warning: Failed to invalidate refresh tokens: %v", err)
 	}
@@ -265,8 +207,6 @@ func (s *AuthService) CompletePasswordReset(tenantID, token, newPassword, confir
 	return nil
 }
 
-// ValidateResetToken validates a reset token
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup - prevents cross-tenant token enumeration
 func (s *AuthService) ValidateResetToken(tenantID, token string) (*models.User, error) {
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
@@ -274,7 +214,6 @@ func (s *AuthService) ValidateResetToken(tenantID, token string) (*models.User, 
 
 	tokenHash := hashToken(token, s.cfg.JWT.Secret)
 
-	// SECURITY: Use TenantFilter to prevent cross-tenant token usage
 	var resetToken models.PasswordResetToken
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&resetToken, "token = ?", tokenHash).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -284,14 +223,12 @@ func (s *AuthService) ValidateResetToken(tenantID, token string) (*models.User, 
 	}
 
 	if resetToken.IsExpired() {
-		return nil, ErrTokenExpired
+		return nil, errors.New("token expired")
 	}
-
 	if resetToken.UsedAt != nil {
-		return nil, ErrTokenUsed
+		return nil, errors.New("token already used")
 	}
 
-	// SECURITY: User lookup must also be tenant-scoped
 	var user models.User
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", resetToken.UserID).Error; err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
@@ -300,14 +237,12 @@ func (s *AuthService) ValidateResetToken(tenantID, token string) (*models.User, 
 	return &user, nil
 }
 
-// secureRandomToken generates a secure random token
 func secureRandomToken() string {
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	return base64.URLEncoding.EncodeToString(bytes)
 }
 
-// hashToken hashes a token for secure storage
 func hashToken(token, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(token))
@@ -338,35 +273,34 @@ func NewAuthService(db *database.DB, cfg *config.Config, emailSvc *EmailService,
 	return &AuthService{db: db, cfg: cfg, emailService: emailSvc, auditService: auditSvc}
 }
 
-// Register creates a new user account
 func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
-	// Validate email format
 	if err := validateEmail(req.Email); err != nil {
 		return nil, ErrInvalidEmail
 	}
 
-	// Validate password with strong policy
 	if err := validatePassword(req.Password); err != nil {
 		return nil, err
 	}
 
-	// Check if email exists
 	var existing models.User
 	if err := s.db.First(&existing, "email = ?", req.Email).Error; err == nil {
 		return nil, ErrEmailExists
 	}
 
-	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Create tenant for new user
+	subdomain := generateSubdomain(req.CompanyName)
+	if subdomain == "" {
+		subdomain = uuid.New().String()[:8]
+	}
+
 	tenant := &models.Tenant{
 		ID:        uuid.New().String(),
-		Name:      req.Name,
-		Subdomain: "",
+		Name:      req.CompanyName,
+		Subdomain: subdomain,
 		Plan:      "free",
 		IsActive:  true,
 	}
@@ -392,7 +326,6 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Generate tokens
 	accessToken, err := s.generateAccessToken(user)
 	if err != nil {
 		return nil, err
@@ -403,10 +336,8 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	// Seed default templates
 	s.db.SeedDefaultTemplates(user.ID)
 
-	// Audit log registration
 	if s.auditService != nil {
 		_ = s.auditService.LogAction(context.Background(), user.TenantID, user.ID, AuditActionUserRegister, AuditEntityUser, user.ID, map[string]interface{}{
 			"email":   user.Email,
@@ -422,7 +353,6 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	}, nil
 }
 
-// Login authenticates a user
 func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 	var user models.User
 	if err := s.db.First(&user, "email = ?", email).Error; err != nil {
@@ -440,7 +370,6 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 		return nil, ErrWrongPassword
 	}
 
-	// Generate tokens
 	accessToken, err := s.generateAccessToken(&user)
 	if err != nil {
 		return nil, err
@@ -451,7 +380,6 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	// Audit log successful login
 	if s.auditService != nil {
 		_ = s.auditService.LogLoginAttempt(context.Background(), user.TenantID, user.Email, "", true, "")
 	}
@@ -463,31 +391,25 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 	}, nil
 }
 
-// RefreshToken refreshes an access token
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup - prevents using tokens from other tenants
 func (s *AuthService) RefreshToken(tenantID, refreshToken string) (*AuthResponse, error) {
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
 	}
 
-	// SECURITY: Use TenantFilter to prevent cross-tenant token usage
 	var storedToken models.RefreshToken
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&storedToken, "token = ? AND expires_at > ?", refreshToken, time.Now()).Error; err != nil {
 		return nil, ErrInvalidToken
 	}
 
-	// SECURITY: User lookup must also be tenant-scoped
 	var user models.User
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", storedToken.UserID).Error; err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
 
-	// Delete old refresh token
 	if err := s.db.Delete(&storedToken).Error; err != nil {
 		return nil, fmt.Errorf("failed to delete refresh token: %w", err)
 	}
 
-	// Generate new tokens - use tenantID from request to ensure consistency
 	accessToken, err := s.generateAccessToken(&user)
 	if err != nil {
 		return nil, err
@@ -505,7 +427,6 @@ func (s *AuthService) RefreshToken(tenantID, refreshToken string) (*AuthResponse
 	}, nil
 }
 
-// ValidateToken validates an access token and returns the user ID
 func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 	if strings.TrimSpace(tokenString) == "" {
 		return nil, ErrInvalidToken
@@ -526,8 +447,6 @@ func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 	return nil, ErrInvalidToken
 }
 
-// GetUserByID retrieves a user by ID
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup - prevents IDOR
 func (s *AuthService) GetUserByID(tenantID, userID string) (*models.User, error) {
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
@@ -536,7 +455,6 @@ func (s *AuthService) GetUserByID(tenantID, userID string) (*models.User, error)
 		return nil, errors.New("user ID is required")
 	}
 
-	// SECURITY: Use TenantFilter to prevent cross-tenant access
 	var user models.User
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -547,8 +465,6 @@ func (s *AuthService) GetUserByID(tenantID, userID string) (*models.User, error)
 	return &user, nil
 }
 
-// UpdateUser updates user profile
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup
 func (s *AuthService) UpdateUser(tenantID, userID string, req *UpdateUserRequest) (*models.User, error) {
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
@@ -579,8 +495,6 @@ func (s *AuthService) UpdateUser(tenantID, userID string, req *UpdateUserRequest
 	return user, nil
 }
 
-// ChangePassword changes user password
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup
 func (s *AuthService) ChangePassword(tenantID, userID, oldPassword, newPassword string) error {
 	if tenantID == "" {
 		return errors.New("tenant_id is required")
@@ -594,12 +508,10 @@ func (s *AuthService) ChangePassword(tenantID, userID, oldPassword, newPassword 
 		return err
 	}
 
-	// Verify old password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
 		return ErrWrongPassword
 	}
 
-	// Hash new password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
@@ -610,32 +522,27 @@ func (s *AuthService) ChangePassword(tenantID, userID, oldPassword, newPassword 
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 
-	// Invalidate all refresh tokens - with tenant scope
 	s.db.Scopes(database.TenantFilter(tenantID)).Where("user_id = ?", userID).Delete(&models.RefreshToken{})
 
 	return nil
 }
 
-// Logout invalidates a refresh token
 func (s *AuthService) Logout(refreshToken string) error {
 	if strings.TrimSpace(refreshToken) == "" {
-		return nil // Nothing to logout
+		return nil
 	}
 	return s.db.Where("token = ?", refreshToken).Delete(&models.RefreshToken{}).Error
 }
 
-// GenerateAPIKey generates an API key for programmatic access
 func (s *AuthService) GenerateAPIKey(userID, keyName string) (string, error) {
 	if strings.TrimSpace(keyName) == "" {
 		keyName = "Default"
 	}
 
-	// Generate random key
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	apiKey := "if_sk_" + base64.URLEncoding.EncodeToString(bytes)
 
-	// Hash the key for storage
 	hash := sha256.Sum256([]byte(apiKey))
 	keyHash := fmt.Sprintf("%x", hash[:])
 
@@ -646,7 +553,7 @@ func (s *AuthService) GenerateAPIKey(userID, keyName string) (string, error) {
 		Key:       apiKey,
 		KeyHash:   keyHash,
 		IsActive:  true,
-		ExpiresAt: time.Now().AddDate(1, 0, 0), // 1 year
+		ExpiresAt: time.Now().AddDate(1, 0, 0),
 	}
 
 	if err := s.db.Create(apiKeyModel).Error; err != nil {
@@ -656,8 +563,6 @@ func (s *AuthService) GenerateAPIKey(userID, keyName string) (string, error) {
 	return apiKey, nil
 }
 
-// ValidateAPIKey validates an API key
-// SECURITY: Accepts tenantID to enforce tenant-scoped lookup
 func (s *AuthService) ValidateAPIKey(tenantID, apiKey string) (*models.User, error) {
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
@@ -669,7 +574,6 @@ func (s *AuthService) ValidateAPIKey(tenantID, apiKey string) (*models.User, err
 	hash := sha256.Sum256([]byte(apiKey))
 	keyHash := fmt.Sprintf("%x", hash[:])
 
-	// SECURITY: Use TenantFilter to prevent cross-tenant API key usage
 	var key models.APIKey
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&key, "key_hash = ? AND is_active = ? AND (expires_at IS NULL OR expires_at > ?)", keyHash, true, time.Now()).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -678,15 +582,12 @@ func (s *AuthService) ValidateAPIKey(tenantID, apiKey string) (*models.User, err
 		return nil, fmt.Errorf("failed to validate API key: %w", err)
 	}
 
-	// Update last used
 	key.LastUsedAt = sql.NullTime{Time: time.Now(), Valid: true}
 	s.db.Save(&key)
 
-	// SECURITY: User lookup must also be tenant-scoped
 	return s.GetUserByID(tenantID, key.UserID)
 }
 
-// Request types
 type RegisterRequest struct {
 	Email       string `json:"email" binding:"required,email"`
 	Password    string `json:"password" binding:"required"`
@@ -733,9 +634,8 @@ func (s *AuthService) GenerateRefreshTokenWithTenant(userID, tenantID string) (s
 	rand.Read(bytes)
 	token := base64.URLEncoding.EncodeToString(bytes)
 
-	// SECURITY: TenantID must be required to prevent cross-tenant token usage
 	if tenantID == "" {
-		tenantID = userID // Fallback: use userID as tenantID for self-tenant tokens
+		tenantID = userID
 	}
 
 	refreshToken := &models.RefreshToken{
@@ -753,14 +653,11 @@ func (s *AuthService) GenerateRefreshTokenWithTenant(userID, tenantID string) (s
 	return token, nil
 }
 
-// validateEmail validates email format
 func validateEmail(email string) error {
 	email = strings.TrimSpace(email)
 	if email == "" {
 		return errors.New("email is required")
 	}
-
-	// Basic email validation
 	if !strings.Contains(email, "@") {
 		return errors.New("invalid email format")
 	}
@@ -777,38 +674,25 @@ func validateEmail(email string) error {
 	return nil
 }
 
-// validatePassword validates password strength
 func validatePassword(password string) error {
 	if len(password) < 8 {
 		return ErrWeakPassword
 	}
-
-	// Check for uppercase
 	if !containsUppercase(password) {
 		return ErrWeakPassword
 	}
-
-	// Check for lowercase
 	if !containsLowercase(password) {
 		return ErrWeakPassword
 	}
-
-	// Check for number
 	if !containsNumber(password) {
 		return ErrWeakPassword
 	}
-
-	// Check for special character
 	if !containsSpecial(password) {
 		return ErrWeakPassword
 	}
-
-	// Check against common passwords
 	if commonPasswords[strings.ToLower(password)] {
 		return ErrPasswordCompromised
 	}
-
-	// Check for common patterns
 	if containsCommonPatterns(password) {
 		return ErrWeakPassword
 	}
@@ -855,32 +739,25 @@ func containsSpecial(s string) bool {
 
 func containsCommonPatterns(password string) bool {
 	lower := strings.ToLower(password)
-
-	// Sequential characters - only reject if the entire password is just the sequence
 	sequences := []string{"123", "abc", "qwerty", "asdf", "zxcv"}
 	for _, seq := range sequences {
 		if lower == seq {
 			return true
 		}
 	}
-
-	// Repeated characters (more than 3)
 	for i := 0; i < len(password)-3; i++ {
 		if password[i] == password[i+1] && password[i+1] == password[i+2] {
 			return true
 		}
 	}
-
 	return false
 }
 
-// normalizePhone normalizes phone number
 func normalizePhone(phone string) string {
 	if strings.TrimSpace(phone) == "" {
 		return ""
 	}
 
-	// Remove all non-digits
 	var digits string
 	for _, c := range phone {
 		if c >= '0' && c <= '9' {
@@ -888,7 +765,6 @@ func normalizePhone(phone string) string {
 		}
 	}
 
-	// Handle different formats
 	if len(digits) == 10 && digits[0] == '0' {
 		return "254" + digits[1:]
 	}
@@ -899,6 +775,33 @@ func normalizePhone(phone string) string {
 		return digits
 	}
 
-	// Return original if no conversion possible
 	return phone
+}
+
+func generateSubdomain(companyName string) string {
+	if strings.TrimSpace(companyName) == "" {
+		return ""
+	}
+
+	var result string
+	for i, c := range strings.ToLower(companyName) {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			result += string(c)
+		} else if c == ' ' || c == '-' || c == '_' {
+			if i > 0 && len(result) > 0 && result[len(result)-1] != '-' {
+				result += "-"
+			}
+		}
+		if len(result) >= 50 {
+			break
+		}
+	}
+
+	result = strings.Trim(result, "-")
+
+	if len(result) < 3 {
+		return ""
+	}
+
+	return result
 }
