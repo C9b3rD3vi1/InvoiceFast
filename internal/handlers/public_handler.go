@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -249,6 +250,9 @@ func (h *PublicHandler) HandleLogin(c *fiber.Ctx) error {
 func (h *PublicHandler) HandleRegister(c *fiber.Ctx) error {
 	var req services.RegisterRequest
 
+	log.Printf("[Register] Content-Type: %s", c.Get("Content-Type"))
+	log.Printf("[Register] Body: %s", string(c.Body()))
+
 	// Parse JSON first, fall back to form data
 	contentType := c.Get("Content-Type")
 	if strings.Contains(contentType, "application/json") {
@@ -258,12 +262,14 @@ func (h *PublicHandler) HandleRegister(c *fiber.Ctx) error {
 			})
 		}
 	} else {
+		// HTMX sends form data - use FormValue
 		req.Email = c.FormValue("email")
 		req.Password = c.FormValue("password")
 		req.Name = c.FormValue("full_name")
 		req.CompanyName = c.FormValue("company_name")
 		req.Phone = c.FormValue("phone")
 		req.KRAPIN = c.FormValue("kra_pin")
+		log.Printf("[Register] Parsed - Email: %s, Name: %s, Company: %s", req.Email, req.Name, req.CompanyName)
 	}
 
 	// Validate required fields
