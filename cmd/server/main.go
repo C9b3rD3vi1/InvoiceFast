@@ -211,7 +211,10 @@ func main() {
 	htmxHandler := handlers.NewHTMXHandler(invoiceService, clientService, kraService, settingsService, paymentService, pdfWorker, exchangeRateService)
 
 	publicHandler := handlers.NewPublicHandler(invoiceService, authService, paymentService, mpesaService, intasendService)
+	authHandler := handlers.NewAuthHandler(authService, auditService)
 	rateLimiter := middleware.NewFiberRateLimiter()
+
+	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc, db, htmxHandler, publicHandler, authHandler, webhookVerifier)
 
 	// Serve static assets from /static directory
 	app.Static("/static", "./static")
@@ -264,13 +267,8 @@ func main() {
 		return c.Next()
 	})
 
-	// Public routes (landing, auth, portal)
-	routes.PublicRoutes(app, publicHandler)
-	routes.PublicAPIRoutes(app, publicHandler, rateLimiter)
-	routes.PublicAuthRoutes(app, publicHandler, rateLimiter)
-
 	// Setup all API routes via routes directory
-	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc, db, htmxHandler, publicHandler, webhookVerifier)
+	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc, db, htmxHandler, publicHandler, authHandler, webhookVerifier)
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -322,14 +320,14 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 func setupRoutes(app *fiber.App, cfg *config.Config,
 	handler *handlers.FiberHandler, rateLimiter *middleware.FiberRateLimiter,
 	authService *services.AuthService, idempotencySvc *services.IdempotencyService, db *database.DB, htmxHandler *handlers.HTMXHandler,
-	publicHandler *handlers.PublicHandler, webhookVerifier *middleware.WebhookVerifierMiddleware) {
+	publicHandler *handlers.PublicHandler, authHandler *handlers.AuthHandler, webhookVerifier *middleware.WebhookVerifierMiddleware) {
 
 	// === API v1 Routes (organized in routes directory) ===
 	routes.PublicRoutes(app, publicHandler)
 	routes.PublicAPIRoutes(app, publicHandler, rateLimiter)
 	routes.PublicAuthRoutes(app, publicHandler, rateLimiter)
-	routes.AuthRoutes(app, handler, rateLimiter)
-	routes.TenantRoutes(app, handler, authService, rateLimiter, db)
+	routes.AuthRoutes(app, authHandler, rateLimiter)
+	routes.TenantRoutes(app, authHandler, authService, rateLimiter, db)
 	routes.InvoiceRoutes(app, handler, authService, db)
 	routes.ClientRoutes(app, handler, authService, db)
 	routes.PaymentRoutes(app, handler, idempotencySvc, rateLimiter, webhookVerifier)

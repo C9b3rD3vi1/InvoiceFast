@@ -74,7 +74,7 @@ func (h *PublicHandler) ServeLogin(c *fiber.Ctx) error    { return c.Redirect("/
 func (h *PublicHandler) ServeRegister(c *fiber.Ctx) error { return c.Redirect("/register") }
 func (h *PublicHandler) ServeContact(c *fiber.Ctx) error  { return c.Redirect("/contact") }
 
-// HandleContact - contact form JSON
+// HandleContact - contact form JSON (non-auth public)
 func (h *PublicHandler) HandleContact(c *fiber.Ctx) error {
 	var req struct {
 		Name    string `json:"name"`
@@ -90,33 +90,15 @@ func (h *PublicHandler) HandleContact(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Thank you! We'll contact you soon.", "ticket": "TKT-" + fmt.Sprint(time.Now().Unix())})
 }
 
-// HandleLogin - login JSON API
+// Auth handlers moved to auth_handler.go - these are aliases for backward compatibility
+// HandleLogin - DEPRECATED: use AuthHandler.Login
 func (h *PublicHandler) HandleLogin(c *fiber.Ctx) error {
-	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
-	}
-	resp, err := h.authService.Login(req.Email, req.Password)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid credentials"})
-	}
-	return c.JSON(fiber.Map{"access_token": resp.AccessToken, "refresh_token": resp.RefreshToken})
+	return c.Redirect("/api/v1/auth/login")
 }
 
-// HandleRegister - register JSON API
+// HandleRegister - DEPRECATED: use AuthHandler.Register
 func (h *PublicHandler) HandleRegister(c *fiber.Ctx) error {
-	var req services.RegisterRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
-	}
-	resp, err := h.authService.Register(&req)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
-	}
-	return c.JSON(fiber.Map{"access_token": resp.AccessToken, "refresh_token": resp.RefreshToken})
+	return c.Redirect("/api/v1/auth/register")
 }
 
 // GetInvoiceByToken - public invoice by magic token
