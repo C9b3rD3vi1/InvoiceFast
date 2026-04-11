@@ -219,6 +219,14 @@ func main() {
 	app.Static("/js", "./static/js")
 	app.Static("/images", "./static/images")
 
+	// Serve static HTML pages (decoupled frontend)
+	app.Get("/dashboard", func(c *fiber.Ctx) error {
+		return c.SendFile("./static/dashboard.html")
+	})
+	app.Get("/invoices", func(c *fiber.Ctx) error {
+		return c.SendFile("./static/invoices.html")
+	})
+
 	// Subdomain routing for branded client portal
 	app.Use(func(c *fiber.Ctx) error {
 		hostname := c.Hostname()

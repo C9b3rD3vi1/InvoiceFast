@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoices | InvoiceFast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="bg-slate-50" x-data="invoices()" x-init="init()">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-slate-900 text-white p-4">
+        <div class="mb-8">
+            <h1 class="text-xl font-bold">InvoiceFast</h1>
+        </div>
+        <nav class="space-y-2">
+            <a href="/static/dashboard.html" class="block py-2 px-4 rounded hover:bg-slate-800">Dashboard</a>
+            <a href="/static/invoices.html" class="block py-2 px-4 rounded bg-slate-800">Invoices</a>
+            <a href="/static/clients.html" class="block py-2 px-4 rounded hover:bg-slate-800">Clients</a>
+            <a href="/static/payments.html" class="block py-2 px-4 rounded hover:bg-slate-800">Payments</a>
+            <a href="/static/settings.html" class="block py-2 px-4 rounded hover:bg-slate-800">Settings</a>
+        </nav>
+        <div class="absolute bottom-4 left-4 right-4">
+            <button @click="logout()" class="w-full py-2 bg-red-600 rounded hover:bg-red-700">Logout</button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 p-8">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Invoices</h1>
+                <p class="text-slate-500">Manage your invoices</p>
+            </div>
+            <button @click="showCreateModal = true" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                + New Invoice
+            </button>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+            <div class="flex items-center gap-4">
+                <input type="text" x-model="search" @input.debounce.300ms="fetchInvoices()" 
+                    placeholder="Search invoices..." 
+                    class="flex-1 px-4 py-2 border rounded-lg">
+                <select x-model="statusFilter" @change="fetchInvoices()" 
+                    class="px-4 py-2 border rounded-lg">
+                    <option value="">All Status</option>
+                    <option value="draft">Draft</option>
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="overdue">Overdue</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Invoices Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-sm font-medium text-slate-500">Invoice #</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium text-slate-500">Client</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium text-slate-500">Amount</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium text-slate-500">Due Date</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium text-slate-500">Status</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium text-slate-500">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    <template x-for="invoice in invoices" :key="invoice.id">
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-6 py-4">
+                                <a :href="'/static/invoice.html?id=' + invoice.id" class="text-blue-600 hover:underline" x-text="invoice.invoiceNumber"></a>
+                            </td>
+                            <td class="px-6 py-4" x-text="invoice.clientName || 'N/A'"></td>
+                            <td class="px-6 py-4 font-medium" x-text="invoice.amount || invoice.total"></td>
+                            <td class="px-6 py-4" x-text="invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'"></td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 text-xs rounded-full" :class="getStatusClass(invoice.status)" x-text="invoice.status"></span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <button @click="viewInvoice(invoice)" class="text-blue-600 hover:underline mr-2">View</button>
+                                <button @click="sendInvoice(invoice)" class="text-green-600 hover:underline">Send</button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            
+            <!-- Loading -->
+            <div x-show="loading" class="p-8 text-center text-slate-500">
+                Loading invoices...
+            </div>
+
+            <!-- Empty -->
+            <div x-show="!loading && invoices.length === 0" class="p-8 text-center text-slate-500">
+                No invoices found
+            </div>
+
+            <!-- Pagination -->
+            <div class="px-6 py-4 border-t flex items-center justify-between">
+                <span class="text-sm text-slate-500">Showing <span x-text="invoices.length"></span> of <span x-text="total"></span> invoices</span>
+                <div class="flex gap-2">
+                    <button @click="prevPage()" :disabled="offset === 0" class="px-3 py-1 border rounded disabled:opacity-50">Previous</button>
+                    <button @click="nextPage()" :disabled="offset + limit >= total" class="px-3 py-1 border rounded disabled:opacity-50">Next</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/invoices.js"></script>
+</body>
+</html>
