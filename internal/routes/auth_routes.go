@@ -11,23 +11,20 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// AuthRoutes configures authentication routes
-func AuthRoutes(app *fiber.App, h *handlers.FiberHandler, rateLimiter *middleware.FiberRateLimiter) fiber.Router {
+// AuthRoutes configures /api/v1/auth endpoints
+func AuthRoutes(app *fiber.App, h *handlers.AuthHandler, rateLimiter *middleware.FiberRateLimiter) fiber.Router {
 	group := app.Group("/api/v1/auth")
 
 	// Public auth routes (rate limited)
 	group.Post("/register", rateLimiter.Limit(10, time.Minute), h.Register)
 	group.Post("/login", rateLimiter.Limit(10, time.Minute), h.Login)
 	group.Post("/refresh", h.RefreshToken)
-	group.Post("/forgot-password", rateLimiter.Limit(5, time.Minute), h.ForgotPassword)
-	group.Post("/reset-password", h.ResetPassword)
-	group.Get("/validate-reset-token", h.ValidateResetToken)
 
 	return group
 }
 
-// TenantRoutes configures dashboard and tenant routes
-func TenantRoutes(app *fiber.App, h *handlers.FiberHandler, authService *services.AuthService, rateLimiter *middleware.FiberRateLimiter, db *database.DB) fiber.Router {
+// TenantRoutes configures /api/v1/tenant endpoints
+func TenantRoutes(app *fiber.App, h *handlers.AuthHandler, authService *services.AuthService, rateLimiter *middleware.FiberRateLimiter, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(rateLimiter.Limit(100, time.Minute))
@@ -37,11 +34,6 @@ func TenantRoutes(app *fiber.App, h *handlers.FiberHandler, authService *service
 	group.Put("/me", h.UpdateUser)
 	group.Post("/change-password", h.ChangePassword)
 	group.Post("/logout", h.Logout)
-	group.Post("/api-keys", h.GenerateAPIKey)
-
-	// Dashboard
-	group.Get("/dashboard", h.GetDashboard)
-	group.Get("/rates", h.GetExchangeRates)
 
 	return group
 }
