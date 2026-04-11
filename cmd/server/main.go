@@ -219,14 +219,6 @@ func main() {
 	app.Static("/js", "./static/js")
 	app.Static("/images", "./static/images")
 
-	// Serve static HTML pages (decoupled frontend)
-	app.Get("/dashboard", func(c *fiber.Ctx) error {
-		return c.SendFile("./static/dashboard.html")
-	})
-	app.Get("/invoices", func(c *fiber.Ctx) error {
-		return c.SendFile("./static/invoices.html")
-	})
-
 	// Subdomain routing for branded client portal
 	app.Use(func(c *fiber.Ctx) error {
 		hostname := c.Hostname()
@@ -332,43 +324,18 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	authService *services.AuthService, idempotencySvc *services.IdempotencyService, db *database.DB, htmxHandler *handlers.HTMXHandler,
 	publicHandler *handlers.PublicHandler, webhookVerifier *middleware.WebhookVerifierMiddleware) {
 
-	// HTMX routes for dashboard SPA-like experience
-	app.Get("/htmx/dashboard", htmxHandler.Dashboard)
-	app.Get("/htmx/invoices", htmxHandler.InvoiceList)
-	app.Get("/htmx/invoices/search", htmxHandler.InvoiceSearch)
-	app.Get("/htmx/invoices/poll", htmxHandler.InvoiceStatusPoll)
-	app.Get("/htmx/invoices/:id", htmxHandler.InvoiceRow)
-	app.Get("/htmx/invoices/:id/kra-sync", htmxHandler.SyncToKRA)
-	app.Get("/htmx/invoices/line-item", htmxHandler.AddLineItem)
-	app.Post("/htmx/invoices", htmxHandler.CreateInvoicePOST)
-	app.Get("/htmx/invoices/calc", htmxHandler.CalculateExchange)
-
-	// Client routes
-	app.Get("/htmx/clients", htmxHandler.GetClients)
-	app.Get("/htmx/clients/search", htmxHandler.SearchClientsHTMX)
-	app.Post("/htmx/clients", htmxHandler.CreateClientPOST)
-	app.Get("/htmx/clients/:id/profile", htmxHandler.GetClientProfile)
-	app.Get("/htmx/clients/:id/kra-pin", htmxHandler.RevealKRAPin)
-	app.Get("/htmx/payments", htmxHandler.GetPayments)
-
-	// Settings HTMX routes
-	app.Post("/htmx/settings/mpesa", htmxHandler.SaveSettingsMpesa)
-	app.Post("/htmx/settings/mpesa/test", htmxHandler.TestMpesaConnection)
-	app.Post("/htmx/settings/kra", htmxHandler.SaveSettingsKRA)
-
-	// Dashboard routes (with shell layout)
-	app.Get("/dashboard", htmxHandler.Dashboard)
-	app.Get("/dashboard/invoices", htmxHandler.RenderInvoices)
-	app.Get("/dashboard/invoices/new", htmxHandler.RenderCreateInvoice)
-	app.Get("/dashboard/clients", htmxHandler.RenderClients)
-	app.Get("/dashboard/payments", htmxHandler.RenderPayments)
-	app.Get("/dashboard/settings", htmxHandler.RenderSettings)
-
-	// Routes via routes directory
-	routes.DashboardRoutes(app, handler, authService, rateLimiter, db)
+	// === API v1 Routes (organized in routes directory) ===
+	routes.PublicRoutes(app, publicHandler)
+	routes.PublicAPIRoutes(app, publicHandler, rateLimiter)
+	routes.PublicAuthRoutes(app, publicHandler, rateLimiter)
+	routes.AuthRoutes(app, handler, rateLimiter)
+	routes.TenantRoutes(app, handler, authService, rateLimiter, db)
 	routes.InvoiceRoutes(app, handler, authService, db)
 	routes.ClientRoutes(app, handler, authService, db)
 	routes.PaymentRoutes(app, handler, idempotencySvc, rateLimiter, webhookVerifier)
 	routes.PaymentAPIRoutes(app, publicHandler, rateLimiter)
 	routes.PublicInvoiceRoutes(app, handler, rateLimiter)
+
+	// === Static Frontend Pages (Decoupled) ===
+	routes.StaticRoutes(app)
 }
