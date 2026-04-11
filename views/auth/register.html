@@ -1,245 +1,213 @@
-{{define "content"}}
-<!-- Register Page -->
-<div class="min-h-screen bg-gradient-to-br from-trust via-trust-light to-cyan-400 flex items-center justify-center p-4 py-12">
-    <div class="w-full max-w-md">
-        <!-- Logo -->
-        <div class="text-center mb-8">
-            <a href="/" class="inline-flex items-center gap-2">
-                <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                </div>
-                <span class="text-2xl font-bold text-white">InvoiceFast</span>
-            </a>
-            <p class="text-white/80 mt-2">Create your free account</p>
-        </div>
-
-        <!-- Register Card -->
-        <div class="card p-8 animate-slide-up">
-            <!-- Error Container -->
-            <div id="register-error-container" class="hidden"></div>
-
-            <form
-                hx-post="/api/v1/auth/register"
-                hx-target="#register-error-container"
-                hx-swap="innerHTML"
-                hx-indicator="#register-loading"
-                class="space-y-6"
-            >
-                <!-- Company Name -->
-                <div>
-                    <label for="company_name" class="block text-sm font-medium text-slate-700 mb-2">
-                        Company Name
-                    </label>
-                    <input
-                        type="text"
-                        id="company_name"
-                        name="company_name"
-                        required
-                        class="input-field"
-                        placeholder="Your Business Ltd"
-                        autocomplete="organization"
-                    >
-                </div>
-
-                <!-- Full Name -->
-                <div>
-                    <label for="full_name" class="block text-sm font-medium text-slate-700 mb-2">
-                        Full Name
-                    </label>
-                    <input
-                        type="text"
-                        id="full_name"
-                        name="full_name"
-                        required
-                        class="input-field"
-                        placeholder="John Doe"
-                        autocomplete="name"
-                    >
-                </div>
-
-                <!-- Email -->
-                <div>
-                    <label for="email" class="block text-sm font-medium text-slate-700 mb-2">
-                        Email Address
-                    </label>
-                    <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        required
-                        class="input-field"
-                        placeholder="you@company.com"
-                        autocomplete="email"
-                    >
-                </div>
-
-                <!-- Phone -->
-                <div>
-                    <label for="phone" class="block text-sm font-medium text-slate-700 mb-2">
-                        Phone Number
-                    </label>
-                    <input
-                        type="tel"
-                        id="phone"
-                        name="phone"
-                        required
-                        class="input-field"
-                        placeholder="0712 345 678"
-                        pattern="^(07|01|254)\d{8}$"
-                        autocomplete="tel"
-                    >
-                    <p class="text-xs text-slate-500 mt-1">For M-Pesa payments</p>
-                </div>
-
-                <!-- Password -->
-                <div>
-                    <label for="password" class="block text-sm font-medium text-slate-700 mb-2">
-                        Password
-                    </label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        required
-                        minlength="8"
-                        class="input-field"
-                        placeholder="Test1234!"
-                        autocomplete="new-password"
-                    >
-                    <p class="text-xs text-slate-500 mt-1">Min 8 chars with uppercase, lowercase, number & special char</p>
-                </div>
-
-                <!-- KRA PIN (Optional) -->
-                <div>
-                    <label for="kra_pin" class="block text-sm font-medium text-slate-700 mb-2">
-                        KRA PIN (Optional)
-                    </label>
-                    <input
-                        type="text"
-                        id="kra_pin"
-                        name="kra_pin"
-                        class="input-field"
-                        placeholder="A0011223344X"
-                        autocomplete="off"
-                    >
-                    <p class="text-xs text-slate-500 mt-1">Required for e-TIMS compliance</p>
-                </div>
-
-                <!-- Terms Checkbox -->
-                <div>
-                    <label class="flex items-start gap-2">
-                        <input type="checkbox" name="terms" required class="w-4 h-4 text-trust rounded border-slate-300 focus:ring-trust mt-1">
-                        <span class="text-sm text-slate-600">
-                            I agree to the <a href="/terms.html" class="text-trust hover:underline" target="_blank">Terms of Service</a> and <a href="/privacy.html" class="text-trust hover:underline" target="_blank">Privacy Policy</a>
-                        </span>
-                    </label>
-                </div>
-
-                <!-- Submit Button -->
-                <button type="submit" class="btn-success w-full flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                    </svg>
-                    Create Free Account
-                </button>
-            </form>
-
-            <!-- Loading Indicator -->
-            <div id="register-loading" class="htmx-indicator text-center py-4">
-                <div class="spinner mx-auto mb-2"></div>
-                <p class="text-slate-600 text-sm">Creating your account...</p>
-            </div>
-
-            <!-- Divider -->
-            <div class="relative my-6">
-                <div class="absolute inset-0 flex items-center">
-                    <div class="w-full border-t border-slate-200"></div>
-                </div>
-                <div class="relative flex justify-center text-sm">
-                    <span class="px-4 bg-white text-slate-500">Already have an account?</span>
-                </div>
-            </div>
-
-            <!-- Login Link -->
-            <a href="/login.html" class="btn-outline w-full block text-center">
-                Sign In
-            </a>
-        </div>
-
-        <!-- Footer Links -->
-        <div class="text-center mt-6">
-            <a href="/" class="text-white/80 hover:text-white text-sm">← Back to home</a>
-        </div>
-    </div>
-</div>
-
-{{define "scripts"}}
-<script>
-    document.body.addEventListener('htmx:afterRequest', function(evt) {
-        const errorContainer = document.getElementById('register-error-container');
-
-        // Check if this is the register form request
-        if (!evt.detail.target || !evt.detail.target.closest('form')) return;
-
-        const xhr = evt.detail.xhr;
-        const responseText = xhr.responseText;
-
-        if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-                const data = JSON.parse(responseText);
-                if (data.access_token || data.message) {
-                    window.location.href = '/dashboard';
-                    return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - InvoiceFast</title>
+    <meta name="description" content="Professional invoicing with M-Pesa integration and KRA e-TIMS compliance">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                        success: '#2E7D32',
+                        success_light: '#4CAF50',
+                    }
                 }
-            } catch (e) {}
+            }
         }
+    </script>
+    <style>
+        .page-wrapper { min-height: 100vh; display: flex; flex-direction: column; }
+        main { flex: 1; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div class="page-wrapper">
+        <!-- Navigation -->
+        <nav class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <!-- Logo -->
+                    <a href="/" class="flex items-center gap-2">
+                        <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-10 w-auto">
+                    </a>
 
-        // Show error for 4xx/5xx responses
-        if (xhr.status >= 400) {
-            errorContainer.classList.remove('hidden');
-            try {
-                const data = JSON.parse(responseText);
-                errorContainer.innerHTML = `
-                    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 flex items-start gap-2">
-                        <svg class="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    <!-- Desktop Nav -->
+                    <div class="hidden md:flex items-center gap-6">
+                        <a href="/" class="text-slate-600 hover:text-trust transition-colors font-medium">Home</a>
+                        <a href="/#features" class="text-slate-600 hover:text-trust transition-colors font-medium">Features</a>
+                        <a href="/#pricing" class="text-slate-600 hover:text-trust transition-colors font-medium">Pricing</a>
+                    </div>
+
+                    <!-- Auth Buttons -->
+                    <div class="hidden md:flex items-center gap-3">
+                        <a href="/login" class="text-slate-600 hover:text-trust font-medium px-4 py-2">Login</a>
+                    </div>
+
+                    <!-- Mobile Menu Button -->
+                    <button class="md:hidden p-2 text-slate-600" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
-                        <div>
-                            <p class="font-medium">Registration failed</p>
-                            <p class="text-sm">${data.error || 'Please check your information and try again'}</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile Menu -->
+            <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-200 px-4 py-3">
+                <a href="/" class="block py-2 text-slate-600 hover:text-trust">Home</a>
+                <a href="/#features" class="block py-2 text-slate-600 hover:text-trust">Features</a>
+                <a href="/#pricing" class="block py-2 text-slate-600 hover:text-trust">Pricing</a>
+                <hr class="my-2 border-slate-200">
+                <a href="/login" class="block py-2 text-slate-600">Login</a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main>
+            <div class="w-full max-w-md px-4 py-8">
+                <!-- Register Card -->
+                <div class="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+                    <div class="text-center mb-8">
+                        <h1 class="text-2xl font-bold text-slate-800">Create your account</h1>
+                        <p class="text-slate-500 mt-1">Start invoicing in minutes</p>
+                    </div>
+
+                    <form id="registerForm" hx-post="/api/v1/auth/register" hx-indicator=".loading" hx-target="#errorMessage">
+                        <div class="space-y-5">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
+                                <input type="text" name="full_name" required 
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="John Doe">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Business Name</label>
+                                <input type="text" name="company_name" required 
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="Your Business Ltd">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Email</label>
+                                <input type="email" name="email" required 
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="you@example.com">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Phone (for M-Pesa)</label>
+                                <input type="tel" name="phone" required 
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="254712345678">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">KRA PIN (Optional)</label>
+                                <input type="text" name="kra_pin" 
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="A0000000000">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                                <input type="password" name="password" required minlength="8" id="regPassword"
+                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                    placeholder="Min 8 chars with uppercase, number, special">
+                                <p class="text-xs text-slate-500 mt-1">Must have: uppercase, lowercase, number, special char (!@#$%...)</p>
+                            </div>
+                            
+                            <div id="errorMessage" class="text-red-600 text-sm text-center hidden"></div>
+                            
+                            <button type="submit" 
+                                class="loading w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center justify-center">
+                                <span class="btn-text">Create Account</span>
+                                <span class="loading spinner hidden">
+                                    <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <script>
+                        document.getElementById('registerForm').addEventListener('htmx:afterRequest', function(evt) {
+                            const errorDiv = document.getElementById('errorMessage');
+                            if (evt.detail.xhr.status === 200 || evt.detail.xhr.status === 201) {
+                                try {
+                                    const data = JSON.parse(evt.detail.xhr.response);
+                                    if (data.access_token) {
+                                        localStorage.setItem('accessToken', data.access_token);
+                                    }
+                                    if (data.refresh_token) {
+                                        localStorage.setItem('refreshToken', data.refresh_token);
+                                    }
+                                    window.location.href = '/login';
+                                } catch(e) {
+                                    window.location.href = '/login';
+                                }
+                            } else if (evt.detail.xhr.status === 400) {
+                                try {
+                                    const data = JSON.parse(evt.detail.xhr.response);
+                                    errorDiv.textContent = data.error || 'Registration failed';
+                                } catch(e) {
+                                    errorDiv.textContent = 'Registration failed';
+                                }
+                                errorDiv.classList.remove('hidden');
+                            } else {
+                                errorDiv.textContent = 'Registration failed. Please try again.';
+                                errorDiv.classList.remove('hidden');
+                            }
+                            document.querySelector('.spinner').classList.add('hidden');
+                            document.querySelector('.btn-text').classList.remove('hidden');
+                        });
+                        
+                        document.getElementById('registerForm').addEventListener('htmx:beforeRequest', function(evt) {
+                            document.querySelector('.spinner').classList.remove('hidden');
+                            document.querySelector('.btn-text').classList.add('hidden');
+                            document.getElementById('errorMessage').classList.add('hidden');
+                        });
+                    </script>
+                    
+                    <div class="mt-6 text-center">
+                        <p class="text-slate-600">Already have an account? 
+                            <a href="/login" class="text-trust font-medium hover:underline">Sign in</a>
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <a href="/" class="text-slate-500 hover:text-trust text-sm">← Back to home</a>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-slate-900 text-slate-300">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                    <p class="text-sm text-slate-400">&copy; 2026 InvoiceFast. All rights reserved.</p>
+                    <div class="flex items-center gap-4">
+                        <a href="/privacy" class="text-slate-400 hover:text-white text-sm">Privacy</a>
+                        <a href="/terms" class="text-slate-400 hover:text-white text-sm">Terms</a>
+                        <div class="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full">
+                            <svg class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                            <span class="text-xs font-medium">KRA OSCP Verified</span>
                         </div>
                     </div>
-                `;
-            } catch (e) {
-                errorContainer.innerHTML = `
-                    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
-                        <p class="font-medium">Registration failed</p>
-                        <p class="text-sm">Please check your information and try again</p>
-                    </div>
-                `;
-            }
-        } else {
-            errorContainer.classList.add('hidden');
-            errorContainer.innerHTML = '';
-        }
-    });
-
-    // Phone number formatting
-    const phoneInput = document.getElementById('phone');
-    if (phoneInput) {
-        phoneInput.addEventListener('input', (e) => {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.startsWith('254')) {
-                value = '0' + value.substring(3);
-            }
-            if (value.length > 10) {
-                value = value.substring(0, 10);
-            }
-            e.target.value = value;
-        });
-    }
-</script>
-{{end}}
-{{end}}
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
