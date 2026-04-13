@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en" x-data="invoiceBuilder()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Invoice | InvoiceFast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                    },
+                    animation: { 'fade-in': 'fadeIn 0.2s ease-out' },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        [x-cloak] { display: none !important; }
+        input[type="checkbox"] { accent-color: #0277BD; }
+        .line-item-drag { cursor: grab; }
+        .line-item-drag:active { cursor: grabbing; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40">
+        <div class="p-6">
+            <a href="/" class="flex items-center gap-2">
+                <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8">
+            </a>
+        </div>
+        
+        <nav class="px-3 space-y-1">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust text-white">
+                <i data-lucide="file-text" class="w-5 h-5"></i>
+                <span>Invoices</span>
+            </a>
+            <a href="/clients" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                <span>Clients</span>
+            </a>
+            <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="settings" class="w-5 h-5"></i>
+                <span>Settings</span>
+            </a>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
+        </nav>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+            <button @click="logout()" class="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-4">
+                        <a href="/invoices" class="p-2 hover:bg-slate-100 rounded-lg">
+                            <i data-lucide="arrow-left" class="w-5 h-5 text-slate-600"></i>
+                        </a>
+                        <div>
+                            <h1 class="text-2xl font-bold text-slate-900">Create Invoice</h1>
+                            <p class="text-slate-500 text-sm mt-1">Fill in the details to create a new invoice</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button @click="saveDraft()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="save" class="w-4 h-4"></i>
+                        Save as Draft
+                    </button>
+                    <button @click="previewInvoice()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="eye" class="w-4 h-4"></i>
+                        Preview
+                    </button>
+                    <button @click="sendInvoice()" :disabled="!canSend" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 disabled:opacity-50">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                        Send Invoice
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex">
+            <!-- Main Form -->
+            <div class="flex-1 p-8">
+                <div class="space-y-6">
+                    <!-- Invoice Settings -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                            <i data-lucide="settings" class="w-4 h-4 text-trust"></i>
+                            Invoice Settings
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Invoice Number</label>
+                                <input type="text" x-model="invoice.invoice_number" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust bg-slate-50" placeholder="INV-0001">
+                                <p class="text-xs text-slate-500 mt-1">Auto-generated if empty</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Invoice Title *</label>
+                                <input type="text" x-model="invoice.title" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust" placeholder="e.g., Consulting Services">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Client *</label>
+                                <select x-model="invoice.client_id" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                                    <option value="">Select Client</option>
+                                    <template x-for="client in clients" :key="client.id">
+                                        <option :value="client.id" x-text="client.name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Currency</label>
+                                <select x-model="invoice.currency" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                                    <option value="KES">KES - Kenyan Shilling</option>
+                                    <option value="USD">USD - US Dollar</option>
+                                    <option value="EUR">EUR - Euro</option>
+                                    <option value="GBP">GBP - British Pound</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Issue Date</label>
+                                <input type="date" x-model="invoice.issue_date" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Due Date *</label>
+                                <input type="date" x-model="invoice.due_date" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Payment Terms</label>
+                                <select x-model="invoice.payment_terms" @change="updateDueDate()" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                                    <option value="0">Due on Receipt</option>
+                                    <option value="7">Net 7 Days</option>
+                                    <option value="14">Net 14 Days</option>
+                                    <option value="30">Net 30 Days</option>
+                                    <option value="60">Net 60 Days</option>
+                                    <option value="90">Net 90 Days</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                                <select x-model="invoice.status" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                                    <option value="draft">Draft</option>
+                                    <option value="sent">Sent</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Line Items -->
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                            <h3 class="font-semibold text-slate-900 flex items-center gap-2">
+                                <i data-lucide="list" class="w-4 h-4 text-trust"></i>
+                                Line Items
+                            </h3>
+                            <button @click="addLineItem()" class="px-3 py-1.5 bg-trust text-white rounded-lg text-sm hover:bg-trust-dark flex items-center gap-1">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                Add Item
+                            </button>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="w-10 px-4 py-3"></th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Item</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-32">Description</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-20">Qty</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-28">Unit Price</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-20">Tax %</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase w-20">Disc %</th>
+                                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase w-28">Total</th>
+                                        <th class="w-10 px-4 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-for="(item, index) in invoice.items" :key="index">
+                                        <tr class="hover:bg-slate-50/50">
+                                            <td class="px-4 py-3">
+                                                <div class="line-item-drag p-2 text-slate-400 hover:text-slate-600">
+                                                    <i data-lucide="grip-vertical" class="w-4 h-4"></i>
+                                                </div>
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <input type="text" x-model="item.name" placeholder="Item name" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-trust">
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <input type="text" x-model="item.description" placeholder="Description" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-trust">
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <input type="number" x-model="item.quantity" min="1" @input="calculateTotals()" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-trust text-right">
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <input type="number" x-model="item.unit_price" min="0" step="0.01" @input="calculateTotals()" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-trust text-right">
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <input type="number" x-model="item.tax_rate" min="0" max="100" @input="calculateTotals()" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-trust text-right">
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <input type="number" x-model="item.discount_rate" min="0" max="100" @input="calculateTotals()" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-trust text-right">
+                                            </td>
+                                            <td class="px-4 py-3 text-right font-semibold text-slate-900">
+                                                <span x-text="formatCurrency(calculateItemTotal(item))"></span>
+                                            </td>
+                                            <td class="px-4 py-3">
+                                                <button @click="removeLineItem(index)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <template x-if="invoice.items.length === 0">
+                                        <tr>
+                                            <td colspan="9" class="px-4 py-12 text-center">
+                                                <p class="text-slate-500 mb-4">No items added yet</p>
+                                                <button @click="addLineItem()" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                                    <i data-lucide="plus" class="w-4 h-4"></i>
+                                                    Add First Item
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Notes & Terms -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                            <i data-lucide="file-text" class="w-4 h-4 text-trust"></i>
+                            Notes & Terms
+                        </h3>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                                <textarea x-model="invoice.notes" rows="3" placeholder="Internal notes..." class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Terms & Conditions</label>
+                                <textarea x-model="invoice.terms" rows="3" placeholder="Payment terms..." class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                            <i data-lucide="sliders" class="w-4 h-4 text-trust"></i>
+                            Advanced Options
+                        </h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="invoice.recurring" class="rounded">
+                                <span class="text-sm">Recurring Invoice</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="invoice.auto_reminder" class="rounded">
+                                <span class="text-sm">Auto Reminders</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="invoice.partial_payment" class="rounded">
+                                <span class="text-sm">Allow Partial Payment</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="invoice.deposit_required" class="rounded">
+                                <span class="text-sm">Require Deposit</span>
+                            </label>
+                        </div>
+                        <div x-show="invoice.recurring" class="mt-4 grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Repeat Every</label>
+                                <select x-model="invoice.recurring_interval" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly</option>
+                                    <option value="yearly">Yearly</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Repeat Count</label>
+                                <input type="number" x-model="invoice.recurring_count" min="1" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Deposit %</label>
+                                <input type="number" x-model="invoice.deposit_percent" min="0" max="100" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pricing Summary Sidebar -->
+            <div class="w-80 bg-white border-l border-slate-200 p-6 h-fit sticky top-6">
+                <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <i data-lucide="calculator" class="w-4 h-4 text-trust"></i>
+                    Pricing Summary
+                </h3>
+                
+                <div class="space-y-3">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-600">Subtotal</span>
+                        <span class="font-medium" x-text="formatCurrency(subtotal)">KES 0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-600">Tax</span>
+                        <span class="font-medium" x-text="formatCurrency(taxTotal)">KES 0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-600">Discount</span>
+                        <span class="font-medium text-green-600" x-text="'-' + formatCurrency(discountTotal)">KES 0</span>
+                    </div>
+                    <hr class="border-slate-200">
+                    <div class="flex justify-between text-lg font-bold">
+                        <span class="text-slate-900">Total</span>
+                        <span class="text-trust" x-text="formatCurrency(grandTotal)">KES 0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-600">Paid</span>
+                        <span class="font-medium text-green-600" x-text="formatCurrency(invoice.paid_amount || 0)">KES 0</span>
+                    </div>
+                    <hr class="border-slate-200">
+                    <div class="flex justify-between font-semibold">
+                        <span class="text-slate-900">Balance Due</span>
+                        <span class="text-red-600" x-text="formatCurrency(balanceDue)">KES 0</span>
+                    </div>
+                </div>
+
+                <hr class="my-6 border-slate-200">
+
+                <!-- Client Info Preview -->
+                <template x-if="selectedClient">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-700 mb-3">Client Details</h4>
+                        <div class="bg-slate-50 rounded-xl p-4">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold"
+                                    :class="getAvatarGradient(selectedClient.id)">
+                                    <span x-text="selectedClient.name?.charAt(0).toUpperCase()">C</span>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-slate-900" x-text="selectedClient.name">Client Name</p>
+                                    <p class="text-xs text-slate-500" x-text="selectedClient.company || selectedClient.email"></p>
+                                </div>
+                            </div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center gap-2 text-slate-600">
+                                    <i data-lucide="mail" class="w-4 h-4"></i>
+                                    <span x-text="selectedClient.email || '-'">-</span>
+                                </div>
+                                <div class="flex items-center gap-2 text-slate-600">
+                                    <i data-lucide="phone" class="w-4 h-4"></i>
+                                    <span x-text="selectedClient.phone || '-'">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+    </div>
+
+    <script>
+        function invoiceBuilder() {
+            return {
+                loading: false,
+                clients: [],
+                selectedClient: null,
+                invoice: {
+                    invoice_number: '',
+                    title: '',
+                    client_id: '',
+                    currency: 'KES',
+                    issue_date: new Date().toISOString().split('T')[0],
+                    due_date: '',
+                    payment_terms: '30',
+                    status: 'draft',
+                    notes: '',
+                    terms: '',
+                    items: [],
+                    paid_amount: 0,
+                    recurring: false,
+                    recurring_interval: 'monthly',
+                    recurring_count: 12,
+                    auto_reminder: false,
+                    partial_payment: false,
+                    deposit_required: false,
+                    deposit_percent: 50,
+                },
+                toast: { show: false, message: '', type: 'success' },
+
+                get subtotal() {
+                    return this.invoice.items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unit_price || 0), 0);
+                },
+
+                get taxTotal() {
+                    return this.invoice.items.reduce((sum, item) => {
+                        const itemSubtotal = (item.quantity || 0) * (item.unit_price || 0);
+                        const discount = itemSubtotal * (item.discount_rate || 0) / 100;
+                        const afterDiscount = itemSubtotal - discount;
+                        return sum + afterDiscount * (item.tax_rate || 0) / 100;
+                    }, 0);
+                },
+
+                get discountTotal() {
+                    return this.invoice.items.reduce((sum, item) => {
+                        return sum + (item.quantity || 0) * (item.unit_price || 0) * (item.discount_rate || 0) / 100;
+                    }, 0);
+                },
+
+                get grandTotal() {
+                    return this.subtotal + this.taxTotal - this.discountTotal;
+                },
+
+                get balanceDue() {
+                    return this.grandTotal - (this.invoice.paid_amount || 0);
+                },
+
+                get canSend() {
+                    return this.invoice.client_id && this.invoice.due_date && this.invoice.items.length > 0;
+                },
+
+                async init() {
+                    if (!requireAuth()) return;
+                    lucide.createIcons();
+                    await this.loadClients();
+                    this.generateInvoiceNumber();
+                    
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.get('client')) {
+                        this.invoice.client_id = params.get('client');
+                    }
+                },
+
+                async loadClients() {
+                    this.loading = true;
+                    try {
+                        const data = await InvoiceFastAPI.clients.list({ limit: 100 });
+                        this.clients = data.clients || [];
+                        if (this.invoice.client_id) {
+                            this.selectedClient = this.clients.find(c => c.id === this.invoice.client_id);
+                        }
+                    } catch(err) {
+                        console.error('Failed to load clients:', err);
+                    } finally {
+                        this.loading = false;
+                        lucide.createIcons();
+                    }
+                },
+
+                generateInvoiceNumber() {
+                    const now = new Date();
+                    const year = now.getFullYear().toString().slice(-2);
+                    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+                    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+                    this.invoice.invoice_number = 'INV-' + year + month + '-' + random;
+                },
+
+                addLineItem() {
+                    this.invoice.items.push({
+                        name: '',
+                        description: '',
+                        quantity: 1,
+                        unit_price: 0,
+                        tax_rate: 16,
+                        discount_rate: 0,
+                    });
+                    lucide.createIcons();
+                },
+
+                removeLineItem(index) {
+                    this.invoice.items.splice(index, 1);
+                    this.calculateTotals();
+                },
+
+                calculateItemTotal(item) {
+                    const qty = item.quantity || 0;
+                    const price = item.unit_price || 0;
+                    const tax = item.tax_rate || 0;
+                    const disc = item.discount_rate || 0;
+                    
+                    const subtotal = qty * price;
+                    const discount = subtotal * disc / 100;
+                    const afterDisc = subtotal - discount;
+                    const taxAmount = afterDisc * tax / 100;
+                    
+                    return afterDisc + taxAmount;
+                },
+
+                calculateTotals() {
+                    return {
+                        subtotal: this.subtotal,
+                        tax: this.taxTotal,
+                        discount: this.discountTotal,
+                        total: this.grandTotal,
+                    };
+                },
+
+                updateDueDate() {
+                    if (!this.invoice.issue_date) return;
+                    const terms = parseInt(this.invoice.payment_terms) || 0;
+                    const issueDate = new Date(this.invoice.issue_date);
+                    issueDate.setDate(issueDate.getDate() + terms);
+                    this.invoice.due_date = issueDate.toISOString().split('T')[0];
+                },
+
+                formatCurrency(amount) {
+                    return new Intl.NumberFormat('en-KE', { 
+                        style: 'currency', 
+                        currency: this.invoice.currency || 'KES',
+                        minimumFractionDigits: 0 
+                    }).format(amount || 0);
+                },
+
+                getAvatarGradient(id) {
+                    const gradients = [
+                        'bg-gradient-to-br from-purple-500 to-indigo-600',
+                        'bg-gradient-to-br from-pink-500 to-rose-600',
+                        'bg-gradient-to-br from-cyan-500 to-blue-600',
+                        'bg-gradient-to-br from-emerald-500 to-green-600',
+                        'bg-gradient-to-br from-amber-500 to-orange-600',
+                    ];
+                    return gradients[id?.charCodeAt(0) % gradients.length] || gradients[0];
+                },
+
+                async saveDraft() {
+                    try {
+                        this.invoice.status = 'draft';
+                        await InvoiceFastAPI.invoices.create(this.formatInvoiceData());
+                        this.showToast('Draft saved', 'success');
+                        window.location.href = '/invoices';
+                    } catch(err) {
+                        this.showToast('Failed to save', 'error');
+                    }
+                },
+
+                async sendInvoice() {
+                    if (!this.canSend) return;
+                    try {
+                        this.invoice.status = 'sent';
+                        const invoice = await InvoiceFastAPI.invoices.create(this.formatInvoiceData());
+                        await InvoiceFastAPI.invoices.send(invoice.id);
+                        this.showToast('Invoice sent', 'success');
+                        window.location.href = '/invoices/' + invoice.id;
+                    } catch(err) {
+                        this.showToast('Failed to send', 'error');
+                    }
+                },
+
+                previewInvoice() {
+                    this.showToast('Preview coming soon', 'success');
+                },
+
+                formatInvoiceData() {
+                    return {
+                        invoice_number: this.invoice.invoice_number,
+                        title: this.invoice.title,
+                        client_id: this.invoice.client_id,
+                        currency: this.invoice.currency,
+                        issue_date: this.invoice.issue_date,
+                        due_date: this.invoice.due_date,
+                        payment_terms: parseInt(this.invoice.payment_terms),
+                        status: this.invoice.status,
+                        notes: this.invoice.notes,
+                        terms: this.invoice.terms,
+                        items: this.invoice.items,
+                        recurring: this.invoice.recurring,
+                        recurring_interval: this.invoice.recurring_interval,
+                        recurring_count: this.invoice.recurring_count,
+                        auto_reminder: this.invoice.auto_reminder,
+                        partial_payment: this.invoice.partial_payment,
+                        deposit_required: this.invoice.deposit_required,
+                        deposit_percent: this.invoice.deposit_percent,
+                    };
+                },
+
+                showToast(message, type) {
+                    this.toast = { show: true, message, type };
+                    setTimeout(() => this.toast.show = false, 3000);
+                },
+
+                logout() {
+                    InvoiceFastAPI.logout();
+                }
+            };
+        }
+    </script>
+</body>
+</html>

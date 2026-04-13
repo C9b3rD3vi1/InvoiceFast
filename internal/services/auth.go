@@ -91,6 +91,8 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 	var user models.User
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "email = ?", email).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// SECURITY: Return nil, nil to prevent email enumeration
+			log.Printf("[SECURITY] Password reset attempted for non-existent email: %s", email)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("database error: %w", err)
@@ -105,6 +107,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 	}
 
 	if recentCount >= 3 {
+		log.Printf("[SECURITY] Rate limited password reset for user: %s", user.ID)
 		return nil, errors.New("rate limit exceeded: too many reset requests")
 	}
 
@@ -121,7 +124,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 		TenantID:  tenantID,
 		UserID:    user.ID,
 		Token:     tokenHash,
-		RawToken:  rawToken,
+		RawToken:  rawToken, // Will be cleared before returning
 		Email:     email,
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 		IPAddress: ipAddress,
@@ -132,6 +135,11 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 	if err := s.db.Create(resetToken).Error; err != nil {
 		return nil, fmt.Errorf("failed to create reset token: %w", err)
 	}
+
+	// SECURITY: Clear raw token before returning - never expose in API response
+	resetToken.RawToken = ""
+
+	log.Printf("[AUDIT] Password reset initiated for user %s from IP %s", user.ID, ipAddress)
 
 	return resetToken, nil
 }

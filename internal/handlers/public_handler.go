@@ -36,9 +36,9 @@ func NewPublicHandler(
 	}
 }
 
-// ServeLanding - DEPRECATED: use routes
+// ServeLanding serves the landing page
 func (h *PublicHandler) ServeLanding(c *fiber.Ctx) error {
-	return c.Redirect("/")
+	return c.SendFile("./views/pages/landing.html")
 }
 
 // ServePortal - get public invoice by magic token
@@ -90,15 +90,27 @@ func (h *PublicHandler) HandleContact(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Thank you! We'll contact you soon.", "ticket": "TKT-" + fmt.Sprint(time.Now().Unix())})
 }
 
-// Auth handlers moved to auth_handler.go - these are aliases for backward compatibility
-// HandleLogin - DEPRECATED: use AuthHandler.Login
+// HandleLogin processes login form submission
 func (h *PublicHandler) HandleLogin(c *fiber.Ctx) error {
-	return c.Redirect("/api/v1/auth/login")
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
+	}
+
+	if req.Email == "" || req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Email and password required"})
+	}
+
+	return c.JSON(fiber.Map{"message": "Use /api/v1/auth/login endpoint"})
 }
 
-// HandleRegister - DEPRECATED: use AuthHandler.Register
+// HandleRegister processes registration form submission
 func (h *PublicHandler) HandleRegister(c *fiber.Ctx) error {
-	return c.Redirect("/api/v1/auth/register")
+	return c.JSON(fiber.Map{"message": "Use /api/v1/auth/register endpoint"})
 }
 
 // GetInvoiceByToken - public invoice by magic token

@@ -1,194 +1,308 @@
 package middleware
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"time"
-
-	"invoicefast/internal/config"
 
 	"github.com/gofiber/fiber/v2"
 )
 
+// FiberRateLimiter implements a production-ready token bucket rate limiter for Fiber
 type FiberRateLimiter struct {
-	mu       sync.RWMutex
-	requests map[string][]time.Time
-	limits   map[string]int
-	window   time.Duration
-	cleanup  *time.Ticker
-	cfg      *config.RateLimitConfig
+	mu              sync.RWMutex
+	tokens          map[string]*clientTokens
+	rate            int
+	window          time.Duration
+	burst           int
+	cleanupInterval time.Duration
+	stopCleanup     chan bool
 }
 
-// Default plan limits
-var defaultPlanLimits = map[string]int{
-	"free":       100,   // 100 requests/min for free tier
-	"pro":        500,   // 500 requests/min for pro
-	"agency":     2000,  // 2000 requests/min for agency
-	"enterprise": 10000, // unlimited-ish for enterprise
+type clientTokens struct {
+	tokens    []time.Time
+	lastCheck time.Time
 }
 
-var defaultBurstLimits = map[string]int{
-	"free":       20,
-	"pro":        100,
-	"agency":     500,
-	"enterprise": 2000,
+// EndpointConfig allows different rate limits per endpoint
+type EndpointConfig struct {
+	Path   string
+	Rate   int
+	Window time.Duration
+	Burst  int
 }
 
-func NewFiberRateLimiterWithConfig(cfg *config.RateLimitConfig) *FiberRateLimiter {
-	// Apply config overrides to defaults
-	planLimits := make(map[string]int)
-	planBurstLimits := make(map[string]int)
+// Default endpoint configs
+var defaultEndpointConfigs = []EndpointConfig{
+	{Path: "/webhook/", Rate: 30, Window: time.Minute, Burst: 10},   // Webhooks - stricter
+	{Path: "/auth/", Rate: 10, Window: time.Minute, Burst: 5},         // Auth endpoints
+	{Path: "/api/v1/invoices", Rate: 60, Window: time.Minute, Burst: 15}, // Invoice operations
+	{Path: "/api/v1/", Rate: 100, Window: time.Minute, Burst: 20},    // Default API
+}
 
-	for k, v := range defaultPlanLimits {
-		planLimits[k] = v
-	}
-	for k, v := range defaultBurstLimits {
-		planBurstLimits[k] = v
-	}
+// NewFiberRateLimiter creates a new rate limiter with default settings
+func NewFiberRateLimiter() *FiberRateLimiter {
+	return NewFiberRateLimiterWithConfig(100, time.Minute, 20)
+}
 
-	// Override with config values if provided
-	if cfg.FreeLimit > 0 {
-		planLimits["free"] = cfg.FreeLimit
-	}
-	if cfg.ProLimit > 0 {
-		planLimits["pro"] = cfg.ProLimit
-	}
-	if cfg.AgencyLimit > 0 {
-		planLimits["agency"] = cfg.AgencyLimit
-	}
-	if cfg.EnterpriseLimit > 0 {
-		planLimits["enterprise"] = cfg.EnterpriseLimit
-	}
-
+// NewFiberRateLimiterWithConfig creates a rate limiter with custom settings
+func NewFiberRateLimiterWithConfig(rate int, window time.Duration, burst int) *FiberRateLimiter {
 	rl := &FiberRateLimiter{
-		requests: make(map[string][]time.Time),
-		limits:   make(map[string]int),
-		window:   time.Minute,
-		cfg:      cfg,
+		tokens:          make(map[string]*clientTokens),
+		rate:            rate,
+		window:          window,
+		burst:           burst,
+		cleanupInterval: 5 * time.Minute,
+		stopCleanup:     make(chan bool),
 	}
-
-	// Store limits for use in Limit method
-	for k, v := range planLimits {
-		rl.limits["plan:"+k] = v
-	}
-
-	go rl.cleanupLoop()
+	go rl.cleanup()
 	return rl
 }
 
-// NewFiberRateLimiter creates default rate limiter (for backward compatibility)
-func NewFiberRateLimiter() *FiberRateLimiter {
-	return NewFiberRateLimiterWithConfig(&config.RateLimitConfig{
-		Enabled:     true,
-		RequestsPer: 100,
-		Window:      time.Minute,
-		Burst:       20,
-	})
-}
-
-func (rl *FiberRateLimiter) cleanupLoop() {
-	rl.cleanup = time.NewTicker(5 * time.Minute)
-	defer rl.cleanup.Stop()
-
-	for range rl.cleanup.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for key, times := range rl.requests {
-			var valid []time.Time
-			for _, t := range times {
-				if now.Sub(t) < rl.window {
-					valid = append(valid, t)
-				}
-			}
-			if len(valid) == 0 {
-				delete(rl.requests, key)
-			} else {
-				rl.requests[key] = valid
-			}
-		}
-		rl.mu.Unlock()
-	}
-}
-
-func (rl *FiberRateLimiter) getLimitForKey(key string) int {
-	// Check if custom limit set (e.g., from plan)
-	if limit, ok := rl.limits[key]; ok {
-		return limit
-	}
-	// Default to free tier
-	return defaultPlanLimits["free"]
-}
-
-func (rl *FiberRateLimiter) Limit(requests int, window time.Duration) fiber.Handler {
+// Middleware returns a Fiber middleware handler
+func (rl *FiberRateLimiter) Middleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Build key based on user context
-		key := c.IP()
+		key := rl.getClientKey(c)
+		endpoint := c.Path()
 
-		// Use user_id if authenticated for more granular limiting
-		if userID := c.Locals("user_id"); userID != nil {
-			if id, ok := userID.(string); ok {
-				key = "user:" + id
-			}
-		}
-
-		// Check for tenant-level rate limiting (use plan from JWT claims)
-		if plan := c.Locals("plan"); plan != nil {
-			if planStr, ok := plan.(string); ok {
-				if limit, exists := defaultPlanLimits[planStr]; exists {
-					requests = limit // Override with plan limit
-				}
-			}
-		}
-
-		rl.mu.Lock()
-		limit := requests
-		if l, ok := rl.limits[key]; ok {
-			limit = l
-		}
-
-		now := time.Now()
-		valid := now.Add(-window)
-
-		var validReqs []time.Time
-		for _, t := range rl.requests[key] {
-			if t.After(valid) {
-				validReqs = append(validReqs, t)
-			}
-		}
-
-		if len(validReqs) >= limit {
-			rl.mu.Unlock()
-			// Set standard rate limit headers
-			c.Set("X-RateLimit-Limit", string(rune(limit)))
-			c.Set("X-RateLimit-Remaining", "0")
-			c.Set("X-RateLimit-Reset", string(rune(time.Now().Add(window).Unix())))
-
+		if !rl.AllowForEndpoint(key, endpoint) {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error":       "rate limit exceeded",
-				"code":        "RATE_LIMITED",
-				"retry_after": window.Seconds(),
+				"error":       "Rate limit exceeded",
+				"retry_after": rl.window.Seconds(),
 			})
 		}
-
-		rl.requests[key] = append(validReqs, now)
-		rl.mu.Unlock()
-
-		// Set rate limit headers for client
-		c.Set("X-RateLimit-Limit", string(rune(limit)))
-		c.Set("X-RateLimit-Remained", string(rune(limit-len(validReqs)-1)))
-
 		return c.Next()
 	}
 }
 
-// SetCustomLimit allows setting a custom rate limit for a specific key (e.g., per plan)
-func (rl *FiberRateLimiter) SetCustomLimit(key string, limit int) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	rl.limits[key] = limit
+// AuthRateLimiter is stricter for auth endpoints
+func (rl *FiberRateLimiter) AuthRateLimiter() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		key := rl.getClientKey(c)
+		
+		rl.mu.Lock()
+		defer rl.mu.Unlock()
+		
+		now := time.Now()
+		windowStart := now.Add(-rl.window)
+		authRate := 10 // Stricter for auth
+		
+		client, exists := rl.tokens[key]
+		if exists {
+			var valid []time.Time
+			for _, t := range client.tokens {
+				if t.After(windowStart) {
+					valid = append(valid, t)
+				}
+			}
+			
+			if len(valid) >= authRate {
+				return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+					"error":       "Too many authentication attempts",
+					"retry_after": "60 seconds",
+				})
+			}
+			
+			client.tokens = append(valid, now)
+		} else {
+			rl.tokens[key] = &clientTokens{
+				tokens:    []time.Time{now},
+				lastCheck: now,
+			}
+		}
+		
+		return c.Next()
+	}
 }
 
+// WebhookRateLimiter is stricter for webhooks
+func (rl *FiberRateLimiter) WebhookRateLimiter() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		key := rl.getClientKey(c)
+		endpoint := c.Path()
+
+		if !rl.AllowForWebhook(key, endpoint) {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error":       "Webhook rate limit exceeded",
+				"retry_after": "60 seconds",
+			})
+		}
+		return c.Next()
+	}
+}
+
+// AllowForWebhook uses stricter limits
+func (rl *FiberRateLimiter) AllowForWebhook(key, endpoint string) bool {
+	return rl.allowWithRate(key, 30) // 30 reqs/min for webhooks
+}
+
+// AllowForEndpoint checks rate limit for a specific endpoint
+func (rl *FiberRateLimiter) AllowForEndpoint(key, endpoint string) bool {
+	config := rl.getEndpointConfig(endpoint)
+	return rl.allowWithRate(key, config.Rate)
+}
+
+// Allow checks default rate limit
+func (rl *FiberRateLimiter) Allow(key string) bool {
+	return rl.allowWithRate(key, rl.rate)
+}
+
+// allowWithRate checks if a request should be allowed
+func (rl *FiberRateLimiter) allowWithRate(key string, rate int) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	windowStart := now.Add(-rl.window)
+
+	client, exists := rl.tokens[key]
+	if !exists {
+		rl.tokens[key] = &clientTokens{
+			tokens:    []time.Time{now},
+			lastCheck: now,
+		}
+		return true
+	}
+
+	// Remove expired tokens
+	var valid []time.Time
+	for _, t := range client.tokens {
+		if t.After(windowStart) {
+			valid = append(valid, t)
+		}
+	}
+
+	// Check if under rate limit
+	if len(valid) >= rate {
+		client.tokens = valid
+		return false
+	}
+
+	// Add new token
+	client.tokens = append(valid, now)
+	client.lastCheck = now
+
+	return true
+}
+
+func (rl *FiberRateLimiter) getEndpointConfig(endpoint string) EndpointConfig {
+	for _, config := range defaultEndpointConfigs {
+		if len(endpoint) >= len(config.Path) && endpoint[:len(config.Path)] == config.Path {
+			return config
+		}
+	}
+	return EndpointConfig{
+		Path:   "/api/v1/",
+		Rate:   rl.rate,
+		Window: rl.window,
+		Burst:  rl.burst,
+	}
+}
+
+func (rl *FiberRateLimiter) getClientKey(c *fiber.Ctx) string {
+	// Check for forwarded headers
+	if forwarded := c.Get("X-Forwarded-For"); forwarded != "" {
+		// Take first IP
+		if idx := strings.Index(forwarded, ","); idx > 0 {
+			return strings.TrimSpace(forwarded[:idx])
+		}
+		return forwarded
+	}
+
+	if cfRay := c.Get("CF-Connecting-IP"); cfRay != "" {
+		return cfRay
+	}
+
+	// Fall back to IP
+	return c.IP()
+}
+
+func (rl *FiberRateLimiter) cleanup() {
+	ticker := time.NewTicker(rl.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			windowStart := now.Add(-rl.window)
+
+			for key, client := range rl.tokens {
+				// Remove if no valid tokens and last check was > 1 hour ago
+				if now.Sub(client.lastCheck) > time.Hour {
+					delete(rl.tokens, key)
+					continue
+				}
+
+				var valid []time.Time
+				for _, t := range client.tokens {
+					if t.After(windowStart) {
+						valid = append(valid, t)
+					}
+				}
+				client.tokens = valid
+			}
+			rl.mu.Unlock()
+
+		case <-rl.stopCleanup:
+			return
+		}
+	}
+}
+
+// Stop stops the cleanup goroutine
 func (rl *FiberRateLimiter) Stop() {
-	if rl.cleanup != nil {
-		rl.cleanup.Stop()
+	if rl.stopCleanup != nil {
+		close(rl.stopCleanup)
+	}
+}
+
+// GetRateLimitInfo returns current rate limit status
+func (rl *FiberRateLimiter) GetRateLimitInfo(c *fiber.Ctx) map[string]interface{} {
+	key := rl.getClientKey(c)
+
+	rl.mu.RLock()
+	defer rl.mu.RUnlock()
+
+	now := time.Now()
+	windowStart := now.Add(-rl.window)
+
+	client, exists := rl.tokens[key]
+	if !exists {
+		return map[string]interface{}{
+			"remaining": rl.rate,
+			"reset":     now.Add(rl.window).Unix(),
+			"limit":     rl.rate,
+		}
+	}
+
+	var valid int
+	for _, t := range client.tokens {
+		if t.After(windowStart) {
+			valid++
+		}
+	}
+
+	return map[string]interface{}{
+		"remaining": rl.rate - valid,
+		"reset":     now.Add(rl.window).Unix(),
+		"limit":     rl.rate,
+		"used":      valid,
+	}
+}
+
+// HeadersMiddleware adds rate limit headers to response
+func (rl *FiberRateLimiter) HeadersMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		err := c.Next()
+		
+		info := rl.GetRateLimitInfo(c)
+		c.Set("X-RateLimit-Limit", fmt.Sprintf("%v", info["limit"]))
+		c.Set("X-RateLimit-Remaining", fmt.Sprintf("%v", info["remaining"]))
+		c.Set("X-RateLimit-Reset", fmt.Sprintf("%v", info["reset"]))
+		
+		return err
 	}
 }

@@ -1,109 +1,483 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" x-data="dashboard()" x-init="init()">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard | InvoiceFast</title>
+    <title>Dashboard - InvoiceFast</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="/static/js/auth.js"></script>
-    <style>[x-cloak] { display: none !important; }</style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-slate-50" x-data="dashboard()" x-init="init()">
+<body class="bg-slate-50 min-h-screen">
     <!-- Sidebar -->
-    <aside class="fixed left-0 top-0 h-full w-64 bg-slate-900 text-white p-4">
-        <div class="mb-8">
-            <h1 class="text-xl font-bold">InvoiceFast</h1>
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40">
+        <div class="p-6">
+            <a href="/" class="flex items-center gap-2">
+                <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8">
+            </a>
         </div>
-        <nav class="space-y-2">
-            <a href="/dashboard" class="block py-2 px-4 rounded bg-slate-800">Dashboard</a>
-            <a href="/invoices" class="block py-2 px-4 rounded hover:bg-slate-800">Invoices</a>
-            <a href="/clients" class="block py-2 px-4 rounded hover:bg-slate-800">Clients</a>
-            <a href="/payments" class="block py-2 px-4 rounded hover:bg-slate-800">Payments</a>
-            <a href="/settings" class="block py-2 px-4 rounded hover:bg-slate-800">Settings</a>
+        
+        <nav class="px-3 space-y-1">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                <span class="font-medium">Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Invoices</span>
+            </a>
+            <a href="/clients" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                <span>Clients</span>
+            </a>
+            <a href="/payments" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                <span>Payments</span>
+            </a>
+            
+            <a href="/reports" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span>Reports</span>
+            </a>
+            
+            <a href="/notifications" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-600 text-white">
+                <i class="fas fa-bell w-5"></i>
+                <span>Notifications</span>
+            </a>
+            
+<a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>
+                <span>Settings</span>
+            </a>
+            <a href="/billing" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                <span>Billing</span>
+            </a>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
         </nav>
-        <div class="absolute bottom-4 left-4 right-4">
-            <button @click="logout()" class="w-full py-2 bg-red-600 rounded hover:bg-red-700">Logout</button>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+            <button @click="logout()" class="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m10 4v-2a2 2 0 00-2-2H5a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2m4-4l4 4m0 0l-4 4m4-4H7"/></svg>
+                <span>Logout</span>
+            </button>
         </div>
     </aside>
 
     <!-- Main Content -->
     <main class="ml-64 p-8">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-8">
+        <header class="flex items-center justify-between mb-8">
             <div>
                 <h1 class="text-2xl font-bold text-slate-900">Dashboard</h1>
-                <p class="text-slate-500" x-text="tenantName || 'Loading...'"></p>
+                <p class="text-slate-500" x-text="user?.name || 'User'"></p>
             </div>
             <div class="flex items-center gap-4">
-                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span class="text-sm text-slate-500">Last updated: <span x-text="lastUpdated"></span></span>
+                <select x-model="period" @change="loadDashboard()" class="px-4 py-2 rounded-lg border border-slate-300">
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="quarter">This Quarter</option>
+                    <option value="year">This Year</option>
+                </select>
+                <a href="/invoices/new" class="bg-trust text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    New Invoice
+                </a>
             </div>
-        </div>
+        </header>
 
-        <!-- Metrics -->
+        <!-- Stats Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div class="bg-white rounded-xl p-6 shadow-sm">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-slate-500 text-sm">Total Unpaid</span>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 bg-green-100 rounded-lg">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2-3 .895-3 2zm0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <span class="text-xs font-medium" :class="growthClass(stats?.revenue_growth)" x-text="growthLabel(stats?.revenue_growth)"></span>
                 </div>
-                <p class="text-2xl font-bold" x-text="metrics.totalUnpaid || '0'"></p>
+                <p class="text-xs text-slate-500">Total Revenue</p>
+                <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(stats?.total_revenue)">KES 0</p>
             </div>
-            <div class="bg-white rounded-xl p-6 shadow-sm">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-slate-500 text-sm">Monthly Revenue</span>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 bg-blue-100 rounded-lg">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                    </div>
                 </div>
-                <p class="text-2xl font-bold" x-text="metrics.monthlyRevenue || '0'"></p>
+                <p class="text-xs text-slate-500">This <span x-text="periodLabel"></span></p>
+                <p class="text-xl font-bold text-blue-600" x-text="formatCurrency(stats?.revenue_this_period)">KES 0</p>
+                <p class="text-xs text-slate-500">vs <span x-text="formatCurrency(stats?.revenue_previous_period)"></span> prev</p>
             </div>
-            <div class="bg-white rounded-xl p-6 shadow-sm">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-slate-500 text-sm">Active Clients</span>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 bg-yellow-100 rounded-lg">
+                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
                 </div>
-                <p class="text-2xl font-bold" x-text="metrics.activeClients || '0'"></p>
+                <p class="text-xs text-slate-500">Outstanding</p>
+                <p class="text-xl font-bold text-yellow-600" x-text="formatCurrency(stats?.outstanding)">KES 0</p>
+                <p class="text-xs text-slate-500"><span x-text="stats?.collection_rate?.toFixed(1)"></span>% collected</p>
             </div>
-            <div class="bg-white rounded-xl p-6 shadow-sm">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-slate-500 text-sm">KRA Success</span>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2 bg-purple-100 rounded-lg">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    </div>
                 </div>
-                <p class="text-2xl font-bold" x-text="metrics.kraSuccessRate || '0' + '%'"></p>
+                <p class="text-xs text-slate-500">Total Invoices</p>
+                <p class="text-xl font-bold text-purple-600" x-text="stats?.total_invoices || 0">0</p>
+                <p class="text-xs text-slate-500">
+                    <span class="text-green-600" x-text="stats?.paid_count || 0">0</span> paid,
+                    <span class="text-red-600" x-text="stats?.overdue_count || 0">0</span> overdue
+                </p>
             </div>
         </div>
 
-        <!-- Recent Invoices -->
-        <div class="bg-white rounded-xl shadow-sm">
-            <div class="p-6 border-b">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold">Recent Invoices</h2>
-                    <a href="/static/invoices.html" class="text-sm text-blue-600 hover:underline">View all</a>
+        <!-- More Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <p class="text-xs text-slate-500">Avg Invoice Value</p>
+                <p class="text-lg font-bold text-slate-900" x-text="formatCurrency(stats?.avg_invoice_value)">KES 0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <p class="text-xs text-slate-500">Collection Rate</p>
+                <p class="text-lg font-bold text-slate-900"><span x-text="stats?.collection_rate?.toFixed(1)">0</span>%</p>
+                <div class="w-full bg-slate-200 rounded-full h-2 mt-2">
+                    <div class="bg-green-500 h-2 rounded-full" :style="'width:' + (stats?.collection_rate || 0) + '%'"></div>
                 </div>
             </div>
-            <div class="divide-y">
-                <template x-for="invoice in recentInvoices" :key="invoice.id">
-                    <div class="p-4 flex items-center justify-between">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                </svg>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <p class="text-xs text-slate-500">Avg Payment Days</p>
+                <p class="text-lg font-bold text-slate-900"><span x-text="stats?.avg_payment_days?.toFixed(1)">0</span> days</p>
+            </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl border border-slate-200 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-slate-900">Revenue Trend</h3>
+                    <select x-model="chartPeriod" @change="updateCharts()" class="text-xs px-2 py-1 rounded border border-slate-300">
+                        <option value="month">Monthly</option>
+                        <option value="year">Yearly</option>
+                    </select>
+                </div>
+                <div class="relative h-64 w-full">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Invoice Status</h3>
+                <div class="relative h-64 w-full flex items-center justify-center">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Invoices Created</h3>
+                <div class="relative h-48 w-full">
+                    <canvas id="invoiceChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Top Clients by Revenue</h3>
+                <div class="relative h-48 w-full">
+                    <canvas id="clientChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-900">Recent Invoices</h3>
+                    <a href="/invoices" class="text-sm text-trust hover:underline">View all</a>
+                </div>
+                <div class="max-h-80 overflow-y-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-50 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Invoice</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Client</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Amount</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                            <template x-if="loading">
+                                <tr><td colspan="4" class="px-6 py-8 text-center text-slate-500">Loading...</td></tr>
+                            </template>
+                            <template x-for="invoice in recentInvoices" :key="invoice.id">
+                                <tr class="hover:bg-slate-50">
+                                    <td class="px-6 py-3">
+                                        <a :href="'/invoices/' + invoice.id" class="font-medium text-trust hover:underline" x-text="invoice.invoice_number">INV-001</a>
+                                        <p class="text-xs text-slate-500" x-text="formatDate(invoice.created_at)"></p>
+                                    </td>
+                                    <td class="px-6 py-3 text-slate-600" x-text="invoice.client_name || '-'">Client</td>
+                                    <td class="px-6 py-3 font-medium" x-text="formatCurrency(invoice.total)">KES 0</td>
+                                    <td class="px-6 py-3" x-html="formatStatus(invoice.status)"></td>
+                                </tr>
+                            </template>
+                            <template x-if="!loading && recentInvoices.length === 0">
+                                <tr><td colspan="4" class="px-6 py-8 text-center text-slate-500">No invoices yet</td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200">
+                    <h3 class="font-semibold text-slate-900">Top Paying Clients</h3>
+                </div>
+                <div class="divide-y divide-slate-200">
+                    <template x-if="loading">
+                        <div class="px-6 py-8 text-center text-slate-500">Loading...</div>
+                    </template>
+                    <template x-for="(client, index) in topClients" :key="client.client_id">
+                        <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50">
+                            <div class="flex items-center gap-3">
+                                <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    :class="index === 0 ? 'bg-yellow-100 text-yellow-700' : index === 1 ? 'bg-slate-100 text-slate-700' : 'bg-slate-100 text-slate-500'"
+                                    x-text="index + 1"></span>
+                                <div>
+                                    <p class="font-medium text-slate-900" x-text="client.client_name">Client</p>
+                                    <p class="text-xs text-slate-500"><span x-text="client.invoice_count"></span> invoices</p>
+                                </div>
                             </div>
-                            <div>
-                                <p class="font-medium" x-text="invoice.invoiceNumber"></p>
-                                <p class="text-sm text-slate-500" x-text="invoice.clientName"></p>
-                            </div>
+                            <p class="font-bold text-green-600" x-text="formatCurrency(client.total_paid)">KES 0</p>
                         </div>
-                        <div class="text-right">
-                            <p class="font-medium" x-text="invoice.amount"></p>
-                            <span class="text-xs px-2 py-1 rounded" :class="invoice.statusClass" x-text="invoice.status"></span>
-                        </div>
-                    </div>
-                </template>
-                <div x-show="loading" class="p-4 text-center text-slate-500">
-                    Loading...
+                    </template>
+                    <template x-if="!loading && topClients.length === 0">
+                        <div class="px-6 py-8 text-center text-slate-500">No data yet</div>
+                    </template>
                 </div>
             </div>
         </div>
     </main>
 
-    <script src="/static/js/dashboard.js"></script>
+    <script>
+    function dashboard() {
+        return {
+            loading: true,
+            period: 'month',
+            chartPeriod: 'month',
+            stats: null,
+            recentInvoices: [],
+            recentClients: [],
+            topClients: [],
+            user: null,
+            revenueChart: null,
+            statusChart: null,
+            invoiceChart: null,
+            clientChart: null,
+            
+            get periodLabel() {
+                const labels = { week: 'Week', month: 'Month', quarter: 'Quarter', year: 'Year' };
+                return labels[this.period] || 'Month';
+            },
+            
+            get revenueChange() {
+                if (!this.stats) return 0;
+                return this.stats.revenue_this_period || 0;
+            },
+            
+            growthClass(growth) {
+                if (!growth) return 'text-slate-500';
+                return growth > 0 ? 'text-green-600' : 'text-red-600';
+            },
+            
+            growthLabel(growth) {
+                if (!growth) return '0%';
+                const sign = growth > 0 ? '+' : '';
+                return sign + growth.toFixed(1) + '%';
+            },
+            
+            async init() {
+                if (!requireAuth()) return;
+                this.user = getUser();
+                this.initCharts();
+                await this.loadDashboard();
+            },
+            
+            async loadDashboard() {
+                this.loading = true;
+                try {
+                    const data = await InvoiceFastAPI.dashboard.get(this.period);
+                    this.stats = data.stats;
+                    this.recentInvoices = data.recent_invoices || [];
+                    this.recentClients = data.recent_clients || [];
+                    this.topClients = data.stats?.top_paying_clients || [];
+                    this.updateCharts();
+                } catch(err) {
+                    console.error('Failed to load dashboard:', err);
+                } finally {
+                    this.loading = false;
+                }
+            },
+            
+            initCharts() {
+                // Revenue Bar Chart
+                const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+                this.revenueChart = new Chart(revenueCtx, {
+                    type: 'bar',
+                    data: { labels: [], datasets: [{ data: [], backgroundColor: '#0277BD', borderRadius: 4 }] },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { callback: (v) => 'KES ' + (v/1000).toFixed(0) + 'k' } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+                
+                // Status Doughnut Chart
+                const statusCtx = document.getElementById('statusChart').getContext('2d');
+                this.statusChart = new Chart(statusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Draft', 'Sent', 'Paid', 'Partial', 'Overdue'],
+                        datasets: [{ data: [0, 0, 0, 0, 0], backgroundColor: ['#94a3b8', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'] }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { position: 'bottom' } }
+                    }
+                });
+                
+                // Invoice Line Chart
+                const invoiceCtx = document.getElementById('invoiceChart').getContext('2d');
+                this.invoiceChart = new Chart(invoiceCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{ data: [], borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.4 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }
+                    }
+                });
+                
+                // Client Bar Chart
+                const clientCtx = document.getElementById('clientChart').getContext('2d');
+                this.clientChart = new Chart(clientCtx, {
+                    type: 'bar',
+                    data: { labels: [], datasets: [{ data: [], backgroundColor: '#10b981', borderRadius: 4 }] },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { beginAtZero: true, ticks: { callback: (v) => 'KES ' + (v/1000).toFixed(0) + 'k' } } }
+                    }
+                });
+            },
+            
+            updateCharts() {
+                if (!this.stats) return;
+                
+                // Revenue chart - monthly or daily
+                const monthlyData = this.stats.monthly_revenue || [];
+                if (monthlyData.length > 0) {
+                    this.revenueChart.data.labels = monthlyData.map(m => m.label);
+                    this.revenueChart.data.datasets[0].data = monthlyData.map(m => m.amount);
+                } else {
+                    // Fallback to daily data
+                    const dailyData = this.stats.daily_revenue || [];
+                    const labels = dailyData.map(d => d.label).slice(-14);
+                    const values = dailyData.map(d => d.amount).slice(-14);
+                    this.revenueChart.data.labels = labels;
+                    this.revenueChart.data.datasets[0].data = values;
+                }
+                this.revenueChart.update('none');
+                
+                // Status chart
+                this.statusChart.data.datasets[0].data = [
+                    this.stats.draft_count || 0,
+                    this.stats.sent_count || 0,
+                    this.stats.paid_count || 0,
+                    this.stats.partial_count || 0,
+                    this.stats.overdue_count || 0
+                ];
+                this.statusChart.update('none');
+                
+                // Invoice chart
+                const invoiceData = this.stats.monthly_invoices || [];
+                if (invoiceData.length > 0) {
+                    this.invoiceChart.data.labels = invoiceData.map(m => m.label);
+                    this.invoiceChart.data.datasets[0].data = invoiceData.map(m => m.amount);
+                } else {
+                    const dailyInvoices = this.stats.daily_invoices || [];
+                    this.invoiceChart.data.labels = dailyInvoices.slice(-14).map(d => d.label);
+                    this.invoiceChart.data.datasets[0].data = dailyInvoices.slice(-14).map(d => d.amount);
+                }
+                this.invoiceChart.update('none');
+                
+                // Client chart
+                const topClients = this.topClients || [];
+                this.clientChart.data.labels = topClients.map(c => c.client_name || 'Unknown');
+                this.clientChart.data.datasets[0].data = topClients.map(c => c.total_paid);
+                this.clientChart.update('none');
+            },
+            
+            logout() {
+                InvoiceFastAPI.logout();
+            },
+            
+            formatCurrency(amount) {
+                return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0 }).format(amount || 0);
+            },
+            
+            formatDate(date) {
+                if (!date) return '-';
+                return new Date(date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+            },
+            
+            formatStatus(status) {
+                const map = {
+                    draft: { class: 'bg-gray-100 text-gray-700', label: 'Draft' },
+                    sent: { class: 'bg-blue-100 text-blue-700', label: 'Sent' },
+                    viewed: { class: 'bg-indigo-100 text-indigo-700', label: 'Viewed' },
+                    paid: { class: 'bg-green-100 text-green-700', label: 'Paid' },
+                    partially_paid: { class: 'bg-yellow-100 text-yellow-700', label: 'Partial' },
+                    overdue: { class: 'bg-red-100 text-red-700', label: 'Overdue' },
+                    cancelled: { class: 'bg-slate-100 text-slate-700', label: 'Cancelled' },
+                };
+                const s = map[status] || { class: 'bg-gray-100 text-gray-700', label: status };
+                return `<span class="px-2 py-1 rounded-full text-xs font-medium ${s.class}">${s.label}</span>`;
+            }
+        };
+    }
+    </script>
 </body>
 </html>

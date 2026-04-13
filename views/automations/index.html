@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en" x-data="automationsManager()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automation Center | InvoiceFast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                        slate: { 850: '#1e293b', 900: '#0f172a' },
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                        purple: '#8B5CF6'
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    animation: { 'fade-in': 'fadeIn 0.2s ease-out', 'slide-up': 'slideUp 0.3s ease-out', 'pulse-slow': 'pulse 3s infinite' },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        [x-cloak] { display: none !important; }
+        .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); }
+        .card-shine { position: relative; overflow: hidden; }
+        .card-shine::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%); pointer-events: none; }
+        .workflow-flow { position: relative; }
+        .workflow-flow::before { content: ''; position: absolute; left: 24px; top: 60px; bottom: 40px; width: 2px; background: linear-gradient(to bottom, #0277BD, #E2E8F0); }
+        .node-connector { position: relative; }
+        .node-connector::after { content: ''; position: absolute; left: 22px; top: 100%; width: 2px; height: 24px; background: #E2E8F0; }
+        .node-connector:last-child::after { display: none; }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+        input[type="checkbox"] { accent-color: #0277BD; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40 flex flex-col">
+        <div class="p-6">
+            <a href="/dashboard" class="flex items-center gap-2">
+                <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8">
+            </a>
+        </div>
+        
+        <nav class="flex-1 px-3 space-y-1 overflow-y-auto">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="file-text" class="w-5 h-5"></i>
+                <span>Invoices</span>
+            </a>
+            <a href="/clients" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                <span>Clients</span>
+            </a>
+            <a href="/payments" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="credit-card" class="w-5 h-5"></i>
+                <span>Payments</span>
+            </a>
+            <a href="/reports" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                <span>Reports</span>
+            </a>
+            <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <a href="/billing" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                    <span>Billing</span>
+                </a>
+                <i data-lucide="settings" class="w-5 h-5"></i>
+                <span>Settings</span>
+            </a>
+            
+            <a href="/notifications" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-600 text-white">
+                <i class="fas fa-bell w-5"></i>
+                <span>Notifications</span>
+            </a>
+            
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase">Tools</p>
+            </div>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust/10 text-trust">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
+        </nav>
+        
+        <div class="p-4 border-t border-slate-200">
+            <button @click="logout()" class="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">Automation Center</h1>
+                    <p class="text-slate-500 text-sm mt-1">Build powerful workflows to automate your business</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" x-model="searchQuery" @input="filterAutomations()" placeholder="Search workflows..." 
+                            class="pl-10 pr-4 py-2 w-64 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20">
+                    </div>
+                    <select x-model="statusFilter" @change="filterAutomations()" class="px-4 py-2 rounded-xl border border-slate-200">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="paused">Paused</option>
+                    </select>
+                    <a href="/automations/new" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 shadow-lg shadow-trust/30">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        Create Workflow
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="px-8 py-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-blue-100">
+                            <i data-lucide="workflow" class="w-4 h-4 text-blue-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Total Workflows</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="automations.length">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-green-100">
+                            <i data-lucide="play" class="w-4 h-4 text-green-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Active</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="activeCount">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-yellow-100">
+                            <i data-lucide="pause" class="w-4 h-4 text-yellow-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Paused</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="pausedCount">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-purple-100">
+                            <i data-lucide="zap" class="w-4 h-4 text-purple-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Runs Today</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="runsToday">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-emerald-100">
+                            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Success Rate</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="successRate + '%'">100%</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-red-100">
+                            <i data-lucide="x-circle" class="w-4 h-4 text-red-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Failed Runs</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="failedRuns">0</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-orange-100">
+                            <i data-lucide="clock" class="w-4 h-4 text-orange-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Avg Duration</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="avgDuration + 's'">0s</p>
+                </div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 card-shine hover:shadow-lg transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="p-2 rounded-xl bg-cyan-100">
+                            <i data-lucide="timer" class="w-4 h-4 text-cyan-600"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500">Time Saved</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="timeSaved">0h</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Templates Section -->
+        <div class="px-8 pb-4" x-show="automations.length === 0 && !loading">
+            <div class="bg-white rounded-2xl border border-slate-200 p-8 card-shine">
+                <h3 class="text-lg font-semibold text-slate-900 mb-4">Quick Start Templates</h3>
+                <p class="text-slate-500 mb-6">Get started with pre-built workflow templates</p>
+                <div class="grid grid-cols-3 gap-4">
+                    <template x-for="template in templates" :key="template.id">
+                        <div class="p-4 rounded-xl border border-slate-200 hover:border-trust hover:bg-trust/5 transition-all cursor-pointer" @click="useTemplate(template)">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="p-2 rounded-lg" :class="template.bg">
+                                    <i :data-lucide="template.icon" class="w-5 h-5" :class="template.color"></i>
+                                </div>
+                                <span class="font-medium text-slate-900" x-text="template.name"></span>
+                            </div>
+                            <p class="text-sm text-slate-500" x-text="template.description"></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflows Table -->
+        <div class="px-8 pb-8" x-show="automations.length > 0">
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden card-shine">
+                <table class="w-full">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Workflow</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Trigger</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Runs</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Success</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Last Run</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <template x-for="workflow in filteredAutomations" :key="workflow.id">
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="p-2 rounded-lg" :class="getTriggerBg(workflow.trigger_type)">
+                                            <i :data-lucide="getTriggerIcon(workflow.trigger_type)" class="w-4 h-4" :class="getTriggerColor(workflow.trigger_type)"></i>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-slate-900" x-text="workflow.name"></p>
+                                            <p class="text-sm text-slate-500" x-text="workflow.description"></p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600" x-text="workflow.trigger_type"></span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <button @click="toggleStatus(workflow)" class="relative w-12 h-6 rounded-full transition-colors" :class="workflow.is_active ? 'bg-green-500' : 'bg-slate-200'">
+                                        <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="workflow.is_active ? 'left-7' : 'left-1'"></span>
+                                    </button>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <span class="text-slate-900 font-medium" x-text="workflow.total_runs || 0"></span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div class="h-full bg-green-500 rounded-full" :style="'width: ' + (workflow.success_rate || 100) + '%'"></div>
+                                        </div>
+                                        <span class="text-sm text-slate-600" x-text="(workflow.success_rate || 100) + '%'"></span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 text-sm text-slate-500" x-text="workflow.last_run ? new Date(workflow.last_run).toLocaleDateString() : 'Never'"></td>
+                                <td class="px-6 py-4 text-right">
+                                    <div class="flex items-center justify-end gap-1">
+                                        <button @click="viewWorkflow(workflow)" class="p-2 hover:bg-slate-100 rounded-lg" title="View">
+                                            <i data-lucide="eye" class="w-4 h-4 text-slate-500"></i>
+                                        </button>
+                                        <button @click="editWorkflow(workflow)" class="p-2 hover:bg-slate-100 rounded-lg" title="Edit">
+                                            <i data-lucide="pencil" class="w-4 h-4 text-slate-500"></i>
+                                        </button>
+                                        <button @click="duplicateWorkflow(workflow)" class="p-2 hover:bg-slate-100 rounded-lg" title="Duplicate">
+                                            <i data-lucide="copy" class="w-4 h-4 text-slate-500"></i>
+                                        </button>
+                                        <button @click="runTest(workflow)" class="p-2 hover:bg-trust/10 rounded-lg" title="Test Run">
+                                            <i data-lucide="play" class="w-4 h-4 text-trust"></i>
+                                        </button>
+                                        <button @click="deleteWorkflow(workflow)" class="p-2 hover:bg-red-50 rounded-lg" title="Delete">
+                                            <i data-lucide="trash-2" class="w-4 h-4 text-red-500"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                
+                <!-- Empty State -->
+                <div x-show="filteredAutomations.length === 0 && !loading" class="p-12 text-center">
+                    <i data-lucide="zap" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
+                    <p class="text-slate-900 font-medium">No workflows found</p>
+                    <p class="text-slate-500 text-sm mt-1">Create your first automation to get started</p>
+                    <a href="/automations/new" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-trust text-white rounded-xl hover:bg-trust-dark">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        Create Workflow
+                    </a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="showDeleteModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-slate-900/50" @click="showDeleteModal = false"></div>
+        <div class="relative bg-white rounded-2xl p-6 w-full max-w-md animate-slide-up">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="p-3 rounded-xl bg-red-100">
+                    <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-900">Delete Workflow?</h3>
+                    <p class="text-sm text-slate-500">This action cannot be undone</p>
+                </div>
+            </div>
+            <p class="text-slate-600 mb-6">Are you sure you want to delete <span x-text="selectedWorkflow?.name" class="font-medium"></span>? This will also remove all execution logs.</p>
+            <div class="flex gap-3">
+                <button @click="showDeleteModal = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button @click="confirmDelete()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50 animate-slide-up">
+        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+    </div>
+
+    <script>
+        function automationsManager() {
+            return {
+                loading: true,
+                searchQuery: '',
+                statusFilter: '',
+                automations: [],
+                templates: [
+                    { id: 1, name: 'Payment Reminder', description: 'Send reminder 3 days before due date', icon: 'bell', bg: 'bg-blue-100', color: 'text-blue-600', trigger: 'invoice_due', action: 'send_notification' },
+                    { id: 2, name: 'Thank You Email', description: 'Auto-send thank you after payment', icon: 'heart', bg: 'bg-pink-100', color: 'text-pink-600', trigger: 'payment_received', action: 'send_email' },
+                    { id: 3, name: 'Failed Payment Alert', description: 'Notify admin on failed payment', icon: 'alert-triangle', bg: 'bg-red-100', color: 'text-red-600', trigger: 'payment_failed', action: 'notify_team' }
+                ],
+                showDeleteModal: false,
+                selectedWorkflow: null,
+                toast: { show: false, message: '', type: 'success' },
+
+                get activeCount() {
+                    return this.automations.filter(w => w.is_active).length;
+                },
+
+                get pausedCount() {
+                    return this.automations.filter(w => !w.is_active).length;
+                },
+
+                get runsToday() {
+                    return this.automations.reduce((sum, w) => sum + (w.runs_today || 0), 0);
+                },
+
+                get successRate() {
+                    if (this.automations.length === 0) return 100;
+                    const totalSuccess = this.automations.reduce((sum, w) => sum + (w.success_rate || 100), 0);
+                    return Math.round(totalSuccess / this.automations.length);
+                },
+
+                get failedRuns() {
+                    return this.automations.reduce((sum, w) => sum + (w.failed_runs || 0), 0);
+                },
+
+                get avgDuration() {
+                    return Math.round(this.automations.reduce((sum, w) => sum + (w.avg_duration || 0), 0) / Math.max(this.automations.length, 1);
+                },
+
+                get timeSaved() {
+                    const hours = this.automations.reduce((sum, w) => sum + (w.runs_today || 0) * 5, 0);
+                    return hours + 'h';
+                },
+
+                get filteredAutomations() {
+                    let result = this.automations;
+                    if (this.searchQuery) {
+                        const q = this.searchQuery.toLowerCase();
+                        result = result.filter(w => w.name.toLowerCase().includes(q) || w.description?.toLowerCase().includes(q));
+                    }
+                    if (this.statusFilter) {
+                        const isActive = this.statusFilter === 'active';
+                        result = result.filter(w => w.is_active === isActive);
+                    }
+                    return result;
+                },
+
+                async init() {
+                    if (!requireAuth()) return;
+                    lucide.createIcons();
+                    await this.loadAutomations();
+                },
+
+                async loadAutomations() {
+                    this.loading = true;
+                    try {
+                        const data = await InvoiceFastAPI.automations.getAll();
+                        this.automations = data.automations || [];
+                    } catch(e) {
+                        console.log('No automations yet');
+                    }
+                    this.loading = false;
+                },
+
+                filterAutomations() {},
+
+                getTriggerIcon(type) {
+                    const icons = {
+                        invoice_created: 'file-plus',
+                        invoice_sent: 'send',
+                        invoice_paid: 'check-circle',
+                        invoice_overdue: 'alert-circle',
+                        client_added: 'user-plus',
+                        payment_received: 'credit-card',
+                        payment_failed: 'x-circle'
+                    };
+                    return icons[type] || 'zap';
+                },
+
+                getTriggerBg(type) {
+                    const bgs = {
+                        invoice_created: 'bg-blue-100',
+                        invoice_sent: 'bg-cyan-100',
+                        invoice_paid: 'bg-green-100',
+                        invoice_overdue: 'bg-red-100',
+                        client_added: 'bg-purple-100',
+                        payment_received: 'bg-emerald-100',
+                        payment_failed: 'bg-orange-100'
+                    };
+                    return bgs[type] || 'bg-slate-100';
+                },
+
+                getTriggerColor(type) {
+                    const colors = {
+                        invoice_created: 'text-blue-600',
+                        invoice_sent: 'text-cyan-600',
+                        invoice_paid: 'text-green-600',
+                        invoice_overdue: 'text-red-600',
+                        client_added: 'text-purple-600',
+                        payment_received: 'text-emerald-600',
+                        payment_failed: 'text-orange-600'
+                    };
+                    return colors[type] || 'text-slate-600';
+                },
+
+                viewWorkflow(workflow) {
+                    window.location.href = '/automations/' + workflow.id;
+                },
+
+                editWorkflow(workflow) {
+                    window.location.href = '/automations/' + workflow.id + '/edit';
+                },
+
+                async duplicateWorkflow(workflow) {
+                    try {
+                        await InvoiceFastAPI.automations.create({
+                            name: workflow.name + ' (Copy)',
+                            description: workflow.description,
+                            trigger_type: workflow.trigger_type,
+                            conditions: workflow.conditions,
+                            actions: workflow.actions,
+                            is_active: false
+                        });
+                        this.showToast('Workflow duplicated', 'success');
+                        await this.loadAutomations();
+                    } catch(e) {
+                        this.showToast('Failed to duplicate', 'error');
+                    }
+                },
+
+                async runTest(workflow) {
+                    try {
+                        await InvoiceFastAPI.automations.run(workflow.id);
+                        this.showToast('Test run started', 'success');
+                    } catch(e) {
+                        this.showToast('Test run failed', 'error');
+                    }
+                },
+
+                toggleStatus(workflow) {
+                    workflow.is_active = !workflow.is_active;
+                    InvoiceFastAPI.automations.update(workflow.id, { is_active: workflow.is_active });
+                },
+
+                deleteWorkflow(workflow) {
+                    this.selectedWorkflow = workflow;
+                    this.showDeleteModal = true;
+                },
+
+                async confirmDelete() {
+                    try {
+                        await InvoiceFastAPI.automations.delete(this.selectedWorkflow.id);
+                        this.automations = this.automations.filter(w => w.id !== this.selectedWorkflow.id);
+                        this.showToast('Workflow deleted', 'success');
+                    } catch(e) {
+                        this.showToast('Failed to delete', 'error');
+                    }
+                    this.showDeleteModal = false;
+                },
+
+                useTemplate(template) {
+                    window.location.href = '/automations/new?template=' + template.id;
+                },
+
+                showToast(message, type = 'success') {
+                    this.toast = { show: true, message, type };
+                    setTimeout(() => this.toast.show = false, 3000);
+                },
+
+                logout() {
+                    localStorage.clear();
+                    window.location.href = '/login';
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -6,7 +6,6 @@
     <title>Contact Support | InvoiceFast</title>
     <meta name="description" content="Contact InvoiceFast support for M-Pesa, KRA e-TIMS, and billing inquiries">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -154,63 +153,126 @@
                         <!-- Honeypot field for anti-spam -->
                         <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" style="position: absolute; left: -9999px;">
 
-                        <form id="contactForm" hx-post="/api/v1/contact" hx-target="#contact-response" hx-swap="innerHTML">
-                            <!-- Error/Success Container -->
-                            <div id="contact-response">
-                                <!-- Form Fields -->
-                                <div class="space-y-5">
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-2">Name *</label>
-                                        <input type="text" name="name" required 
-                                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                            placeholder="Your full name">
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-2">Business Name</label>
-                                        <input type="text" name="business_name" 
-                                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                            placeholder="Your business (optional)">
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-2">Work Email *</label>
-                                        <input type="email" name="email" required 
-                                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                            placeholder="you@company.com">
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-2">Category *</label>
-                                        <select name="category" required 
-                                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition">
-                                            <option value="">Select a category</option>
-                                            <option value="technical">Technical Issue</option>
-                                            <option value="billing">Billing</option>
-                                            <option value="kra">KRA/Compliance</option>
-                                            <option value="partnership">Partnership</option>
-                                            <option value="other">Other</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-2">Message *</label>
-                                        <textarea name="message" required rows="5" 
-                                            class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition resize-none"
-                                            placeholder="How can we help you?"></textarea>
-                                    </div>
-
-                                    <button type="submit" 
-                                        class="htmx-indicator w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center justify-center gap-2">
-                                        <span>Send Message</span>
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
-                                        </svg>
-                                    </button>
-                                    <div class="htmx-indicator text-center text-sm text-slate-500">Sending...</div>
+                        <form id="contactForm">
+                            <div id="contact-response" class="space-y-5">
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Name *</label>
+                                    <input type="text" name="name" id="name" required 
+                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                        placeholder="Your full name">
                                 </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Business Name</label>
+                                    <input type="text" name="business_name" id="business" 
+                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                        placeholder="Your business (optional)">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Work Email *</label>
+                                    <input type="email" name="email" id="email" required 
+                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
+                                        placeholder="you@company.com">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Category *</label>
+                                    <select name="category" id="category" required 
+                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition">
+                                        <option value="">Select a category</option>
+                                        <option value="technical">Technical Issue</option>
+                                        <option value="billing">Billing</option>
+                                        <option value="kra">KRA/Compliance</option>
+                                        <option value="partnership">Partnership</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Message *</label>
+                                    <textarea name="message" id="message" required rows="5" 
+                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition resize-none"
+                                        placeholder="How can we help you?"></textarea>
+                                </div>
+
+                                <div id="formFeedback" class="hidden p-4 rounded-lg"></div>
+
+                                <button type="submit" id="submitBtn"
+                                    class="w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                    <span id="btnText">Send Message</span>
+                                    <span id="spinner" class="hidden">
+                                        <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </span>
+                                </button>
                             </div>
                         </form>
+
+                        <script>
+                        document.getElementById('contactForm').addEventListener('submit', async function(e) {
+                            e.preventDefault();
+                            
+                            const name = document.getElementById('name').value.trim();
+                            const business = document.getElementById('business').value.trim();
+                            const email = document.getElementById('email').value.trim();
+                            const category = document.getElementById('category').value;
+                            const message = document.getElementById('message').value.trim();
+                            const feedback = document.getElementById('formFeedback');
+                            const submitBtn = document.getElementById('submitBtn');
+                            const btnText = document.getElementById('btnText');
+                            const spinner = document.getElementById('spinner');
+                            
+                            if (!name || !email || !category || !message) {
+                                feedback.textContent = 'Please fill in all required fields';
+                                feedback.className = 'p-4 rounded-lg bg-red-50 text-red-700';
+                                feedback.classList.remove('hidden');
+                                return;
+                            }
+                            
+                            feedback.classList.add('hidden');
+                            submitBtn.disabled = true;
+                            btnText.textContent = 'Sending...';
+                            spinner.classList.remove('hidden');
+                            
+                            try {
+                                const res = await fetch('/api/v1/contact', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        name: name,
+                                        business_name: business,
+                                        email: email,
+                                        category: category,
+                                        message: message
+                                    })
+                                });
+                                
+                                const data = await res.json();
+                                
+                                if (res.ok) {
+                                    feedback.textContent = 'Thank you! We\'ll get back to you soon.';
+                                    feedback.className = 'p-4 rounded-lg bg-green-50 text-green-700';
+                                    feedback.classList.remove('hidden');
+                                    document.getElementById('contactForm').reset();
+                                } else {
+                                    feedback.textContent = data.error || 'Failed to send message. Please try again.';
+                                    feedback.className = 'p-4 rounded-lg bg-red-50 text-red-700';
+                                    feedback.classList.remove('hidden');
+                                }
+                            } catch(err) {
+                                feedback.textContent = 'Network error. Please check your connection.';
+                                feedback.className = 'p-4 rounded-lg bg-red-50 text-red-700';
+                                feedback.classList.remove('hidden');
+                            } finally {
+                                submitBtn.disabled = false;
+                                btnText.textContent = 'Send Message';
+                                spinner.classList.add('hidden');
+                            }
+                        });
+                        </script>
                     </div>
                 </div>
 

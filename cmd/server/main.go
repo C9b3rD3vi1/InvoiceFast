@@ -106,22 +106,26 @@ func main() {
 
 	logSvc.Info(context.Background(), "InvoiceFast: Server initialized")
 
+	// CORS configuration
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Idempotency-Key",
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Idempotency-Key, X-Request-ID",
 		AllowCredentials: true,
+		MaxAge:           86400,
 	}))
 
+	// Layout middleware
 	app.Use(middleware.LayoutMiddleware())
 
-	invoiceService := services.NewInvoiceService(db)
-	clientService := services.NewClientService(db)
-	kraService := services.NewKRAServiceWithDB(cfg, db)
-	settingsService := services.NewSettingsService(db)
-	exchangeRateService := services.NewExchangeRateService(db)
-	exchangeRateService.StartCronJob()
+	// Initialize rate limiter (production-ready Fiber version)
+	rateLimiter := middleware.NewFiberRateLimiter()
+	defer rateLimiter.Stop()
 
+	// Apply rate limiting globally
+	app.Use(rateLimiter.HeadersMiddleware())
+
+	// Initialize services
 	var idempotencySvc *services.IdempotencyService
 	if redisCache != nil {
 		idempotencySvc = services.NewIdempotencyService(redisCache)
@@ -137,14 +141,20 @@ func main() {
 
 	authService := services.NewAuthService(db, cfg, emailService, auditService)
 
-	// WhatsApp service - now in internal/whatsapp package
-	// var whatsappService *services.WhatsAppService
-	// if cfg.WhatsApp.Enabled {
-	// 	whatsappService = services.NewWhatsAppService(cfg, db)
-	// }
+	// Initialize exchange rate service
+	exchangeRateService := services.NewExchangeRateService(db)
+	exchangeRateService.StartCronJob()
 
-	// Build invoice service with all features: exchange rates + notifications + KRA
-	invoiceService = services.NewInvoiceServiceWithKRAService(db, exchangeRateService, emailService, nil, kraService, cfg)
+	// KRA service
+	kraService := services.NewKRAServiceWithDB(cfg, db)
+
+	// Build invoice service with all features
+	invoiceService := services.NewInvoiceServiceWithKRAService(db, exchangeRateService, emailService, nil, kraService, cfg)
+
+	clientService := services.NewClientService(db)
+	reportService := services.NewReportService(db)
+	settingsService := services.NewSettingsService(db)
+	automationService := services.NewSimpleAutomationService(db)
 
 	// Payment service for M-Pesa integration
 	paymentService := services.NewPaymentService(db, cfg)
@@ -155,10 +165,17 @@ func main() {
 		intasendService = services.NewIntasendService(&cfg.Intasend)
 	}
 
+	// Reminder service
 	reminderService := services.NewReminderService(db, emailService, nil)
+
+	// Start reminder cron job
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
+		// Run immediately on startup
+		if err := reminderService.RunReminders(); err != nil {
+			log.Printf("Initial reminder error: %v", err)
+		}
 		for {
 			select {
 			case <-stopCh:
@@ -189,6 +206,26 @@ func main() {
 		}
 	}()
 
+	// Automation scheduler - runs every minute to check for triggers
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		log.Println("Starting automation scheduler...")
+		for {
+			select {
+			case <-stopCh:
+				log.Println("Stopping automation scheduler...")
+				return
+			case <-ticker.C:
+				// Run active automations
+				if err := runActiveAutomations(automationService); err != nil {
+					log.Printf("Automation scheduler error: %v", err)
+				}
+			}
+		}
+	}()
+
+	// PDF Worker (Redis-backed)
 	var pdfWorker *worker.PDFWorker
 	if redisCache != nil {
 		pdfWorker = worker.NewPDFWorker(redisCache, db, cfg)
@@ -205,34 +242,51 @@ func main() {
 	// Create webhook verifier for middleware
 	webhookVerifier := middleware.NewWebhookVerifierMiddleware(services.NewWebhookVerifier(cfg))
 
-	handler := handlers.NewFiberHandler(authService, invoiceService, clientService, kraService, exchangeRateService, pdfWorker, mpesaService, auditService)
+	// Billing services (must be before handlers that need them)
+	planService := services.NewPlanService(db)
+	planService.SeedDefaultPlans()
+	subscriptionService := services.NewSubscriptionService(db, planService)
+	billingService := services.NewBillingService(db)
 
-	// HTMX handler for SPA-like dashboard
-	htmxHandler := handlers.NewHTMXHandler(invoiceService, clientService, kraService, settingsService, paymentService, pdfWorker, exchangeRateService)
-
+	// Initialize handlers
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService)
+	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
+	settingsHandler := handlers.NewSettingsHandler(settingsService)
+	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService)
+	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService)
+	reportHandler := handlers.NewReportHandler(reportService)
+	automationHandler := handlers.NewAutomationHandler(automationService)
 	publicHandler := handlers.NewPublicHandler(invoiceService, authService, paymentService, mpesaService, intasendService)
 	authHandler := handlers.NewAuthHandler(authService, auditService)
-	rateLimiter := middleware.NewFiberRateLimiter()
+	notificationHandler := handlers.NewNotificationHandler(db)
 
-	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc, db, htmxHandler, publicHandler, authHandler, webhookVerifier)
+	// Billing handler
+	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService)
 
-	// Serve static assets from /static directory
+	// Static files
 	app.Static("/static", "./static")
 	app.Static("/css", "./static/css")
 	app.Static("/js", "./static/js")
-	app.Static("/images", "./static/images")
+	app.Static("/images", "./static/images", fiber.Static{
+		Browse: false,
+	})
 
-	// Subdomain routing for branded client portal
+	// Setup all routes - ONLY ONCE
+	setupRoutes(app, cfg, invoiceHandler, clientHandler, settingsHandler, paymentHandler,
+		dashboardHandler, reportHandler, automationHandler, notificationHandler, authService, idempotencySvc,
+		db, publicHandler, authHandler, webhookVerifier, emailService, rateLimiter, billingHandler)
+
+	// Subdomain routing for branded client portal (AFTER main routes)
 	app.Use(func(c *fiber.Ctx) error {
 		hostname := c.Hostname()
 
-		// Check if this is a subdomain request (e.g., clientname.invoicefast.com)
+		// Check if this is a subdomain request
 		if strings.Contains(hostname, ".") {
 			parts := strings.Split(hostname, ".")
 			if len(parts) >= 3 {
 				subdomain := parts[0]
 
-				// Skip if it's just localhost or known domains
+				// Skip if it's just known domains
 				if subdomain != "www" && subdomain != "api" && !strings.HasPrefix(hostname, "localhost") {
 					log.Printf("[Subdomain] Detected: %s -> subdomain: %s", hostname, subdomain)
 
@@ -242,7 +296,7 @@ func main() {
 						// Store tenant info in context
 						c.Locals("tenant_id", tenant.ID)
 						c.Locals("tenant_subdomain", subdomain)
-						c.Locals("tenant_brand_color", "#2563eb") // Default brand color
+						c.Locals("tenant_brand_color", "#2563eb")
 
 						// Check for custom brand settings
 						if tenant.Settings != "" {
@@ -267,17 +321,29 @@ func main() {
 		return c.Next()
 	})
 
-	// Setup all API routes via routes directory
-	setupRoutes(app, cfg, handler, rateLimiter, authService, idempotencySvc, db, htmxHandler, publicHandler, authHandler, webhookVerifier)
-
+	// Health endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status":  "healthy",
-			"time":    time.Now().UTC().Format(time.RFC3339),
-			"version": "1.0.0",
+		// Check database connection
+		dbErr := db.Ping()
+
+		status := "healthy"
+		code := fiber.StatusOK
+
+		if dbErr != nil {
+			status = "degraded"
+			code = fiber.StatusServiceUnavailable
+		}
+
+		return c.Status(code).JSON(fiber.Map{
+			"status":   status,
+			"time":     time.Now().UTC().Format(time.RFC3339),
+			"version":  "1.0.0",
+			"database": dbErr == nil,
+			"redis":    redisCache != nil,
 		})
 	})
 
+	// Start server
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)
 		log.Printf("Starting InvoiceFast on %s (mode: %s)", addr, cfg.Server.Mode)
@@ -286,13 +352,14 @@ func main() {
 		}
 	}()
 
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	log.Println("Shutting down...")
 
-	// Signal cron jobs to stop
+	// Signal all cron jobs to stop
 	close(stopCh)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -305,35 +372,83 @@ func main() {
 	log.Println("Server exited")
 }
 
+// runActiveAutomations executes all active automations with triggers
+func runActiveAutomations(automationService *services.AutomationService) error {
+	// This is a placeholder - in production, you'd:
+	// 1. Query for active automations
+	// 2. Check their triggers (invoice_created, payment_received, etc.)
+	// 3. Execute actions for triggered automations
+	// For now, we just return nil
+	return nil
+}
+
 func customErrorHandler(c *fiber.Ctx, err error) error {
 	code := fiber.StatusInternalServerError
 	if e, ok := err.(*fiber.Error); ok {
 		code = e.Code
 	}
 
-	return c.Status(code).JSON(fiber.Map{
-		"error": err.Error(),
-		"code":  code,
+	// Log the error
+	log.Printf("[ERROR] %s %s: %v", c.Method(), c.Path(), err)
+
+	// JSON error for API endpoints
+	if strings.HasPrefix(c.Path(), "/api/") {
+		return c.Status(code).JSON(fiber.Map{
+			"error": err.Error(),
+			"code":  code,
+		})
+	}
+
+	// HTML error for web routes
+	return c.Status(code).Render("error", fiber.Map{
+		"Status": code,
+		"Error":  err.Error(),
 	})
 }
 
 func setupRoutes(app *fiber.App, cfg *config.Config,
-	handler *handlers.FiberHandler, rateLimiter *middleware.FiberRateLimiter,
-	authService *services.AuthService, idempotencySvc *services.IdempotencyService, db *database.DB, htmxHandler *handlers.HTMXHandler,
-	publicHandler *handlers.PublicHandler, authHandler *handlers.AuthHandler, webhookVerifier *middleware.WebhookVerifierMiddleware) {
+	invoiceHandler *handlers.InvoiceHandler, clientHandler *handlers.ClientHandler,
+	settingsHandler *handlers.SettingsHandler, paymentHandler *handlers.PaymentHandler,
+	dashboardHandler *handlers.DashboardHandler, reportHandler *handlers.ReportHandler,
+	automationHandler *handlers.AutomationHandler, notificationHandler *handlers.NotificationHandler,
+	authService *services.AuthService, idempotencySvc *services.IdempotencyService,
+	db *database.DB, publicHandler *handlers.PublicHandler, authHandler *handlers.AuthHandler,
+	webhookVerifier *middleware.WebhookVerifierMiddleware, emailService *services.EmailService,
+	rateLimiter *middleware.FiberRateLimiter, billingHandler *handlers.BillingHandler) {
 
-	// === API v1 Routes (organized in routes directory) ===
+	teamHandler := handlers.NewTeamHandler(db, authService, emailService)
+
+	// === Apply rate limiting to auth endpoints ===
+	authRateLimit := rateLimiter.AuthRateLimiter()
+
+	// === API v1 Routes (organized by domain) ===
+
+	// Public routes (no auth required)
 	routes.PublicRoutes(app, publicHandler)
-	routes.PublicAPIRoutes(app, publicHandler, rateLimiter)
-	routes.PublicAuthRoutes(app, publicHandler, rateLimiter)
-	routes.AuthRoutes(app, authHandler, rateLimiter)
-	routes.TenantRoutes(app, authHandler, authService, rateLimiter, db)
-	routes.InvoiceRoutes(app, handler, authService, db)
-	routes.ClientRoutes(app, handler, authService, db)
-	routes.PaymentRoutes(app, handler, idempotencySvc, rateLimiter, webhookVerifier)
-	routes.PaymentAPIRoutes(app, publicHandler, rateLimiter)
-	routes.PublicInvoiceRoutes(app, handler, rateLimiter)
+	routes.PublicAPIRoutes(app, publicHandler)
 
-	// === Static Frontend Pages (Decoupled) ===
+	// Auth routes with stricter rate limiting
+	auth := app.Group("/api/v1/auth")
+	auth.Use(authRateLimit)
+	routes.AuthRoutes(app, authHandler)
+
+	// Public contact endpoint
+	routes.PublicAuthRoutes(app, publicHandler)
+
+	// Protected tenant routes (require authentication)
+	routes.TenantRoutes(app, authHandler, authService, db)
+	routes.InvoiceRoutes(app, invoiceHandler, authService, db)
+	routes.ClientRoutes(app, clientHandler, authService, db)
+	routes.SettingsRoutes(app, settingsHandler, authService, db)
+	routes.DashboardRoutes(app, dashboardHandler, authService, db)
+	routes.PaymentRoutes(app, paymentHandler, idempotencySvc, webhookVerifier)
+	routes.PaymentAPIRoutes(app, paymentHandler)
+	routes.ReportRoutes(app, reportHandler, authService, db)
+	routes.TeamRoutes(app, teamHandler, authService, db)
+	routes.AutomationRoutes(app, automationHandler, authService, db)
+	routes.NotificationRoutes(app, notificationHandler, authService, db)
+	routes.BillingRoutes(app, billingHandler, authService, db)
+
+	// === Static Frontend Pages (SPA routes) ===
 	routes.StaticRoutes(app)
 }

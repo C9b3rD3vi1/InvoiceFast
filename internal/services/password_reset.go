@@ -129,8 +129,9 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 		}()
 	}
 
-	// Clear the raw token from the returned object (for security)
-	resetToken.RawToken = rawToken
+	// CRITICAL: Do NOT return the raw token - only return success indicator
+	// The token is sent via email, never expose it in API response
+	resetToken.RawToken = ""
 
 	log.Printf("[AUDIT] Password reset initiated for user %s from IP %s", user.ID, ipAddress)
 

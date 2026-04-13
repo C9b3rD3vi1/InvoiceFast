@@ -145,6 +145,36 @@ func (s *EmailService) SendPaymentReceipt(receipt *ReceiptEmailData) error {
 	return s.Send(req)
 }
 
+// TeamInviteEmailData for team invite email template
+type TeamInviteEmailData struct {
+	InviterName string
+	CompanyName string
+	InviteLink  string
+}
+
+// SendTeamInvite sends a team invitation email
+func (s *EmailService) SendTeamInvite(to, inviterName, companyName, inviteLink string) error {
+	body := fmt.Sprintf(`
+		<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+			<h2>You're invited to join %s</h2>
+			<p>Hello,</p>
+			<p><strong>%s</strong> has invited you to join their team on InvoiceFast.</p>
+			<p>Click the button below to accept the invitation:</p>
+			<a href="%s" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">Accept Invitation</a>
+			<p style="margin-top: 20px; color: #666; font-size: 14px;">This invitation expires in 7 days.</p>
+		</div>
+	`, companyName, inviterName, inviteLink)
+
+	req := EmailRequest{
+		To:      []string{to},
+		Subject: fmt.Sprintf("You're invited to join %s on InvoiceFast", companyName),
+		Body:    body,
+		IsHTML:  true,
+	}
+
+	return s.Send(req)
+}
+
 // InvoiceEmailData for invoice email template
 type InvoiceEmailData struct {
 	CompanyName   string

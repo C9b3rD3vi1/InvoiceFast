@@ -1,20 +1,49 @@
 package handlers
 
-import(
+import (
 	"fmt"
-	"time"
+
 	"invoicefast/internal/middleware"
+	"invoicefast/internal/models"
 	"invoicefast/internal/services"
-	"invoicefast/internal/worker"
-	
+
 	"github.com/gofiber/fiber/v2"
-	
 )
 
-func (h *FiberHandler) CreateInvoice(c *fiber.Ctx) error {
+// InvoiceHandler handles invoice API endpoints
+type InvoiceHandler struct {
+	invoiceService *services.InvoiceService
+	kraService     *services.KRAService
+	mpesaService   *services.MPesaService
+	subService     *services.SubscriptionService
+}
+
+// NewInvoiceHandler creates InvoiceHandler
+func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService) *InvoiceHandler {
+	return &InvoiceHandler{
+		invoiceService: invoiceSvc,
+		kraService:     kraSvc,
+		mpesaService:   mpesaSvc,
+		subService:     subSvc,
+	}
+}
+
+// CreateInvoice - create new invoice
+func (h *InvoiceHandler) CreateInvoice(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	if h.subService != nil {
+		allowed, reason, _ := h.subService.CheckLimits(tenantID, "invoices", 1)
+		if !allowed {
+			return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
+				"error":   "Invoice limit exceeded",
+				"reason":  reason,
+				"upgrade": "/billing/upgrade",
+			})
+		}
 	}
 
 	var req services.CreateInvoiceRequest
@@ -28,24 +57,41 @@ func (h *FiberHandler) CreateInvoice(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"invoice": invoice,
-		"message": "invoice created successfully",
-	})
+	if h.subService != nil {
+		h.subService.IncrementUsage(tenantID, "invoices", 1)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(invoice)
 }
 
-func (h *FiberHandler) GetInvoices(c *fiber.Ctx) error {
+// GetInvoices - list invoices with pagination and filtering
+func (h *InvoiceHandler) GetInvoices(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
 	}
 
+	// Parse pagination
+	page := c.Query("page", "1")
+	limit := c.Query("limit", "20")
+	offset := 0
+	_, err := fmt.Sscanf(page, "%d", &offset)
+	if err != nil || offset < 1 {
+		offset = 1
+	}
+	lim := 20
+	fmt.Sscanf(limit, "%d", &lim)
+	if lim < 1 || lim > 100 {
+		lim = 20
+	}
+	offset = (offset - 1) * lim
+
 	filter := services.InvoiceFilter{
 		Status:   c.Query("status"),
 		ClientID: c.Query("client_id"),
 		Search:   c.Query("search"),
-		Offset:   0,
-		Limit:    20,
+		Offset:   offset,
+		Limit:    lim,
 	}
 
 	invoices, total, err := h.invoiceService.GetUserInvoices(tenantID, filter)
@@ -53,13 +99,21 @@ func (h *FiberHandler) GetInvoices(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// Calculate pagination info
+	totalPages := (int(total) + lim - 1) / lim
+	currentPage := offset/lim + 1
+
 	return c.JSON(fiber.Map{
-		"invoices": invoices,
-		"total":    total,
+		"invoices":    invoices,
+		"total":       total,
+		"page":        currentPage,
+		"total_pages": totalPages,
+		"per_page":    lim,
 	})
 }
 
-func (h *FiberHandler) GetInvoice(c *fiber.Ctx) error {
+// GetInvoice - get single invoice
+func (h *InvoiceHandler) GetInvoice(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
@@ -78,173 +132,184 @@ func (h *FiberHandler) GetInvoice(c *fiber.Ctx) error {
 	return c.JSON(invoice)
 }
 
-func (h *FiberHandler) GetInvoicePDF(c *fiber.Ctx) error {
+// UpdateInvoice - update invoice
+func (h *InvoiceHandler) UpdateInvoice(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
 	}
 
 	invoiceID := c.Params("id")
-	invoice, err := h.invoiceService.GetInvoiceByID(invoiceID, tenantID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
-	}
-
-	if invoice.TenantID != tenantID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
-	}
-
-	if h.pdfWorker != nil {
-		err := h.pdfWorker.EnqueueTask(c.Context(), &worker.PDFTask{
-			InvoiceID:  invoiceID,
-			TenantID:   tenantID,
-			InvoiceNum: invoice.InvoiceNumber,
-			CreatedAt:  time.Now(),
-		})
-		if err != nil {
-			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
-				"message":    "PDF generation queued",
-				"invoice_id": invoiceID,
-				"status":     "processing",
-			})
-		}
-
-		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
-			"message":    "PDF generation started",
-			"invoice_id": invoiceID,
-			"status":     "processing",
-		})
-	}
-
-	pdfData, err := h.invoiceService.GenerateInvoicePDF(invoice)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	c.Set("Content-Type", "application/pdf")
-	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=invoice_%s.pdf", invoice.InvoiceNumber))
-
-	return c.Send(pdfData)
-}
-
-func (h *FiberHandler) GetInvoiceStatus(c *fiber.Ctx) error {
-	invoiceID := c.Params("id")
-
-	if h.pdfWorker != nil {
-		status, err := h.pdfWorker.GetTaskStatus(c.Context(), invoiceID)
-		if err == nil && status != nil {
-			return c.JSON(fiber.Map{
-				"invoice_id": invoiceID,
-				"pdf_status": status.Status,
-				"pdf_url":    status.PDFURL,
-			})
-		}
-	}
-
-	return c.JSON(fiber.Map{
-		"invoice_id": invoiceID,
-		"pdf_status": "not_found",
-	})
-}
-
-
-
-func (h *FiberHandler) SendInvoice(c *fiber.Ctx) error {
-	tenantID := middleware.GetTenantID(c)
-	invoiceID := c.Params("id")
-	userID := middleware.GetUserID(c)
-
-	invoice, err := h.invoiceService.SendInvoice(tenantID, invoiceID, userID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if invoice.TenantID != tenantID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
-	}
-
-	return c.JSON(fiber.Map{
-		"invoice": invoice,
-		"message": "invoice sent",
-	})
-}
-
-func (h *FiberHandler) CancelInvoice(c *fiber.Ctx) error {
-	tenantID := middleware.GetTenantID(c)
-	invoiceID := c.Params("id")
-	userID := middleware.GetUserID(c)
-
-	err := h.invoiceService.CancelInvoice(tenantID, invoiceID, userID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	invoice, _ := h.invoiceService.GetInvoiceByID(invoiceID, tenantID)
-
-	return c.JSON(fiber.Map{
-		"invoice": invoice,
-		"message": "invoice cancelled",
-	})
-}
-
-func (h *FiberHandler) UpdateInvoice(c *fiber.Ctx) error {
-	tenantID := middleware.GetTenantID(c)
-	invoiceID := c.Params("id")
-	userID := middleware.GetUserID(c)
-
 	var req services.UpdateInvoiceRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	invoice, err := h.invoiceService.UpdateInvoice(invoiceID, userID, &req)
+	invoice, err := h.invoiceService.UpdateInvoice(invoiceID, tenantID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	if invoice.TenantID != tenantID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
 	}
 
 	return c.JSON(invoice)
 }
 
-func (h *FiberHandler) UpdateInvoiceItems(c *fiber.Ctx) error {
+// SendInvoice - send invoice to client
+func (h *InvoiceHandler) SendInvoice(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	invoice, err := h.invoiceService.SendInvoice(invoiceID, tenantID, "")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(invoice)
+}
+
+// CancelInvoice - cancel invoice
+func (h *InvoiceHandler) CancelInvoice(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
 	invoiceID := c.Params("id")
 	userID := middleware.GetUserID(c)
-
-	var req struct {
-		Items []services.InvoiceItemRequest `json:"items"`
-	}
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
-	}
-
-	invoice, err := h.invoiceService.UpdateInvoiceItems(invoiceID, userID, req.Items)
+	err := h.invoiceService.CancelInvoice(tenantID, invoiceID, userID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	if invoice.TenantID != tenantID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
+	if h.subService != nil {
+		h.subService.IncrementUsage(tenantID, "invoices", -1)
+	}
+
+	return c.JSON(fiber.Map{"message": "Invoice cancelled"})
+}
+
+// GetInvoiceByToken - get invoice by magic token (public)
+func (h *InvoiceHandler) GetInvoiceByToken(c *fiber.Ctx) error {
+	token := c.Params("token")
+	invoice, err := h.invoiceService.GetInvoiceByMagicToken(token)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
 	}
 
 	return c.JSON(invoice)
 }
 
-func (h *FiberHandler) GetInvoiceByToken(c *fiber.Ctx) error {
-	token := c.Params("token")
-	if token == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token required"})
+// GetDashboardStats - get dashboard stats
+func (h *InvoiceHandler) GetDashboardStats(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
 	}
+
+	period := c.Query("period", "month")
+	stats, err := h.invoiceService.GetDashboardStats(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(stats)
+}
+
+// HandleIntasendWebhook processes Intasend webhook callbacks
+func (h *InvoiceHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
+	var payload struct {
+		Event         string `json:"event"`
+		CheckoutID    string `json:"checkout_id"`
+		InvoiceNumber string `json:"invoice_number"`
+		Amount        string `json:"amount"`
+		Reference     string `json:"reference"`
+	}
+
+	if err := c.BodyParser(&payload); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid payload"})
+	}
+
+	key := c.Get("Idempotency-Key")
+	if key == "" {
+		key = payload.CheckoutID
+	}
+
+	if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok && key != "" {
+		isProcessed, _ := svc.IsProcessed(c.Context(), key)
+		if isProcessed {
+			return c.JSON(fiber.Map{"status": "already_processed"})
+		}
+	}
+
+	tenantID := middleware.GetTenantID(c)
+	invoice, err := h.invoiceService.GetInvoiceByNumber(tenantID, payload.InvoiceNumber)
+	if err != nil {
+		return c.JSON(fiber.Map{"status": "ignored"})
+	}
+
+	var amount float64
+	fmt.Sscanf(payload.Amount, "%f", &amount)
+	if amount == 0 {
+		amount = invoice.Total
+	}
+
+	payment := &models.Payment{
+		TenantID:  invoice.TenantID,
+		InvoiceID: invoice.ID,
+		UserID:    invoice.UserID,
+		Amount:    amount,
+		Currency:  invoice.Currency,
+		Method:    models.PaymentMethodMpesa,
+		Status:    models.PaymentStatusCompleted,
+		Reference: payload.Reference,
+	}
+	payment.CompletedAt.Valid = true
+
+	h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
+
+	if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok && key != "" {
+		svc.MarkProcessed(c.Context(), key, map[string]interface{}{
+			"invoice_id": invoice.ID,
+			"amount":     amount,
+		})
+	}
+
+	return c.JSON(fiber.Map{"status": "received"})
+}
+
+// HandleMpesaCallback processes M-Pesa STK callbacks
+func (h *InvoiceHandler) HandleMpesaCallback(c *fiber.Ctx) error {
+	callback, ok := c.Locals("mpesa_callback").(*services.STKCallback)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "no verified callback data",
+			"code":  "INVALID_CALLBACK",
+		})
+	}
+
+	if h.mpesaService != nil {
+		err := h.mpesaService.ProcessSTKCallback(c.Context(), *callback)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "callback processing failed",
+				"code":  "PROCESSING_ERROR",
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{"status": "received"})
+}
+
+// GetInvoicePDF gets the PDF for an invoice
+func (h *InvoiceHandler) GetInvoicePDF(c *fiber.Ctx) error {
+	token := c.Params("token")
 
 	invoice, err := h.invoiceService.GetInvoiceByMagicToken(token)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
 	}
 
-	return c.JSON(fiber.Map{
-		"invoice": invoice,
-	})
+	return c.JSON(fiber.Map{"invoice_id": invoice.ID, "invoice_number": invoice.InvoiceNumber})
 }

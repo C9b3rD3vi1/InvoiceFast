@@ -22,10 +22,25 @@ func NewSettingsService(db *database.DB) *SettingsService {
 }
 
 type TenantSettings struct {
-	Mpesa    *MpesaSettings    `json:"mpesa,omitempty"`
-	KRA      *KRASettings      `json:"kra,omitempty"`
-	Branding *BrandingSettings `json:"branding,omitempty"`
-	Updated  time.Time         `json:"updated_at"`
+	Mpesa         *MpesaSettings        `json:"mpesa,omitempty"`
+	KRA           *KRASettings          `json:"kra,omitempty"`
+	Branding      *BrandingSettings     `json:"branding,omitempty"`
+	Notifications *NotificationSettings `json:"notifications,omitempty"`
+	Updated       time.Time             `json:"updated_at"`
+}
+
+type NotificationSettings struct {
+	Email   []NotificationEvent `json:"email"`
+	SMS     []NotificationEvent `json:"sms"`
+	Slack   []NotificationEvent `json:"slack"`
+	Webhook []NotificationEvent `json:"webhook"`
+}
+
+type NotificationEvent struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+	Enabled     bool   `json:"enabled"`
 }
 
 type MpesaSettings struct {
@@ -254,4 +269,24 @@ func (s *SettingsService) GetTenantBySubdomain(subdomain string) (*models.Tenant
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
 	}
 	return &tenant, nil
+}
+
+func (s *SettingsService) GetNotificationSettings(tenantID string) (*NotificationSettings, error) {
+	settings, err := s.GetSettings(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	if settings.Notifications == nil {
+		return &NotificationSettings{}, nil
+	}
+	return settings.Notifications, nil
+}
+
+func (s *SettingsService) SaveNotificationSettings(tenantID string, notif *NotificationSettings) error {
+	settings, err := s.GetSettings(tenantID)
+	if err != nil {
+		settings = &TenantSettings{}
+	}
+	settings.Notifications = notif
+	return s.SaveSettings(tenantID, settings)
 }
