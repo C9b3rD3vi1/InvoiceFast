@@ -1,7 +1,6 @@
 package handlers
 
-import(
-	
+import (
 	"fmt"
 	"log"
 	"time"
@@ -13,13 +12,22 @@ import(
 	"github.com/gofiber/fiber/v2"
 )
 
-func (h *FiberHandler) RequestPayment(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{"error": "payment request not implemented"})
+// PaymentHandler handles payment API endpoints
+type PaymentHandler struct {
+	invoiceService *services.InvoiceService
+	mpesaService   *services.MPesaService
 }
 
+// NewPaymentHandler creates PaymentHandler
+func NewPaymentHandler(invoiceSvc *services.InvoiceService, mpesaSvc *services.MPesaService) *PaymentHandler {
+	return &PaymentHandler{
+		invoiceService: invoiceSvc,
+		mpesaService:   mpesaSvc,
+	}
+}
 
-
-func (h *FiberHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
+// HandleIntasendWebhook processes Intasend webhook callbacks
+func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 	var payload struct {
 		Event         string `json:"event"`
 		CheckoutID    string `json:"checkout_id"`
@@ -76,7 +84,6 @@ func (h *FiberHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 
 		h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
 
-		// Rotate magic token after successful payment for security
 		if err := h.invoiceService.RotateMagicToken(invoice.ID); err != nil {
 			log.Printf("[Webhook] Warning: Failed to rotate magic token for invoice %s: %v", invoice.InvoiceNumber, err)
 		}
@@ -98,10 +105,7 @@ func (h *FiberHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 }
 
 // HandleMpesaCallback processes verified M-Pesa STK callbacks
-// SECURITY: This handler is protected by webhook verification middleware
-// The callback is already verified before this handler is called
-func (h *FiberHandler) HandleMpesaCallback(c *fiber.Ctx) error {
-	// Get the verified callback from middleware context
+func (h *PaymentHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 	callback, ok := c.Locals("mpesa_callback").(*services.STKCallback)
 	if !ok {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -110,7 +114,6 @@ func (h *FiberHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 		})
 	}
 
-	// Process via the MPesaService if available
 	if h.mpesaService != nil {
 		err := h.mpesaService.ProcessSTKCallback(c.Context(), *callback)
 		if err != nil {
@@ -121,8 +124,6 @@ func (h *FiberHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 			})
 		}
 
-		// Rotate magic token after successful payment for security
-		// Get invoice from callback to rotate token
 		checkoutReqID := callback.Body.StkCallback.CheckoutRequestID
 		if checkoutReqID != "" {
 			log.Printf("[M-Pesa] Payment completed, rotating magic token for checkout: %s", checkoutReqID)
@@ -132,13 +133,42 @@ func (h *FiberHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "received"})
 }
 
-
-// currency exchange rates
-func (h *FiberHandler) GetExchangeRates(c *fiber.Ctx) error {
-	if h.exchangeService == nil {
-		return c.JSON(fiber.Map{"error": "service not available"})
+// InitiateSTKPush initiates M-Pesa STK push
+func (h *PaymentHandler) InitiateSTKPush(c *fiber.Ctx) error {
+	var req struct {
+		InvoiceID string `json:"invoice_id"`
+		Phone     string `json:"phone"`
 	}
 
-	rates := h.exchangeService.GetAllRates()
-	return c.JSON(fiber.Map{"rates": rates})
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	if h.mpesaService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "M-Pesa not configured"})
+	}
+
+	tenantID := middleware.GetTenantID(c)
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, req.InvoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	amountStr := fmt.Sprintf("%.2f", invoice.Total)
+	resp, err := h.mpesaService.InitiateSTKPush(c.Context(), tenantID, invoice.ID, req.Phone, amountStr, invoice.InvoiceNumber)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(resp)
+}
+
+// CheckPaymentStatus checks payment status
+func (h *PaymentHandler) CheckPaymentStatus(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{"status": "pending"})
+}
+
+// GetExchangeRates returns currency exchange rates
+func (h *PaymentHandler) GetExchangeRates(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{"error": "exchange service not available"})
 }

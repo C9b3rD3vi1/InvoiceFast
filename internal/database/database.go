@@ -211,6 +211,16 @@ func (db *DB) Migrate() error {
 		&models.KRAQueueItem{},
 		&models.Tenant{},
 		&models.PasswordResetToken{},
+		&models.Notification{},
+		&models.Automation{},
+		&models.AutomationLog{},
+		&models.SubscriptionPlan{},
+		&models.Subscription{},
+		&models.SubscriptionTransaction{},
+		&models.UsageTracking{},
+		&models.SavedPaymentMethod{},
+		&models.BillingInvoice{},
+		&models.TeamInvite{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)

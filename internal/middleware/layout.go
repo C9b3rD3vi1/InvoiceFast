@@ -14,8 +14,7 @@ func LayoutMiddleware() fiber.Handler {
 			strings.HasPrefix(path, "/invoices") ||
 			strings.HasPrefix(path, "/clients") ||
 			strings.HasPrefix(path, "/settings") ||
-			strings.HasPrefix(path, "/payments") ||
-			strings.HasPrefix(path, "/htmx") {
+			strings.HasPrefix(path, "/payments") {
 			c.Locals("layout", "layouts/dashboard")
 		} else {
 			c.Locals("layout", "layouts/main")

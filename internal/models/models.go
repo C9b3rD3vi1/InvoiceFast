@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 )
 
@@ -266,6 +267,23 @@ type KRAQueueItem struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+// Notification represents a user notification
+type Notification struct {
+	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID  string    `json:"tenant_id" gorm:"type:uuid;index"`
+	UserID    string    `json:"user_id" gorm:"type:uuid;index"`
+	Title     string    `json:"title"`
+	Message   string    `json:"message"`
+	Category  string    `json:"category"` // Invoices, Payments, Clients, System
+	Icon      string    `json:"icon"`     // bell, file-text, credit-card, users, settings
+	Actor     string    `json:"actor"`
+	Read      bool      `json:"read" gorm:"default:false"`
+	Link      string    `json:"link"`
+	Data      string    `json:"data"` // JSON additional data
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // NotificationLog for tracking notification delivery
 type NotificationLog struct {
 	ID          string    `json:"id" gorm:"type:uuid;primaryKey"`
@@ -285,4 +303,210 @@ type NotificationLog struct {
 	DeliveredAt time.Time `json:"delivered_at"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// TeamInvite represents a team member invitation
+type TeamInvite struct {
+	ID         string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID   string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	InvitedBy  string     `json:"invited_by" gorm:"type:uuid;index;not null"`
+	Email      string     `json:"email" gorm:"index;not null"`
+	Name       string     `json:"name"`
+	Role       string     `json:"role" gorm:"default:'staff'"`
+	Token      string     `json:"token" gorm:"uniqueIndex;not null"`
+	Status     string     `json:"status" gorm:"default:'pending'"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	AcceptedAt *time.Time `json:"accepted_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
+// Automation represents an automation workflow
+type Automation struct {
+	ID          string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID    string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID      string    `json:"user_id" gorm:"type:uuid;index;not null"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	TriggerType string    `json:"trigger_type"`
+	IsActive    bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// AutomationLog represents automation execution logs
+type AutomationLog struct {
+	ID           string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID     string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	AutomationID string     `json:"automation_id" gorm:"type:uuid;index;not null"`
+	Status       string     `json:"status"` // running, completed, failed
+	ErrorMessage string     `json:"error_message"`
+	StartedAt    time.Time  `json:"started_at"`
+	CompletedAt  *time.Time `json:"completed_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+// SubscriptionPlan represents a subscription plan
+type SubscriptionPlan struct {
+	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
+	Name         string    `json:"name"`
+	Slug         string    `json:"slug" gorm:"uniqueIndex"`
+	Description  string    `json:"description"`
+	MonthlyPrice int64     `json:"monthly_price"` // in cents
+	YearlyPrice  int64     `json:"yearly_price"`  // in cents
+	FeaturesJSON string    `json:"features_json"` // JSON array of features
+	LimitsJSON   string    `json:"limits_json"`   // JSON object with limits
+	IsActive     bool      `json:"is_active" gorm:"default:true"`
+	SortOrder    int       `json:"sort_order" gorm:"default:0"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// Subscription represents a tenant's subscription
+type Subscription struct {
+	ID                     string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID               string     `json:"tenant_id" gorm:"type:uuid;uniqueIndex"`
+	PlanID                 string     `json:"plan_id" gorm:"type:uuid;index"`
+	Status                 string     `json:"status" gorm:"default:'active'"`         // active, trialing, past_due, canceled, suspended, expired
+	BillingCycle           string     `json:"billing_cycle" gorm:"default:'monthly'"` // monthly, yearly
+	Provider               string     `json:"provider"`                               // mpesa, intasend, manual
+	ProviderCustomerID     string     `json:"provider_customer_id"`
+	ProviderSubscriptionID string     `json:"provider_subscription_id"`
+	PaymentMethod          string     `json:"payment_method"` // mpesa, card
+	Amount                 int64      `json:"amount"`         // amount in cents
+	Currency               string     `json:"currency" gorm:"default:'KES'"`
+	StartsAt               time.Time  `json:"starts_at"`
+	RenewsAt               *time.Time `json:"renews_at"`
+	ExpiresAt              *time.Time `json:"expires_at"`
+	TrialEndsAt            *time.Time `json:"trial_ends_at"`
+	CancelledAt            *time.Time `json:"cancelled_at"`
+	SuspendedAt            *time.Time `json:"suspended_at"`
+	RetryCount             int        `json:"retry_count" gorm:"default:0"`
+	LastPaymentAt          *time.Time `json:"last_payment_at"`
+	LastPaymentError       string     `json:"last_payment_error"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+}
+
+// SubscriptionTransaction represents payment transactions
+type SubscriptionTransaction struct {
+	ID                string     `json:"id" gorm:"type:uuid;primaryKey"`
+	SubscriptionID    string     `json:"subscription_id" gorm:"type:uuid;index"`
+	TenantID          string     `json:"tenant_id" gorm:"type:uuid;index"`
+	Amount            int64      `json:"amount"` // in cents
+	Currency          string     `json:"currency" gorm:"default:'KES'"`
+	ProviderReference string     `json:"provider_reference"`
+	PaymentMethod     string     `json:"payment_method"`                  // mpesa, card
+	Status            string     `json:"status" gorm:"default:'pending'"` // pending, completed, failed, refunded
+	Type              string     `json:"type"`                            // initial, renewal, upgrade, downgrade, refund
+	PaidAt            *time.Time `json:"paid_at"`
+	FailureReason     string     `json:"failure_reason"`
+	MetadataJSON      string     `json:"metadata_json"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+// UsageTracking represents tenant usage for plan limits
+type UsageTracking struct {
+	ID              string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID        string    `json:"tenant_id" gorm:"type:uuid;uniqueIndex"`
+	InvoicesUsed    int       `json:"invoices_used" gorm:"default:0"`
+	ClientsUsed     int       `json:"clients_used" gorm:"default:0"`
+	UsersUsed       int       `json:"users_used" gorm:"default:0"`
+	StorageUsed     int64     `json:"storage_used" gorm:"default:0"` // in bytes
+	APIRequestsUsed int64     `json:"api_requests_used" gorm:"default:0"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// SavedPaymentMethod represents stored payment methods
+type SavedPaymentMethod struct {
+	ID                 string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID           string    `json:"tenant_id" gorm:"type:uuid;index"`
+	ProviderToken      string    `json:"provider_token"` // token from payment provider
+	ProviderCustomerID string    `json:"provider_customer_id"`
+	PaymentType        string    `json:"payment_type"` // mpesa, card
+	Brand              string    `json:"brand"`        // Visa, Mastercard, M-Pesa
+	Last4              string    `json:"last4"`        // last 4 digits
+	ExpiryMonth        int       `json:"expiry_month"`
+	ExpiryYear         int       `json:"expiry_year"`
+	IsDefault          bool      `json:"is_default" gorm:"default:false"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+// BillingInvoice represents invoices sent to tenants for billing
+type BillingInvoice struct {
+	ID             string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID       string     `json:"tenant_id" gorm:"type:uuid;index"`
+	SubscriptionID string     `json:"subscription_id" gorm:"type:uuid;index"`
+	InvoiceNumber  string     `json:"invoice_number" gorm:"uniqueIndex"`
+	Amount         int64      `json:"amount"`
+	Currency       string     `json:"currency" gorm:"default:'KES'"`
+	Status         string     `json:"status" gorm:"default:'draft'"` // draft, sent, paid, failed, void
+	DueDate        time.Time  `json:"due_date"`
+	PaidAt         *time.Time `json:"paid_at"`
+	PDFURL         string     `json:"pdf_url"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+func (p *SubscriptionPlan) GetFeatures() []string {
+	var features []string
+	if p.FeaturesJSON != "" {
+		json.Unmarshal([]byte(p.FeaturesJSON), &features)
+	}
+	return features
+}
+
+func (p *SubscriptionPlan) GetLimits() map[string]int {
+	limits := make(map[string]int)
+	if p.LimitsJSON != "" {
+		json.Unmarshal([]byte(p.LimitsJSON), &limits)
+	}
+	return limits
+}
+
+func (p *SubscriptionPlan) HasFeature(feature string) bool {
+	features := p.GetFeatures()
+	for _, f := range features {
+		if f == feature {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *SubscriptionPlan) GetLimit(resource string) int {
+	limits := p.GetLimits()
+	if limit, ok := limits[resource]; ok {
+		return limit
+	}
+	return -1
+}
+
+func (s *Subscription) IsActive() bool {
+	return s.Status == "active" || s.Status == "trialing"
+}
+
+func (s *Subscription) IsCanceled() bool {
+	return s.Status == "canceled" || s.Status == "expired"
+}
+
+func (s *Subscription) IsExpired() bool {
+	if s.ExpiresAt != nil && s.ExpiresAt.Before(time.Now()) {
+		return true
+	}
+	if s.Status == "expired" {
+		return true
+	}
+	return false
+}
+
+func (s *Subscription) DaysUntilRenewal() int {
+	if s.RenewsAt == nil {
+		return 0
+	}
+	return int(s.RenewsAt.Sub(time.Now()).Hours() / 24)
+}
+
+func (s *Subscription) HasTrial() bool {
+	return s.TrialEndsAt != nil && time.Now().Before(*s.TrialEndsAt)
 }

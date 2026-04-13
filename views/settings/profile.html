@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" x-data="profilePage()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - InvoiceFast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40">
+        <div class="p-6">
+            <a href="/dashboard"><img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8"></a>
+        </div>
+        <nav class="px-3 space-y-1">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <span>Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <span>Invoices</span>
+            </a>
+            <a href="/profile" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust text-white">
+                <span>Profile</span>
+            </a>
+            <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <span>Settings</span>
+            </a>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <span>Automations</span>
+            </a>
+            <a href="/billing" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <span>Billing</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="ml-64 p-8" x-cloak>
+        <div class="max-w-2xl mx-auto">
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold text-slate-900">User Profile</h1>
+                <p class="text-slate-500 text-sm">Manage your personal account information and security</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <form @submit.prevent="updateProfile" class="p-6 space-y-6">
+                    <div class="grid grid-cols-1 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                            <input type="text" x-model="user.name" required 
+                                class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust focus:border-transparent outline-none transition-all">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+                            <input type="email" x-model="user.email" disabled 
+                                class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed">
+                            <p class="text-xs text-slate-400 mt-1">Email cannot be changed manually.</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+                            <input type="tel" x-model="user.phone" 
+                                class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust focus:border-transparent outline-none transition-all">
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-slate-100 flex justify-end">
+                        <button type="submit" 
+                            class="px-6 py-2.5 bg-trust text-white rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center gap-2"
+                            :disabled="loading">
+                            <span x-show="!loading">Update Profile</span>
+                            <span x-show="loading">Saving...</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-semibold text-slate-900 mb-4">Security</h2>
+                <button @click="showPasswordModal = true" class="text-trust font-medium hover:underline">
+                    Change Password
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <div x-show="showPasswordModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" x-cloak @click.self="showPasswordModal = false">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md">
+            <h2 class="text-xl font-bold mb-4">Change Password</h2>
+            <form @submit.prevent="changePassword" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Current Password</label>
+                    <input type="password" x-model="pwdForm.current" required class="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">New Password</label>
+                    <input type="password" x-model="pwdForm.new" required class="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" @click="showPasswordModal = false" class="px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-trust text-white rounded-lg">Update Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function profilePage() {
+            return {
+                user: { name: '', email: '', phone: '' },
+                loading: false,
+                showPasswordModal: false,
+                pwdForm: { current: '', new: '' },
+
+                async init() {
+                    InvoiceFastAPI.requireAuth(); //
+                    await this.loadProfile();
+                },
+
+                async loadProfile() {
+                    try {
+                        const data = await InvoiceFastAPI.user.getProfile();
+                        this.user = {
+                            name: data.name || '',
+                            email: data.email || '',
+                            phone: data.phone || ''
+                        };
+                    } catch (err) {
+                        console.error("Profile load failed", err);
+                    }
+                },
+
+                async updateProfile() {
+                    this.loading = true;
+                    try {
+                        await InvoiceFastAPI.user.updateProfile(this.user);
+                        alert('Profile updated successfully!');
+                    } catch (err) {
+                        alert('Update failed: ' + err.message);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async changePassword() {
+                    try {
+                        await InvoiceFastAPI.user.changePassword(this.pwdForm.current, this.pwdForm.new);
+                        alert('Password updated!');
+                        this.showPasswordModal = false;
+                        this.pwdForm = { current: '', new: '' };
+                    } catch (err) {
+                        alert('Error: ' + err.message);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

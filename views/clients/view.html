@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" x-data="clientView()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Details - InvoiceFast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 min-h-screen" x-init="init()">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40">
+        <div class="p-6">
+            <a href="/" class="flex items-center gap-2">
+                <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8">
+            </a>
+        </div>
+        
+        <nav class="px-3 space-y-1">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                </svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span>Invoices</span>
+            </a>
+            <a href="/clients" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+                <span>Clients</span>
+            </a>
+            <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span>Settings</span>
+            </a>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
+        </nav>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+            <button @click="logout()" class="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m10 4v-2a2 2 0 00-2-2H5a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2m4-4l4 4m0 0l-4 4m4-4H7"/>
+                </svg>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 p-8">
+        <template x-if="loading">
+            <div class="text-center py-8 text-slate-500">Loading...</div>
+        </template>
+        <template x-if="!loading && client">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <a href="/clients" class="text-sm text-trust hover:underline mb-2 inline-block">&larr; Back to Clients</a>
+                    <h1 class="text-2xl font-bold text-slate-900" x-text="client.name"></h1>
+                    <p class="text-slate-500" x-text="client.company"></p>
+                </div>
+                <button @click="showModal = true" class="bg-trust text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    Edit
+                </button>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white rounded-xl border border-slate-200 p-4">
+                    <p class="text-sm text-slate-500">Total Invoices</p>
+                    <p class="text-2xl font-bold text-slate-900" x-text="stats?.total_invoices || 0"></p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4">
+                    <p class="text-sm text-slate-500">Paid</p>
+                    <p class="text-2xl font-bold text-green-600" x-text="stats?.paid_invoices || 0"></p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4">
+                    <p class="text-sm text-slate-500">Outstanding</p>
+                    <p class="text-2xl font-bold text-yellow-600" x-text="stats?.pending_amount || 0"></p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4">
+                    <p class="text-sm text-slate-500">Total Revenue</p>
+                    <p class="text-2xl font-bold text-trust" x-text="formatCurrency(stats?.total_revenue)"></p>
+                </div>
+            </div>
+
+            <!-- Client Details -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <!-- Contact Info -->
+                <div class="bg-white rounded-xl border border-slate-200 p-6">
+                    <h2 class="text-lg font-semibold text-slate-900 mb-4">Contact Information</h2>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-sm text-slate-500">Email</p>
+                            <p class="text-slate-900" x-text="client.email || '-'"></p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500">Phone</p>
+                            <p class="text-slate-900" x-text="client.phone || '-'"></p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500">Address</p>
+                            <p class="text-slate-900 whitespace-pre-line" x-text="client.address || '-'"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="bg-white rounded-xl border border-slate-200 p-6">
+                    <h2 class="text-lg font-semibold text-slate-900 mb-4">Notes</h2>
+                    <p class="text-slate-600 whitespace-pre-line" x-text="client.notes || 'No notes'"></p>
+                </div>
+            </div>
+
+            <!-- Recent Invoices -->
+            <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200">
+                    <h2 class="text-lg font-semibold text-slate-900">Recent Invoices</h2>
+                </div>
+                <table class="w-full">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Invoice #</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Amount</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        <template x-for="inv in stats?.recent_invoices || []" :key="inv.id">
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-6 py-4">
+                                    <a :href="'/invoices/' + inv.id" class="font-medium text-trust hover:underline" x-text="inv.invoice_number"></a>
+                                </td>
+                                <td class="px-6 py-4 text-slate-600" x-text="formatDate(inv.created_at)"></td>
+                                <td class="px-6 py-4 font-medium" x-text="formatCurrency(inv.total)"></td>
+                                <td class="px-6 py-4" x-html="formatStatus(inv.status)"></td>
+                                <td class="px-6 py-4 text-right">
+                                    <a :href="'/invoices/' + inv.id" class="text-trust hover:underline">View</a>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="!stats?.recent_invoices?.length">
+                            <tr><td colspan="5" class="px-6 py-8 text-center text-slate-500">No invoices yet</td></tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+    </main>
+
+    <!-- Edit Modal -->
+    <div x-show="showModal" x-cloak class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showModal = false">
+        <div class="bg-white rounded-xl p-6 w-full max-w-lg" @click.stop>
+            <h2 class="text-xl font-bold mb-4">Edit Client</h2>
+            <form @submit.prevent="saveClient">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                        <input type="text" x-model="form.name" required class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Company</label>
+                        <input type="text" x-model="form.company" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                        <input type="email" x-model="form.email" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                        <input type="tel" x-model="form.phone" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                        <textarea x-model="form.address" rows="2" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                        <textarea x-model="form.notes" rows="3" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent"></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" @click="showModal = false" class="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function clientView() {
+        return {
+            loading: true,
+            client: null,
+            stats: null,
+            showModal: false,
+            form: { name: '', company: '', email: '', phone: '', address: '', notes: '' },
+            
+            async init() {
+                if (!requireAuth()) return;
+                await this.loadClient();
+            },
+            
+            async loadClient() {
+                this.loading = true;
+                try {
+                    const id = this.getClientId();
+                    const [clientData, statsData] = await Promise.all([
+                        InvoiceFastAPI.clients.get(id),
+                        InvoiceFastAPI.request('/tenant/clients/' + id + '/stats'),
+                    ]);
+                    this.client = clientData;
+                    this.stats = statsData;
+                    this.form = {
+                        name: clientData.name || '',
+                        company: clientData.company || '',
+                        email: clientData.email || '',
+                        phone: clientData.phone || '',
+                        address: clientData.address || '',
+                        notes: clientData.notes || '',
+                    };
+                } catch(err) {
+                    console.error('Failed to load client:', err);
+                } finally {
+                    this.loading = false;
+                }
+            },
+            
+            getClientId() {
+                const path = window.location.pathname;
+                const parts = path.split('/');
+                return parts[parts.length - 1];
+            },
+            
+            async saveClient() {
+                try {
+                    const id = this.getClientId();
+                    await InvoiceFastAPI.clients.update(id, this.form);
+                    this.showModal = false;
+                    await this.loadClient();
+                } catch(err) {
+                    alert('Failed to save: ' + err.message);
+                }
+            },
+            
+            logout() {
+                InvoiceFastAPI.logout();
+            },
+            
+            formatCurrency(amount) {
+                return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount || 0);
+            },
+            
+            formatDate(date) {
+                if (!date) return '-';
+                return new Date(date).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' });
+            },
+            
+            formatStatus(status) {
+                const map = {
+                    draft: { class: 'bg-gray-100 text-gray-700', label: 'Draft' },
+                    sent: { class: 'bg-blue-100 text-blue-700', label: 'Sent' },
+                    viewed: { class: 'bg-indigo-100 text-indigo-700', label: 'Viewed' },
+                    paid: { class: 'bg-green-100 text-green-700', label: 'Paid' },
+                    partially_paid: { class: 'bg-yellow-100 text-yellow-700', label: 'Partial' },
+                    overdue: { class: 'bg-red-100 text-red-700', label: 'Overdue' },
+                    cancelled: { class: 'bg-slate-100 text-slate-700', label: 'Cancelled' },
+                };
+                const s = map[status] || { class: 'bg-gray-100 text-gray-700', label: status };
+                return `<span class="px-2 py-1 rounded-full text-xs font-medium ${s.class}">${s.label}</span>`;
+            }
+        };
+    }
+    </script>
+</body>
+</html>

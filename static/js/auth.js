@@ -1,4 +1,3 @@
-<script>
 // Common authentication utilities for InvoiceFast
 (function() {
     'use strict';
@@ -38,51 +37,59 @@
         const authenticated = isAuthenticated();
         
         // Update elements with data-auth attribute
-        document.querySelectorAll('[data-auth="authenticated"]').forEach(el => {
+        document.querySelectorAll('[data-auth="authenticated"]').forEach(function(el) {
             el.style.display = authenticated ? '' : 'none';
         });
         
-        document.querySelectorAll('[data-auth="anonymous"]').forEach(el => {
+        document.querySelectorAll('[data-auth="anonymous"]').forEach(function(el) {
             el.style.display = authenticated ? 'none' : '';
         });
     }
     
     // Make authenticated API call
-    async function apiCall(url, options = {}) {
-        const token = getAccessToken();
+    async function apiCall(url, options) {
+        options = options || {};
+        var token = getAccessToken();
         
-        const headers = {
-            'Content-Type': 'application/json',
-            ...options.headers
+        var headers = {
+            'Content-Type': 'application/json'
         };
+        
+        if (options.headers) {
+            Object.keys(options.headers).forEach(function(key) {
+                headers[key] = options.headers[key];
+            });
+        }
         
         if (token) {
             headers['Authorization'] = 'Bearer ' + token;
         }
         
-        const response = await fetch(url, {
-            ...options,
-            headers
+        var response = await fetch(url, {
+            method: options.method || 'GET',
+            headers: headers,
+            body: options.body
         });
         
         // Handle token refresh on 401
         if (response.status === 401 && getRefreshToken()) {
-            const refreshToken = getRefreshToken();
-            const refreshResponse = await fetch('/api/v1/auth/refresh', {
+            var refreshToken = getRefreshToken();
+            var refreshResponse = await fetch('/api/v1/auth/refresh', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: refreshToken })
             });
             
             if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
+                var data = await refreshResponse.json();
                 setTokens(data.access_token, data.refresh_token);
                 
                 // Retry original request
                 headers['Authorization'] = 'Bearer ' + data.access_token;
                 return fetch(url, {
-                    ...options,
-                    headers
+                    method: options.method || 'GET',
+                    headers: headers,
+                    body: options.body
                 });
             }
             
@@ -96,7 +103,7 @@
     
     // Logout function
     async function logout() {
-        const token = getRefreshToken();
+        var token = getRefreshToken();
         if (token) {
             try {
                 await fetch('/api/v1/tenant/logout', {
@@ -119,7 +126,7 @@
     function init() {
         // Add token to all HTMX requests
         document.body.addEventListener('htmx:configRequest', function(evt) {
-            const token = getAccessToken();
+            var token = getAccessToken();
             if (token) {
                 evt.detail.headers.set('Authorization', 'Bearer ' + token);
             }
@@ -128,7 +135,7 @@
         // Handle auth errors
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             // Check for auth error in response
-            const errEl = evt.detail.target.querySelector('[data-auth-error]');
+            var errEl = evt.detail.target.querySelector('[data-auth-error]');
             if (errEl && errEl.dataset.authError === 'true') {
                 clearTokens();
                 window.location.href = '/login.html';
@@ -143,12 +150,12 @@
             }
             
             // Verify token is valid
-            apiCall('/api/v1/tenant/me').then(res => {
+            apiCall('/api/v1/tenant/me').then(function(res) {
                 if (res.status === 401) {
                     clearTokens();
                     window.location.href = '/login.html';
                 }
-            }).catch(() => {
+            }).catch(function() {
                 clearTokens();
                 window.location.href = '/login.html';
             });
@@ -166,13 +173,13 @@
     
     // Export to window for global access
     window.InvoiceFastAuth = {
-        getAccessToken,
-        getRefreshToken,
-        setTokens,
-        clearTokens,
-        isAuthenticated,
-        apiCall,
-        logout,
-        updateAuthUI
+        getAccessToken: getAccessToken,
+        getRefreshToken: getRefreshToken,
+        setTokens: setTokens,
+        clearTokens: clearTokens,
+        isAuthenticated: isAuthenticated,
+        apiCall: apiCall,
+        logout: logout,
+        updateAuthUI: updateAuthUI
     };
 })();

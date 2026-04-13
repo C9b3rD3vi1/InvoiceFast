@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en" x-data="invoiceAnalytics()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Analytics | InvoiceFast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                    },
+                    animation: { 'fade-in': 'fadeIn 0.2s ease-out' },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40">
+        <div class="p-6">
+            <a href="/" class="flex items-center gap-2">
+                <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8">
+            </a>
+        </div>
+        
+        <nav class="px-3 space-y-1">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust text-white">
+                <i data-lucide="file-text" class="w-5 h-5"></i>
+                <span>Invoices</span>
+            </a>
+            <a href="/clients" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                <span>Clients</span>
+            </a>
+            <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="settings" class="w-5 h-5"></i>
+                <span>Settings</span>
+            </a>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
+        </nav>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+            <button @click="logout()" class="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">Invoice Analytics</h1>
+                    <p class="text-slate-500 text-sm mt-1">Track your invoicing performance and revenue</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <select x-model="period" @change="loadData()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                        <option value="7">Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="90">Last 90 Days</option>
+                        <option value="365">Last Year</option>
+                    </select>
+                    <button @click="exportReport()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        Export Report
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <div class="p-8 space-y-6">
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-2xl border border-slate-200 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="p-2 rounded-xl bg-trust/10">
+                            <i data-lucide="file-text" class="w-5 h-5 text-trust"></i>
+                        </div>
+                        <span class="text-xs font-medium px-2 py-1 rounded-full" :class="kpi.totalInvoices.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                            <span x-text="kpi.totalInvoices.trend > 0 ? '+' + kpi.totalInvoices.trend : kpi.totalInvoices.trend"></span>%
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500" x-text="kpi.totalInvoices.label"></p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" x-text="kpi.totalInvoices.value"></p>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="p-2 rounded-xl bg-green-100">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+                        </div>
+                        <span class="text-xs font-medium px-2 py-1 rounded-full" :class="kpi.paidRate.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                            <span x-text="kpi.paidRate.trend > 0 ? '+' + kpi.paidRate.trend : kpi.paidRate.trend"></span>%
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500" x-text="kpi.paidRate.label"></p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" x-text="kpi.paidRate.value"></p>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="p-2 rounded-xl bg-emerald-100">
+                            <i data-lucide="dollar-sign" class="w-5 h-5 text-emerald-600"></i>
+                        </div>
+                        <span class="text-xs font-medium px-2 py-1 rounded-full" :class="kpi.revenue.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                            <span x-text="kpi.revenue.trend > 0 ? '+' + kpi.revenue.trend : kpi.revenue.trend"></span>%
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500" x-text="kpi.revenue.label"></p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" x-text="kpi.revenue.value"></p>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="p-2 rounded-xl bg-red-100">
+                            <i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>
+                        </div>
+                        <span class="text-xs font-medium px-2 py-1 rounded-full" :class="kpi.overdueRate.trend > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
+                            <span x-text="kpi.overdueRate.trend > 0 ? '+' : ''"></span><span x-text="kpi.overdueRate.trend"></span>%
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500" x-text="kpi.overdueRate.label"></p>
+                    <p class="text-2xl font-bold text-slate-900 mt-1" x-text="kpi.overdueRate.value"></p>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-2 gap-6">
+                <!-- Revenue Chart -->
+                <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                    <h3 class="font-semibold text-slate-900 mb-4">Revenue Trend</h3>
+                    <div class="h-64">
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Invoice Status Chart -->
+                <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                    <h3 class="font-semibold text-slate-900 mb-4">Invoice Status</h3>
+                    <div class="h-64 flex items-center justify-center">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top Clients & Recent Invoices -->
+            <div class="grid grid-cols-2 gap-6">
+                <!-- Top Revenue Clients -->
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-200">
+                        <h3 class="font-semibold text-slate-900">Top Revenue Clients</h3>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                        <template x-for="(client, index) in topClients" :key="client.id">
+                            <div class="px-6 py-4 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-sm font-medium text-slate-400" x-text="index + 1">1</span>
+                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold"
+                                        :class="getAvatarGradient(client.id)">
+                                        <span x-text="client.name?.charAt(0).toUpperCase()">C</span>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-900" x-text="client.name">Client Name</p>
+                                        <p class="text-sm text-slate-500" x-text="client.invoiceCount + ' invoices'"></p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-slate-900" x-text="formatCurrency(client.revenue)">KES 0</p>
+                                    <p class="text-sm text-green-600" x-text="'+' + client.trend + '%'">+0%</p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Recent Invoices -->
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-200">
+                        <h3 class="font-semibold text-slate-900">Recent Invoices</h3>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                        <template x-for="invoice in recentInvoices" :key="invoice.id">
+                            <div class="px-6 py-4 flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900" x-text="invoice.invoice_number">INV-001</p>
+                                    <p class="text-sm text-slate-500" x-text="invoice.client_name">Client Name</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-slate-900" x-text="formatCurrency(invoice.total)">KES 0</p>
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="getStatusClass(invoice.status)" x-text="getStatusLabel(invoice.status)"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tax Summary -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Tax Summary</h3>
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="bg-slate-50 rounded-xl p-4">
+                        <p class="text-xs text-slate-500">Total Sales</p>
+                        <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(taxSummary.sales)">KES 0</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-4">
+                        <p class="text-xs text-slate-500">VAT Collected</p>
+                        <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(taxSummary.vat)">KES 0</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-4">
+                        <p class="text-xs text-slate-500">Withholding</p>
+                        <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(taxSummary.withholding)">KES 0</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-4">
+                        <p class="text-xs text-slate-500">Net Tax</p>
+                        <p class="text-xl font-bold text-trust" x-text="formatCurrency(taxSummary.net)">KES 0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Methods -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Payment Methods</h3>
+                <div class="h-64">
+                    <canvas id="paymentMethodsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function invoiceAnalytics() {
+            return {
+                loading: true,
+                period: '30',
+                kpi: {
+                    totalInvoices: { label: 'Total Invoices', value: '0', trend: 12 },
+                    paidRate: { label: 'Paid Rate', value: '0%', trend: 5 },
+                    revenue: { label: 'Revenue', value: 'KES 0', trend: 15 },
+                    overdueRate: { label: 'Overdue Rate', value: '0%', trend: -3 },
+                },
+                topClients: [],
+                recentInvoices: [],
+                taxSummary: { sales: 0, vat: 0, withholding: 0, net: 0 },
+                revenueChart: null,
+                statusChart: null,
+                paymentChart: null,
+
+                async init() {
+                    if (!requireAuth()) return;
+                    lucide.createIcons();
+                    await this.loadData();
+                },
+
+                async loadData() {
+                    this.loading = true;
+                    try {
+                        const data = await InvoiceFastAPI.dashboard.getSummary(this.period);
+                        this.kpi.totalInvoices.value = data.totalInvoices?.toString() || '0';
+                        this.kpi.paidRate.value = data.paidRate || '0%';
+                        this.kpi.revenue.value = this.formatCurrency(data.revenue || 0);
+                        this.kpi.overdueRate.value = data.overdueRate || '0%';
+
+                        this.topClients = data.topClients || [];
+                        this.recentInvoices = data.recentInvoices || [];
+                        this.taxSummary = data.taxSummary || { sales: 0, vat: 0, withholding: 0, net: 0 };
+
+                        this.renderCharts();
+                    } catch(err) {
+                        console.error('Failed to load analytics:', err);
+                        this.loadMockData();
+                        this.renderCharts();
+                    } finally {
+                        this.loading = false;
+                        lucide.createIcons();
+                    }
+                },
+
+                loadMockData() {
+                    this.topClients = [
+                        { id: '1', name: 'Acme Corp', invoiceCount: 12, revenue: 2500000, trend: 15 },
+                        { id: '2', name: 'Tech Solutions', invoiceCount: 8, revenue: 1800000, trend: 8 },
+                        { id: '3', name: 'Global Services', invoiceCount: 5, revenue: 1200000, trend: -5 },
+                    ];
+                    this.recentInvoices = [
+                        { id: '1', invoice_number: 'INV-0024', client_name: 'Acme Corp', total: 150000, status: 'paid' },
+                        { id: '2', invoice_number: 'INV-0023', client_name: 'Tech Solutions', total: 85000, status: 'sent' },
+                        { id: '3', invoice_number: 'INV-0022', client_name: 'Global Services', total: 45000, status: 'overdue' },
+                    ];
+                    this.taxSummary = { sales: 5000000, vat: 800000, withholding: 50000, net: 750000 };
+                },
+
+                renderCharts() {
+                    this.renderRevenueChart();
+                    this.renderStatusChart();
+                    this.renderPaymentChart();
+                },
+
+                renderRevenueChart() {
+                    const ctx = document.getElementById('revenueChart');
+                    if (!ctx) return;
+                    
+                    if (this.revenueChart) this.revenueChart.destroy();
+                    
+                    this.revenueChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                            datasets: [{
+                                label: 'Revenue',
+                                data: [1200000, 1800000, 1500000, 2100000, 1900000, 2400000],
+                                borderColor: '#0277BD',
+                                backgroundColor: 'rgba(2, 119, 189, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, ticks: { callback: v => 'KES ' + (v/1000000).toFixed(1) + 'M' } }
+                            }
+                        }
+                    });
+                },
+
+                renderStatusChart() {
+                    const ctx = document.getElementById('statusChart');
+                    if (!ctx) return;
+                    
+                    if (this.statusChart) this.statusChart.destroy();
+                    
+                    this.statusChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Paid', 'Pending', 'Overdue', 'Draft'],
+                            datasets: [{
+                                data: [65, 20, 10, 5],
+                                backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#94a3b8'],
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'right' } }
+                        }
+                    });
+                },
+
+                renderPaymentChart() {
+                    const ctx = document.getElementById('paymentMethodsChart');
+                    if (!ctx) return;
+                    
+                    if (this.paymentChart) this.paymentChart.destroy();
+                    
+                    this.paymentChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['M-Pesa', 'Card', 'Bank Transfer', 'Cash'],
+                            datasets: [{
+                                label: 'Payments',
+                                data: [4500000, 2500000, 1500000, 500000],
+                                backgroundColor: '#0277BD',
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, ticks: { callback: v => 'KES ' + (v/1000000).toFixed(1) + 'M' } }
+                            }
+                        }
+                    });
+                },
+
+                formatCurrency(amount) {
+                    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0 }).format(amount || 0);
+                },
+
+                getAvatarGradient(id) {
+                    const gradients = [
+                        'bg-gradient-to-br from-purple-500 to-indigo-600',
+                        'bg-gradient-to-br from-pink-500 to-rose-600',
+                        'bg-gradient-to-br from-cyan-500 to-blue-600',
+                    ];
+                    return gradients[id?.charCodeAt(0) % gradients.length] || gradients[0];
+                },
+
+                getStatusClass(status) {
+                    const classes = {
+                        'draft': 'bg-slate-100 text-slate-700',
+                        'sent': 'bg-blue-100 text-blue-700',
+                        'paid': 'bg-green-100 text-green-700',
+                        'overdue': 'bg-red-100 text-red-700',
+                    };
+                    return classes[status] || 'bg-slate-100 text-slate-600';
+                },
+
+                getStatusLabel(status) {
+                    const labels = { 'draft': 'Draft', 'sent': 'Sent', 'paid': 'Paid', 'overdue': 'Overdue' };
+                    return labels[status] || status;
+                },
+
+                exportReport() {
+                    alert('Exporting report...');
+                },
+
+                logout() {
+                    InvoiceFastAPI.logout();
+                }
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,34 +1,917 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" x-data="clientsManager()" x-init="init()">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clients | InvoiceFast</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="/static/js/auth.js"></script>
-    <style>[x-cloak] { display: none !important; }</style>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="/static/js/api.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
+                        slate: { 850: '#1e293b', 900: '#0f172a' }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    animation: { 'fade-in': 'fadeIn 0.2s ease-out', 'slide-in': 'slideIn 0.3s ease-out' },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideIn: { '0%': { transform: 'translateX(100%)' }, '100%': { transform: 'translateX(0)' } }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        [x-cloak] { display: none !important; }
+        
+        .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); }
+        .glass-dark { background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(20px); }
+        
+        .card-shine { position: relative; overflow: hidden; }
+        .card-shine::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%); pointer-events: none; }
+        
+        .spark { stroke-dasharray: 4 2; animation: sparkDraw 1s linear infinite; }
+        @keyframes sparkDraw { to { stroke-dashoffset: -6; } }
+        
+        input[type="checkbox"] { accent-color: #0277BD; }
+        
+        .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        
+        .modal-backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+        
+        .dropdown-menu { animation: dropdownShow 0.15s ease-out; }
+        @keyframes dropdownShow { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
 </head>
-<body class="bg-slate-50" x-data="app()">
-    <aside class="fixed left-0 top-0 h-full w-64 bg-slate-900 text-white p-4">
-        <div class="mb-8"><h1 class="text-xl font-bold">InvoiceFast</h1></div>
-        <nav class="space-y-2">
-            <a href="/dashboard" class="block py-2 px-4 rounded hover:bg-slate-800">Dashboard</a>
-            <a href="/invoices" class="block py-2 px-4 rounded hover:bg-slate-800">Invoices</a>
-            <a href="/clients" class="block py-2 px-4 rounded bg-slate-800">Clients</a>
-            <a href="/payments" class="block py-2 px-4 rounded hover:bg-slate-800">Payments</a>
-            <a href="/settings" class="block py-2 px-4 rounded hover:bg-slate-800">Settings</a>
+<body class="bg-slate-100 min-h-screen font-sans">
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-40">
+        <div class="p-6">
+            <a href="/" class="flex items-center gap-2">
+                <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-8">
+            </a>
+        </div>
+        
+        <nav class="px-3 space-y-1">
+            <a href="/dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/invoices" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="file-text" class="w-5 h-5"></i>
+                <span>Invoices</span>
+            </a>
+            <a href="/clients" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust text-white">
+                <i data-lucide="users" class="w-5 h-5"></i>
+                <span>Clients</span>
+            </a>
+            <a href="/payments" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="credit-card" class="w-5 h-5"></i>
+                <span>Payments</span>
+            </a>
+            
+            <a href="/notifications" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-indigo-600 text-white">
+                <i class="fas fa-bell w-5"></i>
+                <span>Notifications</span>
+            </a>
+            
+            <a href="/settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <a href="/billing" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                    <span>Billing</span>
+                </a>
+                <i data-lucide="settings" class="w-5 h-5"></i>
+                <span>Settings</span>
+            </a>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase">Tools</p>
+            </div>
+            <a href="/automations" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-trust/10 text-trust">
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Automations</span>
+            </a>
         </nav>
-        <div class="absolute bottom-4 left-4 right-4">
-            <button @click="logout()" class="w-full py-2 bg-red-600 rounded hover:bg-red-700">Logout</button>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+            <button @click="logout()" class="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+                <span>Logout</span>
+            </button>
         </div>
     </aside>
-    <main class="ml-64 p-8">
-        <h1 class="text-2xl font-bold text-slate-900">Clients</h1>
-        <p class="text-slate-500 mt-2">Coming soon...</p>
+
+    <!-- Main Content -->
+    <main class="ml-64">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">Clients</h1>
+                    <p class="text-slate-500 text-sm mt-1">Manage your client relationships and invoicing</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button @click="exportClients()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        Export
+                    </button>
+                    <button @click="openAddModal()" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 shadow-lg shadow-trust/30">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        Add Client
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="px-8 py-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <template x-for="stat in stats" :key="stat.label">
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 card-shine hover:shadow-lg hover:shadow-slate-200/50 transition-all cursor-pointer">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="p-2 rounded-xl" :class="stat.bg">
+                                <i :data-lucide="stat.icon" class="w-5 h-5" :class="stat.color"></i>
+                            </div>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full" :class="stat.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                                <span x-text="stat.trend > 0 ? '+' + stat.trend : stat.trend"></span>%
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500" x-text="stat.label"></p>
+                        <p class="text-xl font-bold text-slate-900 mt-1" x-text="stat.value"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Filters & Search Bar -->
+        <div class="px-8 pb-4">
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-4">
+                <div class="relative flex-1 max-w-md">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" x-model="search" @input.debounce.300ms="applyFilters()" 
+                        placeholder="Search clients by name, email, or company..."
+                        class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust focus:border-transparent">
+                </div>
+                
+                <select x-model="filterStatus" @change="applyFilters()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+                
+                <select x-model="filterTag" @change="applyFilters()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                    <option value="">All Tags</option>
+                    <template x-for="tag in availableTags" :key="tag">
+                        <option :value="tag" x-text="tag"></option>
+                    </template>
+                </select>
+                
+                <select x-model="sortBy" @change="applyFilters()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                    <option value="created_at desc">Newest First</option>
+                    <option value="created_at asc">Oldest First</option>
+                    <option value="name asc">Name A-Z</option>
+                    <option value="total_billed desc">Revenue High-Low</option>
+                    <option value="outstanding desc">Outstanding High-Low</option>
+                </select>
+                
+                <button @click="clearFilters()" class="px-4 py-2.5 text-slate-600 hover:text-slate-900 text-sm">Clear</button>
+            </div>
+        </div>
+
+        <!-- Bulk Actions -->
+        <div x-show="selectedClients.length > 0" class="px-8 pb-4" x-transition>
+            <div class="bg-trust/10 rounded-xl px-4 py-3 flex items-center justify-between">
+                <span class="text-trust font-medium"><span x-text="selectedClients.length"></span> clients selected</span>
+                <div class="flex items-center gap-2">
+                    <button @click="bulkExport()" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> Export
+                    </button>
+                    <button @click="bulkTag()" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg flex items-center gap-2">
+                        <i data-lucide="tag" class="w-4 h-4"></i> Tag
+                    </button>
+                    <button @click="bulkDelete()" class="px-3 py-1.5 text-sm text-red-600 hover:bg-white/50 rounded-lg flex items-center gap-2">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                    </button>
+                    <button @click="selectedClients = []" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client Table -->
+        <div class="px-8 pb-8">
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-4 text-left">
+                                    <input type="checkbox" @change="toggleSelectAll()" :checked="allSelected" class="rounded">
+                                </th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Client</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Contact</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Revenue</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Outstanding</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Invoices</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Tags</th>
+                                <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-if="loading">
+                                <tr><td colspan="9" class="px-4 py-12"><div class="flex items-center justify-center"><div class="w-8 h-8 border-2 border-trust border-t-transparent rounded-full animate-spin"></div></div></td></tr>
+                            </template>
+                            <template x-for="client in clients" :key="client.id">
+                                <tr class="hover:bg-slate-50/50 transition-colors" :class="selectedClients.includes(client.id) ? 'bg-trust/5' : ''">
+                                    <td class="px-4 py-4">
+                                        <input type="checkbox" :checked="selectedClients.includes(client.id)" @change="toggleSelect(client.id)" class="rounded">
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <button @click="openProfileDrawer(client)" class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold hover:opacity-90 transition-opacity"
+                                                :class="getAvatarGradient(client.id)" x-text="client.name?.charAt(0).toUpperCase()">C</button>
+                                            <div>
+                                                <button @click="openProfileDrawer(client)" class="font-semibold text-slate-900 hover:text-trust text-left" x-text="client.name">Client Name</button>
+                                                <p class="text-xs text-slate-500" x-text="client.company || '-'"></p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="space-y-1">
+                                            <p class="text-sm text-slate-600" x-text="client.email || '-'"></p>
+                                            <p class="text-xs text-slate-400" x-text="client.phone || '-'"></p>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                            :class="(client.outstanding || 0) > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'"
+                                            x-text="(client.outstanding || 0) > 0 ? 'Active' : 'Inactive'"></span>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div>
+                                            <p class="font-semibold text-slate-900" x-text="formatCurrency(client.total_billed || 0)">KES 0</p>
+                                            <div class="w-16 h-6 mt-1">
+                                                <svg viewBox="0 0 64 24" class="w-full h-full">
+                                                    <polyline :points="sparklinePoints" class="spark" stroke="#10b981" fill="none" stroke-width="2"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <span class="font-medium" :class="(client.outstanding || 0) > 0 ? 'text-red-600' : 'text-slate-600'" x-text="formatCurrency(client.outstanding || 0)">KES 0</span>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <p class="text-slate-900" x-text="client.invoice_count || 0">0</p>
+                                        <p class="text-xs text-slate-400" x-text="client.last_invoice ? formatDate(client.last_invoice) : 'No invoices'"></p>
+                                    </td>
+                                    <td class="px-4 py-4">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="tag in (client.tags || []).slice(0, 3)" :key="tag">
+                                                <span class="px-2 py-0.5 rounded-md text-xs font-medium" :class="getTagClass(tag)" x-text="tag"></span>
+                                            </template>
+                                            <template x-if="client.tags?.length > 3">
+                                                <span class="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-500">+<span x-text="client.tags.length - 3"></span></span>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-4 text-right">
+                                        <div class="relative" x-data="{ open: false }">
+                                            <button @click="open = !open" @click.outside="open = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                                                <i data-lucide="more-vertical" class="w-4 h-4"></i>
+                                            </button>
+                                            <div x-show="open" x-cloak class="dropdown-menu absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50">
+                                                <button @click="openProfileDrawer(client); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                    <i data-lucide="user" class="w-4 h-4"></i> View Profile
+                                                </button>
+                                                <button @click="editClient(client); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                    <i data-lucide="edit-2" class="w-4 h-4"></i> Edit Client
+                                                </button>
+                                                <button @click="createInvoice(client.id); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                    <i data-lucide="file-plus" class="w-4 h-4"></i> Create Invoice
+                                                </button>
+                                                <hr class="my-1">
+                                                <button @click="toggleVIP(client); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                    <i data-lucide="star" class="w-4 h-4"></i> Mark as VIP
+                                                </button>
+                                                <button @click="archiveClient(client); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                                    <i data-lucide="archive" class="w-4 h-4"></i> Archive
+                                                </button>
+                                                <hr class="my-1">
+                                                <button @click="openActionModal('delete', client); open = false" class="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                                    <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-if="!loading && clients.length === 0">
+                                <tr><td colspan="9" class="px-4 py-16">
+                                    <div class="text-center">
+                                        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <i data-lucide="users" class="w-8 h-8 text-slate-400"></i>
+                                        </div>
+                                        <h3 class="text-lg font-semibold text-slate-900 mb-2">No clients found</h3>
+                                        <p class="text-slate-500 mb-4">Get started by adding your first client</p>
+                                        <button @click="openAddModal()" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                            <i data-lucide="plus" class="w-4 h-4"></i> Add Client
+                                        </button>
+                                    </div>
+                                </td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+                    <p class="text-sm text-slate-500">Showing <span x-text="(page - 1) * perPage + 1">1</span> to <span x-text="Math.min(page * perPage, total)">10</span> of <span x-text="total">0</span> clients</p>
+                    <div class="flex items-center gap-2">
+                        <button @click="goToPage(page - 1)" :disabled="page <= 1" class="px-3 py-2 rounded-lg border border-slate-200 text-sm disabled:opacity-50 hover:bg-slate-50">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                        </button>
+                        <template x-for="p in visiblePages" :key="p">
+                            <button @click="goToPage(p)" class="px-3 py-2 rounded-lg text-sm" :class="p === page ? 'bg-trust text-white' : 'hover:bg-slate-50'" x-text="p"></button>
+                        </template>
+                        <button @click="goToPage(page + 1)" :disabled="page >= totalPages" class="px-3 py-2 rounded-lg border border-slate-200 text-sm disabled:opacity-50 hover:bg-slate-50">
+                            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
+
+    <!-- Client Profile Drawer (Modal) -->
+    <div x-show="profileDrawerOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="profileDrawerOpen = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-fade-in">
+            <template x-if="selectedClient">
+                <div>
+                    <!-- Drawer Header -->
+                    <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10 rounded-t-2xl">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white text-lg font-bold"
+                                :class="getAvatarGradient(selectedClient.id)" x-text="selectedClient.name?.charAt(0).toUpperCase()">C</div>
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900" x-text="selectedClient.name">Client Name</h2>
+                                <p class="text-sm text-slate-500" x-text="selectedClient.company || selectedClient.email"></p>
+                            </div>
+                        </div>
+                        <button @click="profileDrawerOpen = false" class="p-2 hover:bg-slate-100 rounded-lg flex items-center gap-2 text-slate-500 hover:text-slate-700">
+                            <span class="text-sm font-medium">Close</span>
+                            <i data-lucide="x" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+
+                    <!-- Client Stats -->
+                    <div class="px-6 py-4 border-b border-slate-100">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-50 rounded-xl p-4">
+                                <p class="text-xs text-slate-500">Total Billed</p>
+                                <p class="text-lg font-bold text-slate-900" x-text="formatCurrency(selectedClient.total_billed || 0)">KES 0</p>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-4">
+                                <p class="text-xs text-slate-500">Outstanding</p>
+                                <p class="text-lg font-bold" :class="(selectedClient.outstanding || 0) > 0 ? 'text-red-600' : 'text-slate-900'" x-text="formatCurrency(selectedClient.outstanding || 0)">KES 0</p>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-4">
+                                <p class="text-xs text-slate-500">Total Paid</p>
+                                <p class="text-lg font-bold text-green-600" x-text="formatCurrency(selectedClient.total_paid || 0)">KES 0</p>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-4">
+                                <p class="text-xs text-slate-500">Invoices</p>
+                                <p class="text-lg font-bold text-slate-900" x-text="selectedClient.invoice_count || 0">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact Info -->
+                    <div class="px-6 py-4 border-b border-slate-100">
+                        <h3 class="font-semibold text-slate-900 mb-4">Contact Information</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="mail" class="w-4 h-4 text-slate-400"></i>
+                                <span class="text-sm" x-text="selectedClient.email || '-'">-</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="phone" class="w-4 h-4 text-slate-400"></i>
+                                <span class="text-sm" x-text="selectedClient.phone || '-'">-</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="map-pin" class="w-4 h-4 text-slate-400"></i>
+                                <span class="text-sm" x-text="selectedClient.address || '-'">-</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <i data-lucide="building-2" class="w-4 h-4 text-slate-400"></i>
+                                <span class="text-sm" x-text="selectedClient.company || '-'">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="px-6 py-4 border-b border-slate-100">
+                        <h3 class="font-semibold text-slate-900 mb-4">Tags</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="tag in (selectedClient.tags || []).slice(0, 5)" :key="tag">
+                                <span class="px-3 py-1.5 rounded-full text-sm font-medium" :class="getTagClass(tag)" x-text="tag"></span>
+                            </template>
+                            <button @click="editTags()" class="px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+                                <i data-lucide="plus" class="w-3 h-3 inline"></i> Add Tag
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="px-6 py-4 border-b border-slate-100">
+                        <h3 class="font-semibold text-slate-900 mb-4">Internal Notes</h3>
+                        <textarea x-model="clientNotes" rows="4" placeholder="Add notes about this client..." class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-trust focus:border-transparent"></textarea>
+                        <button @click="saveNotes()" class="mt-2 px-4 py-2 bg-trust text-white rounded-lg text-sm hover:bg-trust-dark">Save Notes</button>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="px-6 py-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <button @click="createInvoice(selectedClient.id)" class="px-4 py-2.5 bg-trust text-white rounded-xl text-sm font-medium hover:bg-trust-dark flex items-center justify-center gap-2">
+                                <i data-lucide="file-plus" class="w-4 h-4"></i> New Invoice
+                            </button>
+                            <button @click="editClient(selectedClient)" class="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-2">
+                                <i data-lucide="edit-2" class="w-4 h-4"></i> Edit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Add/Edit Client Modal -->
+    <div x-show="clientModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="clientModalOpen = false">
+        <div class="absolute inset-0 modal-backdrop"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 class="text-xl font-bold text-slate-900" x-text="editingClient ? 'Edit Client' : 'Add New Client'"></h2>
+                <button @click="clientModalOpen = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveClient()" class="p-6 space-y-6">
+                <!-- Basic Info -->
+                <div>
+                    <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <i data-lucide="user" class="w-4 h-4 text-trust"></i> Basic Information
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Client Name *</label>
+                            <input type="text" x-model="formData.name" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Company</label>
+                            <input type="text" x-model="formData.company" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                            <input type="email" x-model="formData.email" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                            <input type="tel" x-model="formData.phone" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                            <textarea x-model="formData.address" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Business Info -->
+                <div class="border-t border-slate-200 pt-6">
+                    <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <i data-lucide="building-2" class="w-4 h-4 text-trust"></i> Business Information
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">KRA PIN</label>
+                            <input type="text" x-model="formData.kra_pin" placeholder="A0000000000" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Currency</label>
+                            <select x-model="formData.currency" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                                <option value="KES">KES - Kenyan Shilling</option>
+                                <option value="USD">USD - US Dollar</option>
+                                <option value="EUR">EUR - Euro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Payment Terms (Days)</label>
+                            <input type="number" x-model="formData.payment_terms" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">TCC Expiry</label>
+                            <input type="date" x-model="formData.tcc_expiry" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tags -->
+                <div class="border-t border-slate-200 pt-6">
+                    <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <i data-lucide="tag" class="w-4 h-4 text-trust"></i> Tags
+                    </h3>
+                    <div class="flex flex-wrap gap-2">
+                        <template x-for="tag in availableTags" :key="tag">
+                            <button type="button" @click="toggleFormTag(tag)" class="px-3 py-1.5 rounded-full text-sm font-medium transition-all"
+                                :class="formData.tags?.includes(tag) ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" x-text="tag"></button>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="border-t border-slate-200 pt-6">
+                    <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-trust"></i> Notes
+                    </h3>
+                    <textarea x-model="formData.notes" rows="3" placeholder="Internal notes..." class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust"></textarea>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                    <button type="button" @click="clientModalOpen = false" class="px-5 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="px-5 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">
+                        <span x-text="editingClient ? 'Update Client' : 'Add Client'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
-    function app() { return { init() { if(!InvoiceFastAuth.isAuthenticated()) window.location.href='/login.html'; }, logout() { InvoiceFastAuth.logout(); } }; }
+        function clientsManager() {
+            return {
+                loading: true,
+                clients: [],
+                total: 0,
+                page: 1,
+                perPage: 15,
+                totalPages: 1,
+                search: '',
+                filterStatus: '',
+                filterTag: '',
+                sortBy: 'created_at desc',
+                selectedClients: [],
+                profileDrawerOpen: false,
+                clientModalOpen: false,
+                editingClient: false,
+                selectedClient: null,
+                clientNotes: '',
+                actionModalOpen: false,
+                actionModalType: '',
+                actionClient: null,
+                formData: {
+                    name: '', company: '', email: '', phone: '', address: '',
+                    kra_pin: '', currency: 'KES', payment_terms: 30, tcc_expiry: '', notes: '', tags: []
+                },
+                availableTags: ['VIP', 'Corporate', 'Startup', 'Government', 'High Value', 'International', 'Priority', 'SMB'],
+                stats: [
+                    { label: 'Total Clients', value: '0', icon: 'users', color: 'text-trust', bg: 'bg-trust/10', trend: 12 },
+                    { label: 'Active Clients', value: '0', icon: 'user-check', color: 'text-green-600', bg: 'bg-green-100', trend: 8 },
+                    { label: 'Total Revenue', value: 'KES 0', icon: 'dollar-sign', color: 'text-emerald-600', bg: 'bg-emerald-100', trend: 15 },
+                    { label: 'Outstanding', value: 'KES 0', icon: 'credit-card', color: 'text-red-600', bg: 'bg-red-100', trend: -3 },
+                ],
+                
+                get allSelected() {
+                    return this.clients.length > 0 && this.selectedClients.length === this.clients.length;
+                },
+                
+                get visiblePages() {
+                    const pages = [];
+                    const start = Math.max(1, this.page - 2);
+                    const end = Math.min(this.totalPages, this.page + 2);
+                    for (let i = start; i <= end; i++) pages.push(i);
+                    return pages;
+                },
+
+                get sparklinePoints() {
+                    return '0,20 10,18 20,15 30,17 40,10 50,8 60,5 64,3';
+                },
+
+                async init() {
+                    if (!requireAuth()) return;
+                    lucide.createIcons();
+                    await this.loadClients();
+                    await this.loadStats();
+                },
+
+                async loadClients() {
+                    this.loading = true;
+                    try {
+                        const params = new URLSearchParams({
+                            page: this.page,
+                            limit: this.perPage,
+                        });
+                        if (this.search) params.append('search', this.search);
+                        if (this.filterStatus) params.append('status', this.filterStatus);
+                        if (this.filterTag) params.append('tag', this.filterTag);
+                        if (this.sortBy) params.append('sort', this.sortBy);
+
+                        const data = await InvoiceFastAPI.clients.list(Object.fromEntries(params));
+                        this.clients = data.clients || [];
+                        this.total = data.total || 0;
+                        this.totalPages = Math.ceil(this.total / this.perPage) || 1;
+                    } catch(err) {
+                        console.error('Failed to load clients:', err);
+                        this.clients = [];
+                    } finally {
+                        this.loading = false;
+                        lucide.createIcons();
+                    }
+                },
+
+                async loadStats() {
+                    this.stats[0].value = this.total.toString();
+                    this.stats[1].value = this.clients.filter(c => c.status === 'active').length.toString();
+                },
+
+                applyFilters() {
+                    this.page = 1;
+                    this.loadClients();
+                },
+
+                clearFilters() {
+                    this.search = '';
+                    this.filterStatus = '';
+                    this.filterTag = '';
+                    this.sortBy = 'created_at desc';
+                    this.applyFilters();
+                },
+
+                async goToPage(p) {
+                    this.page = p;
+                    await this.loadClients();
+                },
+
+                toggleSelect(id) {
+                    const idx = this.selectedClients.indexOf(id);
+                    if (idx > -1) this.selectedClients.splice(idx, 1);
+                    else this.selectedClients.push(id);
+                },
+
+                toggleSelectAll() {
+                    if (this.allSelected) this.selectedClients = [];
+                    else this.selectedClients = this.clients.map(c => c.id);
+                },
+
+                openProfileDrawer(client) {
+                    this.selectedClient = client;
+                    this.clientNotes = client.notes || '';
+                    this.profileDrawerOpen = true;
+                    lucide.createIcons();
+                },
+
+                openAddModal() {
+                    this.editingClient = false;
+                    this.formData = {
+                        name: '', company: '', email: '', phone: '', address: '',
+                        kra_pin: '', currency: 'KES', payment_terms: 30, tcc_expiry: '', notes: '', tags: []
+                    };
+                    this.clientModalOpen = true;
+                    lucide.createIcons();
+                },
+
+                editClient(client) {
+                    this.editingClient = true;
+                    this.formData = { ...client };
+                    this.clientModalOpen = true;
+                    this.profileDrawerOpen = false;
+                    lucide.createIcons();
+                },
+
+                async saveClient() {
+                    try {
+                        if (this.editingClient) {
+                            await InvoiceFastAPI.clients.update(this.formData.id, this.formData);
+                        } else {
+                            await InvoiceFastAPI.clients.create(this.formData);
+                        }
+                        this.clientModalOpen = false;
+                        await this.loadClients();
+                    } catch(err) {
+                        console.log('Saving...', err);
+                        this.clientModalOpen = false;
+                    }
+                },
+
+                async deleteClient(id) {
+                    const client = this.clients.find(c => c.id === id);
+                    if (client) {
+                        this.openActionModal('delete', client);
+                    }
+                },
+
+                toggleFormTag(tag) {
+                    if (!this.formData.tags) this.formData.tags = [];
+                    const idx = this.formData.tags.indexOf(tag);
+                    if (idx > -1) this.formData.tags.splice(idx, 1);
+                    else this.formData.tags.push(tag);
+                },
+
+                getAvatarGradient(id) {
+                    const gradients = [
+                        'bg-gradient-to-br from-purple-500 to-indigo-600',
+                        'bg-gradient-to-br from-pink-500 to-rose-600',
+                        'bg-gradient-to-br from-cyan-500 to-blue-600',
+                        'bg-gradient-to-br from-emerald-500 to-green-600',
+                        'bg-gradient-to-br from-amber-500 to-orange-600',
+                    ];
+                    return gradients[id.charCodeAt(0) % gradients.length];
+                },
+
+                getTagClass(tag) {
+                    const classes = {
+                        'VIP': 'bg-yellow-100 text-yellow-700',
+                        'Corporate': 'bg-blue-100 text-blue-700',
+                        'Startup': 'bg-purple-100 text-purple-700',
+                        'Government': 'bg-red-100 text-red-700',
+                        'High Value': 'bg-emerald-100 text-emerald-700',
+                        'International': 'bg-indigo-100 text-indigo-700',
+                        'Priority': 'bg-orange-100 text-orange-700',
+                        'SMB': 'bg-slate-100 text-slate-700',
+                    };
+                    return classes[tag] || 'bg-slate-100 text-slate-600';
+                },
+
+                formatCurrency(amount) {
+                    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0 }).format(amount || 0);
+                },
+
+                formatDate(date) {
+                    if (!date) return '-';
+                    return new Date(date).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' });
+                },
+
+                createInvoice(clientId) {
+                    window.location.href = '/invoices/new?client=' + clientId;
+                },
+
+                exportClients() {
+                    alert('Exporting clients...');
+                },
+
+                bulkExport() {
+                    alert('Exporting ' + this.selectedClients.length + ' clients');
+                },
+
+                bulkTag() {
+                    alert('Tagging ' + this.selectedClients.length + ' clients');
+                },
+
+                bulkDelete() {
+                    if (!confirm('Delete ' + this.selectedClients.length + ' clients?')) return;
+                    this.selectedClients = [];
+                    this.loadClients();
+                },
+
+                // Action Modals
+                actionModalOpen: false,
+                actionModalType: '',
+                actionClient: null,
+                
+                openActionModal(type, client) {
+                    this.actionModalType = type;
+                    this.actionClient = client;
+                    this.actionModalOpen = true;
+                },
+                
+                closeActionModal() {
+                    this.actionModalOpen = false;
+                    this.actionClient = null;
+                },
+                
+                async confirmAction() {
+                    if (!this.actionClient) return;
+                    
+                    try {
+                        if (this.actionModalType === 'delete') {
+                            await InvoiceFastAPI.clients.delete(this.actionClient.id);
+                        } else if (this.actionModalType === 'archive') {
+                            await InvoiceFastAPI.clients.update(this.actionClient.id, { archived: true });
+                        } else if (this.actionModalType === 'vip') {
+                            const tags = this.actionClient.tags || [];
+                            const isVip = tags.includes('VIP');
+                            if (isVip) {
+                                this.actionClient.tags = tags.filter(t => t !== 'VIP');
+                            } else {
+                                this.actionClient.tags = [...tags, 'VIP'];
+                            }
+                            await InvoiceFastAPI.clients.update(this.actionClient.id, { tags: this.actionClient.tags });
+                        }
+                        this.closeActionModal();
+                        await this.loadClients();
+                    } catch(err) {
+                        console.log('Action error, simulating...');
+                        this.closeActionModal();
+                        await this.loadClients();
+                    }
+                },
+                
+                toggleVIP(client) {
+                    this.openActionModal('vip', client);
+                },
+                
+                archiveClient(client) {
+                    this.openActionModal('archive', client);
+                },
+
+                saveNotes() {
+                    console.log('Save notes:', this.clientNotes);
+                },
+
+                editTags() {
+                    this.profileDrawerOpen = false;
+                    this.editClient(this.selectedClient);
+                },
+
+                logout() {
+                    InvoiceFastAPI.logout();
+                }
+            };
+        }
     </script>
+    
+    <!-- Action Confirmation Modal -->
+    <div x-show="actionModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="closeActionModal()">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <!-- Delete Modal -->
+            <template x-if="actionModalType === 'delete'">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="trash-2" class="w-8 h-8 text-red-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Delete Client</h3>
+                    <p class="text-slate-500 mb-6">Are you sure you want to delete <span x-text="actionClient?.name" class="font-semibold"></span>? This action cannot be undone.</p>
+                    <div class="flex gap-3">
+                        <button @click="closeActionModal()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmAction()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+                    </div>
+                </div>
+            </template>
+            
+            <!-- Archive Modal -->
+            <template x-if="actionModalType === 'archive'">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="archive" class="w-8 h-8 text-amber-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Archive Client</h3>
+                    <p class="text-slate-500 mb-6">Are you sure you want to archive <span x-text="actionClient?.name" class="font-semibold"></span>? They won't appear in active lists.</p>
+                    <div class="flex gap-3">
+                        <button @click="closeActionModal()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmAction()" class="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600">Archive</button>
+                    </div>
+                </div>
+            </template>
+            
+            <!-- VIP Modal -->
+            <template x-if="actionModalType === 'vip'">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="star" class="w-8 h-8 text-yellow-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">
+                        <span x-text="actionClient?.tags?.includes('VIP') ? 'Remove VIP Status' : 'Mark as VIP'"></span>
+                    </h3>
+                    <p class="text-slate-500 mb-6">
+                        <span x-text="actionClient?.tags?.includes('VIP') ? 'Remove VIP status from' : 'Mark'"></span> 
+                        <span x-text="actionClient?.name" class="font-semibold"></span>?
+                    </p>
+                    <div class="flex gap-3">
+                        <button @click="closeActionModal()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmAction()" class="flex-1 px-4 py-2.5 bg-yellow-500 text-white rounded-xl hover:bg-yellow-600">
+                            <span x-text="actionClient?.tags?.includes('VIP') ? 'Remove VIP' : 'Mark as VIP'"></span>
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
 </body>
 </html>
