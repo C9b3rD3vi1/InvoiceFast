@@ -1,36 +1,51 @@
-<!-- Invoice View Content -->
-<div class="p-6" x-data="invoiceView()" x-init="init()">
+<!-- Invoice View Content - Enterprise -->
+<div class="p-6 lg:p-8" x-data="invoiceView()" x-init="init()">
     <!-- Header -->
-    <header class="bg-white border-b border-slate-200 px-0 -mx-6 mb-6 px-6 py-4">
-        <div class="flex items-center justify-between">
+    <header class="bg-white border-b border-slate-200 -mx-6 -mt-6 mb-6 px-6 lg:px-8 py-6">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div class="flex items-center gap-4">
-                <a href="/invoices" class="p-2 hover:bg-slate-100 rounded-lg">
+                <a href="/invoices" class="p-2.5 hover:bg-slate-100 rounded-xl transition-colors">
                     <i data-lucide="arrow-left" class="w-5 h-5"></i>
                 </a>
-                <div>
-                    <div class="flex items-center gap-3">
-                        <h1 class="text-2xl font-bold text-slate-900" x-text="invoice?.invoice_number">Invoice</h1>
-                        <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" :class="getStatusClass(invoice?.status)" x-text="getStatusLabel(invoice?.status)"></span>
+                <div class="flex-1">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <h1 class="text-2xl lg:text-3xl font-bold text-slate-900" x-text="invoice?.invoice_number">Invoice</h1>
+                        <div class="flex items-center gap-2">
+                            <span class="px-3 py-1.5 rounded-full text-sm font-medium" :class="getStatusClass(invoice?.status)">
+                                <i :data-lucide="getStatusIcon(invoice?.status)" class="w-4 h-4 inline mr-1"></i>
+                                <span x-text="getStatusLabel(invoice?.status)"></span>
+                            </span>
+                        </div>
                     </div>
-                    <p class="text-slate-500 text-sm mt-1" x-text="invoice?.title || 'No title'"></p>
+                    <p class="text-slate-500 mt-2" x-text="invoice?.title || 'Untitled Invoice'"></p>
+                    <div class="flex items-center gap-4 mt-2 text-sm text-slate-500">
+                        <span class="flex items-center gap-1">
+                            <i data-lucide="calendar" class="w-4 h-4"></i>
+                            <span x-text="formatDate(invoice?.created_at)"></span>
+                        </span>
+                        <span class="flex items-center gap-1" x-show="invoice?.due_date">
+                            <i data-lucide="clock" class="w-4 h-4" :class="isOverdue() ? 'text-red-500' : ''"></i>
+                            <span :class="isOverdue() ? 'text-red-600 font-medium' : ''" x-text="isOverdue() ? 'Overdue by ' + daysOverdue() + ' days' : 'Due ' + formatDate(invoice?.due_date)"></span>
+                        </span>
+                    </div>
                 </div>
             </div>
-            <div class="flex items-center gap-3">
-                <button @click="downloadPDF()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2 lg:gap-3">
+                <button @click="downloadPDF()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-all">
                     <i data-lucide="download" class="w-4 h-4"></i>
-                    PDF
+                    <span>PDF</span>
                 </button>
-                <button @click="sendEmail()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                <button @click="sendEmail()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-all">
                     <i data-lucide="mail" class="w-4 h-4"></i>
-                    Email
+                    <span>Email</span>
                 </button>
-                <button @click="sendWhatsApp()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                <button @click="sendWhatsApp()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-all">
                     <i data-lucide="message-circle" class="w-4 h-4"></i>
-                    WhatsApp
+                    <span>WhatsApp</span>
                 </button>
-                <a :href="'/invoices/' + invoiceId + '/edit'" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2">
+                <a :href="'/invoices/' + invoiceId + '/edit'" class="px-5 py-2.5 bg-trust text-white rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 transition-all shadow-lg shadow-trust/30 hover:shadow-xl">
                     <i data-lucide="edit-2" class="w-4 h-4"></i>
-                    Edit
+                    <span>Edit</span>
                 </a>
             </div>
         </div>
@@ -805,10 +820,10 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.delete(this.invoiceId);
                 this.modalOpen = null;
-                alert('Invoice deleted');
+                this.showToast('Invoice deleted', 'success');
                 window.location.href = '/invoices';
             } catch(err) {
-                alert('Failed to delete invoice');
+                this.showToast('Failed to delete invoice', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -818,7 +833,7 @@ function invoiceView() {
             this.kraSubmitting = true;
             try {
                 await InvoiceFastAPI.invoices.submitToKRA(this.invoiceId);
-                alert('Submitted to KRA');
+                this.showToast('Submitted to KRA', 'success');
                 this.loadInvoice(this.invoiceId);
             } catch(err) {
                 this.kraError = err.message || 'Failed to submit to KRA';
@@ -838,7 +853,44 @@ function invoiceView() {
                 link.download = 'kra-qr-' + this.invoice.invoice_number + '.png';
                 link.click();
             }
-        }
+        },
+
+        getStatusIcon(status) {
+            const icons = {
+                'draft': 'file',
+                'sent': 'send',
+                'viewed': 'eye',
+                'partially_paid': 'clock',
+                'paid': 'check-circle',
+                'overdue': 'alert-circle',
+                'cancelled': 'x-circle'
+            };
+            return icons[status] || 'file';
+        },
+
+        showToast(message, type = 'success') {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
+        },
+
+        toast: { show: false, message: '', type: 'success' }
     };
 }
 </script>
+
+<!-- Toast Notification -->
+<div x-show="toast.show" x-cloak class="fixed bottom-6 right-6 z-50" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
+    <div class="bg-white rounded-xl shadow-lg border px-6 py-4 flex items-center gap-3">
+        <template x-if="toast.type === 'success'">
+            <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <i data-lucide="check" class="w-5 h-5 text-green-600"></i>
+            </div>
+        </template>
+        <template x-if="toast.type === 'error'">
+            <div class="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                <i data-lucide="x" class="w-5 h-5 text-red-600"></i>
+            </div>
+        </template>
+        <span class="font-medium text-slate-700" x-text="toast.message"></span>
+    </div>
+</div>
