@@ -12,19 +12,21 @@ import (
 
 // InvoiceHandler handles invoice API endpoints
 type InvoiceHandler struct {
-	invoiceService *services.InvoiceService
-	kraService     *services.KRAService
-	mpesaService   *services.MPesaService
-	subService     *services.SubscriptionService
+	invoiceService    *services.InvoiceService
+	kraService        *services.KRAService
+	mpesaService      *services.MPesaService
+	subService        *services.SubscriptionService
+	attachmentService *services.AttachmentService
 }
 
 // NewInvoiceHandler creates InvoiceHandler
-func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService) *InvoiceHandler {
+func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService) *InvoiceHandler {
 	return &InvoiceHandler{
-		invoiceService: invoiceSvc,
-		kraService:     kraSvc,
-		mpesaService:   mpesaSvc,
-		subService:     subSvc,
+		invoiceService:    invoiceSvc,
+		kraService:        kraSvc,
+		mpesaService:      mpesaSvc,
+		subService:        subSvc,
+		attachmentService: attachmentSvc,
 	}
 }
 
@@ -48,7 +50,7 @@ func (h *InvoiceHandler) CreateInvoice(c *fiber.Ctx) error {
 
 	var req services.CreateInvoiceRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request", "details": err.Error()})
 	}
 
 	userID := middleware.GetUserID(c)
@@ -312,4 +314,182 @@ func (h *InvoiceHandler) GetInvoicePDF(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"invoice_id": invoice.ID, "invoice_number": invoice.InvoiceNumber})
+}
+
+// SubmitToKRA submits an invoice to KRA eTIMS
+func (h *InvoiceHandler) SubmitToKRA(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	if invoice.KRAICN != "" {
+		return c.JSON(fiber.Map{
+			"message": "already_submitted",
+			"icn":     invoice.KRAICN,
+			"qr_code": invoice.KRAQRCode,
+		})
+	}
+
+	kraResp, err := h.invoiceService.SubmitInvoiceToKRA(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"icn":       kraResp.ICN,
+		"qr_code":   kraResp.QRCode,
+		"signature": kraResp.Signature,
+		"timestamp": kraResp.Timestamp,
+	})
+}
+
+// CreateCreditNote creates a credit note for an invoice
+func (h *InvoiceHandler) CreateCreditNote(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	var req struct {
+		Items []services.CreateCreditNoteItem `json:"items"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	if len(req.Items) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "at least one item required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	creditNote, err := h.invoiceService.CreateCreditNote(tenantID, userID, invoiceID, req.Items)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(creditNote)
+}
+
+// CreateInvoiceAttachment handles file upload for an invoice
+func (h *InvoiceHandler) CreateInvoiceAttachment(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "user ID required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	// Verify invoice exists and belongs to tenant/user
+	_, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		if err.Error() == "invoice not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Get uploaded file
+	file, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "no file uploaded"})
+	}
+
+	// Upload attachment
+	attachment, err := h.attachmentService.UploadFile(tenantID, invoiceID, file, c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(attachment)
+}
+
+// GetInvoiceAttachments retrieves all attachments for an invoice
+func (h *InvoiceHandler) GetInvoiceAttachments(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	// Verify invoice exists and belongs to tenant
+	_, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		if err.Error() == "invoice not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	attachments, err := h.attachmentService.GetAttachments(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(attachments)
+}
+
+// DeleteInvoiceAttachment removes an attachment from an invoice
+func (h *InvoiceHandler) DeleteInvoiceAttachment(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	attachmentID := c.Params("id")
+	if attachmentID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "attachment ID required"})
+	}
+
+	// Get attachment to verify ownership and get invoice ID
+	attachment, err := h.attachmentService.GetAttachmentByID(tenantID, attachmentID)
+	if err != nil {
+		if err.Error() == "attachment not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "attachment not found"})
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Verify invoice belongs to tenant
+	if _, err := h.invoiceService.GetInvoiceByID(tenantID, attachment.InvoiceID); err != nil {
+		if err.Error() == "invoice not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Delete attachment
+	if err := h.attachmentService.DeleteAttachment(tenantID, attachmentID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
