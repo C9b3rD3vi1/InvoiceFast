@@ -11,8 +11,10 @@ import (
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	authService  *services.AuthService
-	auditService *services.AuditService
+	authService    *services.AuthService
+	auditService   *services.AuditService
+	invoiceService *services.InvoiceService
+	clientService  *services.ClientService
 }
 
 // NewAuthHandler creates a new AuthHandler
@@ -20,6 +22,16 @@ func NewAuthHandler(authSvc *services.AuthService, auditSvc *services.AuditServi
 	return &AuthHandler{
 		authService:  authSvc,
 		auditService: auditSvc,
+	}
+}
+
+// NewAuthHandlerWithDeps creates a new AuthHandler with dependencies
+func NewAuthHandlerWithDeps(authSvc *services.AuthService, auditSvc *services.AuditService, invSvc *services.InvoiceService, clientSvc *services.ClientService) *AuthHandler {
+	return &AuthHandler{
+		authService:    authSvc,
+		auditService:   auditSvc,
+		invoiceService: invSvc,
+		clientService:  clientSvc,
 	}
 }
 
@@ -182,4 +194,62 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "Logged out successfully"})
+}
+
+// Search - global search across invoices and clients
+func (h *AuthHandler) Search(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	userID := middleware.GetUserID(c)
+	if tenantID == "" || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	query := c.Query("q")
+	if query == "" {
+		return c.JSON(fiber.Map{"invoices": []interface{}{}, "clients": []interface{}{}})
+	}
+
+	var invoiceResults []interface{}
+	var clientResults []interface{}
+
+	// Search invoices
+	if h.invoiceService != nil {
+		invoices, _, err := h.invoiceService.GetUserInvoices(tenantID, services.InvoiceFilter{
+			Search: query,
+			Limit:  5,
+		})
+		if err == nil {
+			for _, inv := range invoices {
+				invoiceResults = append(invoiceResults, fiber.Map{
+					"id":          inv.ID,
+					"number":      inv.InvoiceNumber,
+					"client_name": inv.ClientID,
+					"amount":      inv.Total,
+					"status":      inv.Status,
+				})
+			}
+		}
+	}
+
+	// Search clients
+	if h.clientService != nil {
+		clients, _, err := h.clientService.GetUserClients(tenantID, services.ClientFilter{
+			Search: query,
+			Limit:  5,
+		})
+		if err == nil {
+			for _, cl := range clients {
+				clientResults = append(clientResults, fiber.Map{
+					"id":    cl.ID,
+					"name":  cl.Name,
+					"email": cl.Email,
+				})
+			}
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"invoices": invoiceResults,
+		"clients":  clientResults,
+	})
 }
