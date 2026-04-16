@@ -1,28 +1,33 @@
-<!-- Invoice Create Content -->
-<div class="p-6" x-data="invoiceCreate()" x-init="init()">
+<!-- Invoice Create Content - Enterprise -->
+<div class="p-6 lg:p-8" x-data="invoiceCreate()" x-init="init()">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
         <div class="flex items-center gap-4">
-            <a href="/invoices" class="p-2 hover:bg-slate-100 rounded-lg">
+            <a href="/invoices" class="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                 <i data-lucide="arrow-left" class="w-5 h-5"></i>
             </a>
             <div>
-                <h1 class="text-2xl font-bold text-slate-900">Create Invoice</h1>
-                <p class="text-slate-500 text-sm mt-1">Fill in the details to create a new invoice</p>
+                <h1 class="text-2xl lg:text-3xl font-bold text-slate-900">Create Invoice</h1>
+                <p class="text-slate-500 text-sm mt-1">Fill in the details to create a professional invoice</p>
             </div>
         </div>
-        <div class="flex items-center gap-3">
-            <button @click="saveDraft()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-3">
+            <button @click="saveDraft()" :disabled="saving" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-all disabled:opacity-50">
                 <i data-lucide="save" class="w-4 h-4"></i>
-                Save as Draft
+                <span>Save as Draft</span>
             </button>
-            <button @click="previewInvoice()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+            <button @click="previewInvoice()" :disabled="saving" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-all disabled:opacity-50">
                 <i data-lucide="eye" class="w-4 h-4"></i>
-                Preview
+                <span>Preview</span>
             </button>
-            <button @click="sendInvoice()" :disabled="!canSend" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-trust/30">
-                <i data-lucide="send" class="w-4 h-4"></i>
-                Send Invoice
+            <button @click="sendInvoice()" :disabled="!canSend || saving" class="px-5 py-2.5 bg-trust text-white rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-trust/30 transition-all hover:shadow-xl">
+                <template x-if="!saving">
+                    <i data-lucide="send" class="w-4 h-4"></i>
+                </template>
+                <template x-if="saving">
+                    <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                </template>
+                <span x-text="saving ? 'Sending...' : 'Send Invoice'"></span>
             </button>
         </div>
     </div>
@@ -470,27 +475,38 @@ function invoiceCreate() {
         },
 
         async saveDraft() {
+            this.saving = true;
             try {
                 this.invoice.status = 'draft';
                 await InvoiceFastAPI.invoices.create(this.formatInvoiceData());
-                alert('Draft saved');
+                this.showToast('Draft saved!', 'success');
                 window.location.href = '/invoices';
             } catch(err) {
-                alert('Failed to save');
+                this.showToast('Failed to save: ' + err.message, 'error');
+            } finally {
+                this.saving = false;
             }
         },
 
         async sendInvoice() {
             if (!this.canSend) return;
+            this.saving = true;
             try {
                 this.invoice.status = 'sent';
                 const invoice = await InvoiceFastAPI.invoices.create(this.formatInvoiceData());
                 await InvoiceFastAPI.invoices.send(invoice.id);
-                alert('Invoice sent');
+                this.showToast('Invoice sent successfully!', 'success');
                 window.location.href = '/invoices/' + invoice.id;
             } catch(err) {
-                alert('Failed to send');
+                this.showToast('Failed to send: ' + err.message, 'error');
+            } finally {
+                this.saving = false;
             }
+        },
+
+        showToast(message, type) {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
         },
 
         previewInvoice() {
