@@ -290,8 +290,12 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
+	// Check if email exists with is_active = true
+	lowerEmail := strings.ToLower(req.Email)
 	var existing models.User
-	if err := s.db.First(&existing, "email = ?", req.Email).Error; err == nil {
+	err := s.db.Where("email = ? AND is_active = ?", lowerEmail, true).First(&existing).Error
+	if err == nil {
+		// Active user with this email exists - block registration
 		return nil, ErrEmailExists
 	}
 
@@ -309,7 +313,7 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		ID:        uuid.New().String(),
 		Name:      req.CompanyName,
 		Subdomain: subdomain,
-		Plan:      "free",
+		Plan:      "starter",
 		IsActive:  true,
 	}
 	if err := s.db.Create(tenant).Error; err != nil {
@@ -325,9 +329,42 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		Phone:        normalizePhone(req.Phone),
 		CompanyName:  req.CompanyName,
 		KRAPIN:       strings.ToUpper(strings.TrimSpace(req.KRAPIN)),
-		Plan:         "free",
+		Plan:         "starter",
 		IsActive:     true,
 		Role:         "owner",
+	}
+
+	if err := s.db.Create(user).Error; err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	starterPlan := models.SubscriptionPlan{}
+	if err := s.db.First(&starterPlan, "slug = ?", "starter").Error; err == nil && starterPlan.ID != "" {
+		trialEndsAt := time.Now().AddDate(0, 0, 14)
+		subscription := &models.Subscription{
+			ID:           uuid.New().String(),
+			TenantID:     tenant.ID,
+			PlanID:       starterPlan.ID,
+			Status:       "trialing",
+			BillingCycle: "monthly",
+			Amount:       starterPlan.MonthlyPriceUSD,
+			Currency:     "USD",
+			TrialEndsAt:  &trialEndsAt,
+			StartsAt:     time.Now(),
+			CreatedAt:    time.Now(),
+			UpdatedAt:    time.Now(),
+		}
+		s.db.Create(subscription)
+
+		usage := &models.UsageTracking{
+			ID:           uuid.New().String(),
+			TenantID:     tenant.ID,
+			InvoicesUsed: 0,
+			ClientsUsed:  0,
+			UsersUsed:    1,
+			UpdatedAt:    time.Now(),
+		}
+		s.db.Create(usage)
 	}
 
 	if err := s.db.Create(user).Error; err != nil {
