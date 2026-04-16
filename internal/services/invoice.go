@@ -135,6 +135,7 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		}
 
 		lineTotal := item.Quantity * item.UnitPrice
+
 		subtotal += lineTotal
 		items = append(items, models.InvoiceItem{
 			ID:          uuid.New().String(),
@@ -170,7 +171,13 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 	// Calculate KES equivalent for dual display
 	kesEquivalent := total
 	exchangeRate := 1.0
-	if currency != "KES" && s.exchangeService != nil {
+	if req.ExchangeRate != nil && *req.ExchangeRate > 0 {
+		exchangeRate = *req.ExchangeRate
+		kesEquivalent = total * exchangeRate
+		if req.KESEquivalent != nil && *req.KESEquivalent > 0 {
+			kesEquivalent = *req.KESEquivalent
+		}
+	} else if currency != "KES" && s.exchangeService != nil {
 		rate, err := s.exchangeService.GetRate(currency, "KES")
 		if err == nil && rate > 0 {
 			kesEquivalent = total * rate
@@ -201,6 +208,11 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		LogoURL:             req.LogoURL,
 		MagicToken:          uuid.New().String(),
 		MagicTokenExpiresAt: sql.NullTime{Time: time.Now().AddDate(0, 3, 0), Valid: true}, // 3 months expiry
+	}
+
+	// Add title to notes if provided
+	if req.Title != "" {
+		invoice.Notes = req.Title + "\n\n" + invoice.Notes
 	}
 
 	// Use transaction for data integrity
@@ -304,6 +316,11 @@ func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, 
 	}
 	if !user.IsActive {
 		return nil, errors.New("payment link inactive - contact administrator")
+	}
+
+	// Track viewed status if not already set
+	if !invoice.ViewedAt.Valid {
+		s.db.Model(&invoice).Update("viewed_at", time.Now())
 	}
 
 	return &invoice, nil
@@ -624,7 +641,7 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 				Currency:          currency,
 			}
 
-			kraResp, err := s.kraService.SubmitInvoice(kraData)
+			kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
 			if err != nil {
 				log.Printf("[KRA] Failed to submit invoice %s: %v", invoiceNum, err)
 				return
@@ -904,7 +921,7 @@ func (s *InvoiceService) GetDashboardStats(tenantID, period string) (*DashboardS
 	var avgDays float64
 	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
 		Where("status = ? AND paid_at IS NOT NULL", models.InvoiceStatusPaid).
-		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (paid_at - created_at))/86400, 0)").Scan(&avgDays)
+		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (paid_at - created_at)) / 86400), 0)").Scan(&avgDays)
 	stats.AvgPaymentDays = avgDays
 
 	// Get monthly revenue for last 12 months
@@ -928,6 +945,7 @@ func (s *InvoiceService) GetDashboardStats(tenantID, period string) (*DashboardS
 }
 
 // Helper functions for dashboard stats
+
 func (s *InvoiceService) getMonthlyRevenue(tenantID string, months int) []MonthlyData {
 	var data []MonthlyData
 	now := time.Now()
@@ -1104,26 +1122,123 @@ func generateInvoiceNumber(userID string) string {
 	return fmt.Sprintf("INV-%s-%s", timestamp, hex.EncodeToString(randBytes))
 }
 
-// Request types
-type CreateInvoiceRequest struct {
-	ClientID   string               `json:"client_id" binding:"required"`
-	Reference  string               `json:"reference"`
-	Currency   string               `json:"currency"`
-	TaxRate    float64              `json:"tax_rate"`
-	Discount   float64              `json:"discount"`
-	DueDate    time.Time            `json:"due_date" binding:"required"`
-	Notes      string               `json:"notes"`
-	Terms      string               `json:"terms"`
-	BrandColor string               `json:"brand_color"`
-	LogoURL    string               `json:"logo_url"`
-	Items      []InvoiceItemRequest `json:"items" binding:"required,min=1"`
+func generateCreditNoteNumber(userID string) string {
+	timestamp := time.Now().UTC().Format("20060102")
+	randBytes := make([]byte, 2)
+	rand.Read(randBytes)
+	return fmt.Sprintf("CN-%s-%s", timestamp, hex.EncodeToString(randBytes))
 }
 
-type InvoiceItemRequest struct {
-	Description string  `json:"description" binding:"required"`
-	Quantity    float64 `json:"quantity" binding:"required,min=-999999"`
-	UnitPrice   float64 `json:"unit_price" binding:"required,min=0"`
+func generateDebitNoteNumber(userID string) string {
+	timestamp := time.Now().UTC().Format("20060102")
+	randBytes := make([]byte, 2)
+	rand.Read(randBytes)
+	return fmt.Sprintf("DN-%s-%s", timestamp, hex.EncodeToString(randBytes))
+}
+
+// CreateCreditNote creates a credit note from an original invoice
+func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID string, items []CreateCreditNoteItem) (*models.Invoice, error) {
+	original, err := s.GetInvoiceByID(tenantID, originalInvoiceID)
+	if err != nil {
+		return nil, fmt.Errorf("original invoice not found: %w", err)
+	}
+
+	var creditItems []models.InvoiceItem
+	var subtotal float64
+	for i, item := range items {
+		lineTotal := item.Quantity * item.UnitPrice
+		subtotal += lineTotal
+		creditItems = append(creditItems, models.InvoiceItem{
+			ID:          uuid.New().String(),
+			Description: item.Description,
+			Quantity:    item.Quantity,
+			UnitPrice:   item.UnitPrice,
+			Unit:        item.Unit,
+			Total:       lineTotal,
+			SortOrder:   i,
+		})
+	}
+
+	taxRate := original.TaxRate
+	taxAmount := subtotal * (taxRate / 100)
+	discount := math.Max(0, original.Discount)
+	total := subtotal + taxAmount - discount
+
+	creditNote := &models.Invoice{
+		ID:                uuid.New().String(),
+		TenantID:          tenantID,
+		UserID:            userID,
+		ClientID:          original.ClientID,
+		InvoiceNumber:     generateCreditNoteNumber(userID),
+		Reference:         "Credit for " + original.InvoiceNumber,
+		Currency:          original.Currency,
+		InvoiceType:       "credit_note",
+		OriginalInvoiceID: originalInvoiceID,
+		Subtotal:          math.Round(subtotal*100) / 100,
+		TaxRate:           taxRate,
+		TaxAmount:         math.Round(taxAmount*100) / 100,
+		Discount:          math.Round(discount*100) / 100,
+		Total:             math.Round((-total)*100) / 100, // Negative for credit
+		Status:            models.InvoiceStatusCreditNote,
+		DueDate:           time.Now().AddDate(0, 0, 30),
+		Notes:             "Credit note for: " + original.InvoiceNumber,
+	}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(creditNote).Error; err != nil {
+			return fmt.Errorf("failed to create credit note: %w", err)
+		}
+		for i := range creditItems {
+			creditItems[i].InvoiceID = creditNote.ID
+		}
+		if err := tx.Create(&creditItems).Error; err != nil {
+			return fmt.Errorf("failed to create credit note items: %w", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	creditNote.Items = creditItems
+	return creditNote, nil
+}
+
+type CreateCreditNoteItem struct {
+	Description string  `json:"description"`
+	Quantity    float64 `json:"quantity"`
+	UnitPrice   float64 `json:"unit_price"`
 	Unit        string  `json:"unit"`
+}
+
+// Request types
+type CreateInvoiceRequest struct {
+	ClientID      string               `json:"client_id" binding:"required"`
+	Reference     string               `json:"reference"`
+	Title         string               `json:"title"`
+	Currency      string               `json:"currency"`
+	TaxRate       float64              `json:"tax_rate"`
+	Discount      float64              `json:"discount"`
+	DueDate       time.Time            `json:"due_date" binding:"required"`
+	Notes         string               `json:"notes"`
+	Terms         string               `json:"terms"`
+	BrandColor    string               `json:"brand_color"`
+	LogoURL       string               `json:"logo_url"`
+	ExchangeRate  *float64             `json:"exchange_rate"`  // Manual override for exchange rate
+	KESEquivalent *float64             `json:"kes_equivalent"` // Manual override for KES equivalent
+	Items         []InvoiceItemRequest `json:"items" binding:"required,min=1"`
+}
+
+// InvoiceItemRequest with extended fields for frontend compatibility
+type InvoiceItemRequest struct {
+	Description  string  `json:"description"`
+	Name         string  `json:"name,omitempty"`
+	Quantity     float64 `json:"quantity" binding:"required,min=-999999"`
+	UnitPrice    float64 `json:"unit_price" binding:"required,min=0"`
+	TaxRate      float64 `json:"tax_rate,omitempty"`
+	DiscountRate float64 `json:"discount_rate,omitempty"`
+	Unit         string  `json:"unit"`
 }
 
 type UpdateInvoiceRequest struct {
@@ -1293,4 +1408,87 @@ func internalClientToKRA(client *models.Client) *kraClient {
 		Address: client.Address,
 		KRAPIN:  client.KRAPIN,
 	}
+}
+
+// SubmitInvoiceToKRA manually submits an invoice to KRA eTIMS
+func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRAResponse, error) {
+	if s.kraService == nil {
+		return nil, errors.New("KRA service not configured")
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if invoice.KRAICN != "" {
+		return &KRAResponse{
+			ICN:    invoice.KRAICN,
+			QRCode: invoice.KRAQRCode,
+		}, nil
+	}
+
+	userID := invoice.UserID
+	var cli models.Client
+	var usr models.User
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID)
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", userID)
+
+	items := make([]KRAItem, 0)
+	s.db.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items)
+
+	kraData := &KRAInvoiceData{
+		InvoiceNumber: invoice.InvoiceNumber,
+		InvoiceDate:   invoice.CreatedAt.Format("2006-01-02"),
+		InvoiceTime:   invoice.CreatedAt.Format("15:04:05"),
+		Seller: KRASeller{
+			RegistrationNumber: usr.KRAPIN,
+			BusinessName:       usr.CompanyName,
+			ContactMobile:      usr.Phone,
+			ContactEmail:       usr.Email,
+		},
+		Buyer: KRABuyer{
+			CustomerName:       cli.Name,
+			ContactMobile:      cli.Phone,
+			ContactEmail:       cli.Email,
+			RegistrationNumber: cli.KRAPIN,
+		},
+		Items:             items,
+		SubTotal:          invoice.Subtotal,
+		TotalExcludingVAT: invoice.Subtotal - invoice.Discount,
+		VATRate:           invoice.TaxRate,
+		VATAmount:         invoice.TaxAmount,
+		TotalIncludingVAT: invoice.Total,
+		Currency:          invoice.Currency,
+	}
+
+	kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
+	if err != nil {
+		s.db.Create(&models.AuditLog{
+			ID:         uuid.New().String(),
+			UserID:     userID,
+			Action:     "kra_failed",
+			EntityType: "invoice",
+			EntityID:   invoiceID,
+			Details:    fmt.Sprintf(`{"invoice_number": "%s", "error": "%s"}`, invoice.InvoiceNumber, err.Error()),
+		})
+		return nil, err
+	}
+
+	s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+		"kra_icn":     kraResp.ICN,
+		"kra_qr_code": kraResp.QRCode,
+	})
+
+	s.db.Create(&models.AuditLog{
+		ID:         uuid.New().String(),
+		UserID:     userID,
+		Action:     "kra_success",
+		EntityType: "invoice",
+		EntityID:   invoiceID,
+		Details:    fmt.Sprintf(`{"invoice_number": "%s", "icn": "%s"}`, invoice.InvoiceNumber, kraResp.ICN),
+	})
+
+	log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoice.InvoiceNumber, kraResp.ICN)
+	return kraResp, nil
 }
