@@ -1,0 +1,373 @@
+<!-- Billing Content -->
+<div class="p-6" x-data="billingContent()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Billing</h1>
+            <p class="text-slate-500 text-sm mt-1">Manage your subscription and payments</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button @click="invoiceModalOpen = true" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                <i data-lucide="file-text" class="w-4 h-4"></i>
+                View Invoices
+            </button>
+            <button @click="upgradeModalOpen = true" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 shadow-lg shadow-trust/30">
+                <i data-lucide="zap" class="w-4 h-4"></i>
+                Upgrade Plan
+            </button>
+        </div>
+    </div>
+
+    <!-- Current Plan -->
+    <div class="bg-gradient-to-r from-trust to-trust-dark rounded-2xl p-6 mb-6 text-white">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-white/70 text-sm">Current Plan</p>
+                <h2 class="text-3xl font-bold mt-1" x-text="currentPlan.name">Free Plan</h2>
+                <p class="text-white/70 mt-2" x-text="currentPlan.description">Perfect for starting out</p>
+            </div>
+            <div class="text-right">
+                <p class="text-4xl font-bold" x-text="currentPlan.price">$0</p>
+                <p class="text-white/70" x-text="'/month'">/month</p>
+                <div x-show="currentPlan.savings > 0" class="mt-2 px-3 py-1 bg-yellow-500 rounded-full text-sm font-medium">
+                    Save <span x-text="currentPlan.savings">0</span>%
+                </div>
+            </div>
+        </div>
+        
+        <!-- Usage -->
+        <div class="grid grid-cols-4 gap-4 mt-6">
+            <div class="bg-white/10 rounded-xl p-4">
+                <p class="text-white/70 text-xs">Invoices</p>
+                <p class="text-xl font-bold mt-1"><span x-text="usage.invoices">0</span> / <span x-text="usage.invoicesLimit">Unlimited</span></p>
+                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
+                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.invoices / usage.invoicesLimit) * 100, 100) + '%'"></div>
+                </div>
+            </div>
+            <div class="bg-white/10 rounded-xl p-4">
+                <p class="text-white/70 text-xs">Clients</p>
+                <p class="text-xl font-bold mt-1"><span x-text="usage.clients">0</span> / <span x-text="usage.clientsLimit">Unlimited</span></p>
+                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
+                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.clients / usage.clientsLimit) * 100, 100) + '%'"></div>
+                </div>
+            </div>
+            <div class="bg-white/10 rounded-xl p-4">
+                <p class="text-white/70 text-xs">Team Members</p>
+                <p class="text-xl font-bold mt-1"><span x-text="usage.team">0</span> / <span x-text="usage.teamLimit">1</span></p>
+                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
+                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.team / usage.teamLimit) * 100, 100) + '%'"></div>
+                </div>
+            </div>
+            <div class="bg-white/10 rounded-xl p-4">
+                <p class="text-white/70 text-xs">Storage</p>
+                <p class="text-xl font-bold mt-1"><span x-text="usage.storage">0</span> / <span x-text="usage.storageLimit">1GB</span></p>
+                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
+                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.storage / usage.storageLimit) * 100, 100) + '%'"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plans -->
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-4">Available Plans</h3>
+        <div class="grid grid-cols-3 gap-4">
+            <template x-for="plan in plans" :key="plan.id">
+                <div class="bg-white rounded-2xl border-2 p-6 transition-all cursor-pointer"
+                    :class="plan.id === currentPlan.id ? 'border-trust shadow-lg shadow-trust/20' : 'border-slate-200 hover:border-slate-300'"
+                    @click="selectPlan(plan)">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h4 class="font-semibold text-slate-900" x-text="plan.name">Starter</h4>
+                            <p class="text-xs text-slate-500" x-text="plan.description">For small business</p>
+                        </div>
+                        <span x-show="plan.id === currentPlan.id" class="px-2 py-1 bg-trust text-white text-xs rounded-full">Current</span>
+                        <span x-show="plan.popular" class="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">Popular</span>
+                    </div>
+                    <p class="text-2xl font-bold text-slate-900">
+                        <span x-text="plan.price">$19</span>
+                        <span class="text-sm font-normal text-slate-500">/month</span>
+                    </p>
+                    <div class="mt-4 space-y-2">
+                        <template x-for="feature in plan.features" :key="feature">
+                            <div class="flex items-center gap-2 text-sm text-slate-600">
+                                <i data-lucide="check" class="w-4 h-4 text-green-500"></i>
+                                <span x-text="feature"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Payment Methods -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-slate-900">Payment Methods</h3>
+            <button @click="addPaymentModalOpen = true" class="px-4 py-2 bg-trust text-white rounded-xl text-sm hover:bg-trust-dark flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                Add Method
+            </button>
+        </div>
+        
+        <div class="space-y-3">
+            <template x-for="method in paymentMethods" :key="method.id">
+                <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-8 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold" x-text="method.brand">VISA</div>
+                        <div>
+                            <p class="font-medium text-slate-900">•••• •••�� •��•• <span x-text="method.last4">4242</span></p>
+                            <p class="text-sm text-slate-500">Expires <span x-text="method.expMonth">12</span>/<span x-text="method.expYear">25</span></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span x-show="method.isDefault" class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Default</span>
+                        <button x-show="!method.isDefault" @click="setDefaultPayment(method.id)" class="text-sm text-trust hover:underline">Set Default</button>
+                        <button @click="removePaymentMethod(method.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </template>
+            <template x-if="paymentMethods.length === 0">
+                <div class="p-8 text-center border border-dashed border-slate-300 rounded-xl">
+                    <i data-lucide="credit-card" class="w-8 h-8 text-slate-400 mx-auto mb-2"></i>
+                    <p class="text-slate-500">No payment methods added</p>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Billing History -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <h3 class="font-semibold text-slate-900 mb-4">Billing History</h3>
+        <div class="space-y-3">
+            <template x-for="item in billingHistory" :key="item.id">
+                <div class="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center"
+                            :class="item.type === 'charge' ? 'bg-green-100' : 'bg-red-100'">
+                            <i :data-lucide="item.type === 'charge' ? 'arrow-down-right' : 'arrow-up-right'" 
+                                class="w-5 h-5" :class="item.type === 'charge' ? 'text-green-600' : 'text-red-600'"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-slate-900" x-text="item.description">Monthly subscription</p>
+                            <p class="text-sm text-slate-500" x-text="item.date">Jan 1, 2024</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-medium text-slate-900"><span x-text="item.currency">KES</span> <span x-text="item.amount">1,900</span></p>
+                        <span class="px-2 py-1 rounded-full text-xs font-medium" 
+                            :class="item.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                            x-text="item.status">Paid</span>
+                    </div>
+                </div>
+            </template>
+            <template x-if="billingHistory.length === 0">
+                <p class="text-center text-slate-500 py-8">No billing history yet</p>
+            </template>
+        </div>
+    </div>
+
+    <!-- Upgrade Modal -->
+    <div x-show="upgradeModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="upgradeModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-trust/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="zap" class="w-8 h-8 text-trust"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900">Upgrade to <span x-text="selectedPlanToUpgrade?.name">Pro</span></h3>
+                <p class="text-slate-500 mt-1">Get more features and higher limits</p>
+            </div>
+            
+            <div class="bg-slate-50 rounded-xl p-4 mb-6">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-slate-600">Plan</span>
+                    <span class="font-medium" x-text="selectedPlanToUpgrade?.name">Pro</span>
+                </div>
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-slate-600">Billing</span>
+                    <div class="flex items-center gap-2">
+                        <button @click="billingCycle = 'monthly'" 
+                            class="px-3 py-1 rounded-lg text-sm" 
+                            :class="billingCycle === 'monthly' ? 'bg-trust text-white' : 'bg-white border'">Monthly</button>
+                        <button @click="billingCycle = 'yearly'" 
+                            class="px-3 py-1 rounded-lg text-sm" 
+                            :class="billingCycle === 'yearly' ? 'bg-trust text-white' : 'bg-white border'">Yearly</button>
+                    </div>
+                </div>
+                <hr class="my-3 border-slate-200">
+                <div class="flex justify-between items-center">
+                    <span class="font-medium text-slate-900">Total</span>
+                    <span class="text-xl font-bold text-trust" x-text="selectedPlanToUpgrade?.price">$29</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button @click="upgradeModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button @click="confirmUpgrade()" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Confirm Upgrade</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Payment Modal -->
+    <div x-show="addPaymentModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="addPaymentModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 class="text-xl font-bold text-slate-900 mb-4">Add Payment Method</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Card Number</label>
+                    <input type="text" x-model="newCard.number" placeholder="4242 4242 4242 4242" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Expiry</label>
+                        <input type="text" x-model="newCard.expiry" placeholder="MM/YY" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">CVC</label>
+                        <input type="text" x-model="newCard.cvc" placeholder="123" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <button @click="addPaymentModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button @click="addPaymentMethod()" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Add Card</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+    </div>
+</div>
+
+<script>
+function billingContent() {
+    return {
+        upgradeModalOpen: false,
+        addPaymentModalOpen: false,
+        invoiceModalOpen: false,
+        billingCycle: 'monthly',
+        selectedPlanToUpgrade: null,
+        currentPlan: {
+            id: 'free', name: 'Free Plan', price: '$0', description: 'Perfect for starting out',
+            savings: 0
+        },
+        usage: { invoices: 12, invoicesLimit: 10, clients: 8, clientsLimit: 5, team: 2, teamLimit: 1, storage: 0.2, storageLimit: 1 },
+        plans: [
+            { id: 'free', name: 'Free', price: '$0', description: 'Perfect for starting out', popular: false, 
+              features: ['10 invoices/month', '5 clients', '1 team member', '1GB storage', 'Email support'] },
+            { id: 'starter', name: 'Starter', price: '$19', description: 'For growing businesses', popular: true, savings: 20,
+              features: ['100 invoices/month', '50 clients', '3 team members', '10GB storage', 'Priority support', 'Custom branding'] },
+            { id: 'pro', name: 'Pro', price: '$49', description: 'For scaling teams', popular: false, savings: 35,
+              features: ['Unlimited invoices', 'Unlimited clients', 'Unlimited team', '100GB storage', 'VIP support', 'Advanced reports', 'API access'] }
+        ],
+        paymentMethods: [
+            { id: '1', brand: 'VISA', last4: '4242', expMonth: '12', expYear: '25', isDefault: true }
+        ],
+        billingHistory: [
+            { id: '1', type: 'charge', description: 'Starter Plan - Monthly', date: 'Jan 1, 2024', currency: 'KES', amount: '1,900', status: 'paid' },
+            { id: '2', type: 'charge', description: 'Starter Plan - Monthly', date: 'Dec 1, 2023', currency: 'KES', amount: '1,900', status: 'paid' }
+        ],
+        newCard: { number: '', expiry: '', cvc: '' },
+        toast: { show: false, message: '', type: 'success' },
+
+        async init() {
+            lucide.createIcons();
+            await this.loadBilling();
+        },
+
+        async loadBilling() {
+            try {
+                const [subscription, methods, history] = await Promise.all([
+                    InvoiceFastAPI.billing.getSubscription(),
+                    InvoiceFastAPI.billing.getPaymentMethods(),
+                    InvoiceFastAPI.billing.getHistory()
+                ]);
+                this.currentPlan = subscription?.plan || this.currentPlan;
+                this.usage = subscription?.usage || this.usage;
+                this.paymentMethods = methods || this.paymentMethods;
+                this.billingHistory = history || this.billingHistory;
+            } catch(err) {
+                console.error('Failed to load billing:', err);
+            }
+        },
+
+        selectPlan(plan) {
+            if (plan.id === this.currentPlan.id) return;
+            this.selectedPlanToUpgrade = plan;
+            this.upgradeModalOpen = true;
+        },
+
+        async confirmUpgrade() {
+            try {
+                await InvoiceFastAPI.request('/tenant/billing/subscription', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        plan_id: this.selectedPlanToUpgrade.id,
+                        cycle: this.billingCycle 
+                    })
+                });
+                this.showToast('Plan upgraded successfully', 'success');
+                this.upgradeModalOpen = false;
+                await this.loadBilling();
+            } catch(err) {
+                this.showToast('Failed to upgrade plan', 'error');
+            }
+        },
+
+        async addPaymentMethod() {
+            try {
+                await InvoiceFastAPI.request('/tenant/billing/mpesa', {
+                    method: 'POST',
+                    body: JSON.stringify({ phone: this.newCard.number })
+                });
+                this.showToast('Payment method added', 'success');
+                this.addPaymentModalOpen = false;
+                this.newCard = { number: '', expiry: '', cvc: '' };
+                await this.loadBilling();
+            } catch(err) {
+                this.showToast('Failed to add payment method', 'error');
+            }
+        },
+
+        async setDefaultPayment(id) {
+            try {
+                await InvoiceFastAPI.request(`/tenant/billing/payment-methods/${id}/default`, {
+                    method: 'PUT'
+                });
+                this.showToast('Default payment updated', 'success');
+                await this.loadBilling();
+            } catch(err) {
+                this.showToast('Failed to update default', 'error');
+            }
+        },
+
+        async removePaymentMethod(id) {
+            if (!confirm('Remove this payment method?')) return;
+            try {
+                await InvoiceFastAPI.request(`/tenant/billing/payment-methods/${id}`, {
+                    method: 'DELETE'
+                });
+                this.showToast('Payment method removed', 'success');
+                await this.loadBilling();
+            } catch(err) {
+                this.showToast('Failed to remove payment method', 'error');
+            }
+        },
+
+        showToast(message, type) {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
+        }
+    };
+}
+</script>

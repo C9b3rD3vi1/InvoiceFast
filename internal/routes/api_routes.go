@@ -1,33 +1,153 @@
 package routes
 
 import (
-	"strings"
+	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
 )
 
+var layoutService = services.NewLayoutService()
+
+func getLayoutData(c *fiber.Ctx) services.LayoutData {
+	userName := "User"
+	userEmail := "user@example.com"
+	tenantName := "My Company"
+
+	if u := c.Locals("user_name"); u != nil {
+		if n, ok := u.(string); ok {
+			userName = n
+		}
+	}
+	if e := c.Locals("user_email"); e != nil {
+		if em, ok := e.(string); ok {
+			userEmail = em
+		}
+	}
+	if t := c.Locals("tenant_name"); t != nil {
+		if tn, ok := t.(string); ok {
+			tenantName = tn
+		}
+	}
+
+	initials := services.GetInitials(userName)
+
+	return services.LayoutData{
+		Title:        "",
+		TenantName:   tenantName,
+		UserName:     userName,
+		UserEmail:    userEmail,
+		UserInitials: initials,
+	}
+}
+
 // StaticRoutes serves frontend pages from views/
 func StaticRoutes(app *fiber.App) fiber.Router {
-	// Client pages - MUST come first, before any other /clients routes
+	// Root redirects to dashboard
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Redirect("/dashboard")
+	})
+
+	// Dashboard
+	app.Get("/dashboard", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/dashboard.html", getLayoutData(c))
+	})
+
+	// Clients - all using shell
 	clientRouter := app.Group("/clients")
-
 	clientRouter.Get("/", func(c *fiber.Ctx) error {
-		println("[ROUTE] GET /clients -> index.html")
-		return c.SendFile("./views/clients/index.html")
+		return layoutService.RenderWithShell(c, "./views/content/clients.html", getLayoutData(c))
 	})
-
+	// Specific routes BEFORE /:id
 	clientRouter.Get("/new", func(c *fiber.Ctx) error {
-		println("[ROUTE] GET /clients/new -> index.html")
-		return c.SendFile("./views/clients/index.html")
+		return layoutService.RenderWithShell(c, "./views/content/clients.html", getLayoutData(c))
 	})
-
 	clientRouter.Get("/:id", func(c *fiber.Ctx) error {
-		clientID := c.Params("id")
-		println("[ROUTE] GET /clients/", clientID, " -> view.html")
-		return c.SendFile("./views/clients/view.html")
+		return layoutService.RenderWithShell(c, "./views/content/clients.html", getLayoutData(c))
 	})
 
-	// Public pages (in views/pages/) - / is handled by PublicRoutes
+	// Invoices - index using shell
+	invoiceRouter := app.Group("/invoices")
+	invoiceRouter.Get("/", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/invoices.html", getLayoutData(c))
+	})
+	// IMPORTANT: specific routes must come BEFORE /:id
+	invoiceRouter.Get("/new", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/invoice-create.html", getLayoutData(c))
+	})
+	invoiceRouter.Get("/analytics", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/invoices.html", getLayoutData(c))
+	})
+	invoiceRouter.Get("/public/:id", func(c *fiber.Ctx) error {
+		return c.SendFile("./views/invoices/public.html")
+	})
+	// Invoice detail - using shell
+	invoiceRouter.Get("/:id", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/invoice-view.html", getLayoutData(c))
+	})
+	invoiceRouter.Get("/:id/edit", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/invoice-create.html", getLayoutData(c))
+	})
+
+	// Payments - shell
+	app.Get("/payments", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/payments.html", getLayoutData(c))
+	})
+
+	// Expenses - shell
+	app.Get("/expenses", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/expenses.html", getLayoutData(c))
+	})
+	// IMPORTANT: specific routes must come BEFORE /:id
+	app.Get("/expenses/new", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/expenses.html", getLayoutData(c))
+	})
+	app.Get("/expenses/:id", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/expenses.html", getLayoutData(c))
+	})
+
+	// Settings - shell with subsections as standalone
+	settingsRouter := app.Group("/settings")
+	settingsRouter.Get("/", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/settings.html", getLayoutData(c))
+	})
+	settingsRouter.Get("/profile", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/settings.html", getLayoutData(c))
+	})
+
+	// Billing - dedicated page
+	settingsRouter.Get("/billing", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/billing.html", getLayoutData(c))
+	})
+
+	// Pricing - public page
+	app.Get("/pricing", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/pricing.html", getLayoutData(c))
+	})
+
+	// Reports - shell
+	app.Get("/reports", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/reports.html", getLayoutData(c))
+	})
+
+	// Automations - shell with new/edit using shell
+	automationRouter := app.Group("/automations")
+	automationRouter.Get("/", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/automations.html", getLayoutData(c))
+	})
+	// IMPORTANT: /new must come BEFORE /:id to avoid :id matching "new"
+	automationRouter.Get("/new", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/automation-edit.html", getLayoutData(c))
+	})
+	automationRouter.Get("/:id/edit", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/automation-edit.html", getLayoutData(c))
+	})
+
+	// Notifications - shell
+	app.Get("/notifications", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/notifications.html", getLayoutData(c))
+	})
+
+	// Public pages (no auth required)
 	app.Get("/contact", func(c *fiber.Ctx) error {
 		return c.SendFile("./views/pages/contact.html")
 	})
@@ -35,87 +155,17 @@ func StaticRoutes(app *fiber.App) fiber.Router {
 		return c.SendFile("./views/pages/success.html")
 	})
 
-	// Dashboard pages (SPA with Alpine.js)
-	app.Get("/dashboard", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/dashboard/index.html")
-	})
-
-	// Auth pages (in views/auth/)
+	// Auth pages (no auth required)
 	app.Get("/login", func(c *fiber.Ctx) error {
 		return c.SendFile("./views/auth/login.html")
 	})
 	app.Get("/register", func(c *fiber.Ctx) error {
 		return c.SendFile("./views/auth/register.html")
 	})
-
-	// Reports pages
-	app.Get("/reports", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/reports/index.html")
-	})
-
-	// Invoice pages - MUST order specific routes before parameterized routes
-	invoiceRouter := app.Group("/invoices")
-
-	// Specific routes FIRST
-	invoiceRouter.Get("/", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/invoices/index.html")
-	})
-
-	invoiceRouter.Get("/new", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/invoices/new.html")
-	})
-
-	invoiceRouter.Get("/analytics", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/invoices/analytics.html")
-	})
-
-	invoiceRouter.Get("/public/:id", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/invoices/public.html")
-	})
-
-	// Parameterized routes LAST
-	invoiceRouter.Get("/:id", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/invoices/view.html")
-	})
-
-	invoiceRouter.Get("/:id/edit", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/invoices/edit.html")
-	})
-
-	// Catch-all for other SPA routes
-	app.Use(func(c *fiber.Ctx) error {
-		path := c.Path()
-		if strings.HasPrefix(path, "/invoices") {
-			return c.SendFile("./views/invoices/index.html")
-		}
-		if strings.HasPrefix(path, "/profile") {
-			return c.SendFile("./views/settings/profile.html")
-		}
-		if strings.HasPrefix(path, "/payments") {
-			return c.SendFile("./views/payments/index.html")
-		}
-		if strings.HasPrefix(path, "/settings") {
-			return c.SendFile("./views/settings/index.html")
-		}
-		if strings.HasPrefix(path, "/billing") {
-			return c.SendFile("./views/settings/billing.html")
-		}
-		if strings.HasPrefix(path, "/automations") {
-			if path == "/automations" || path == "/automations/" {
-				return c.SendFile("./views/automations/index.html")
-			}
-			if strings.HasSuffix(path, "/new") || strings.HasSuffix(path, "/new/") {
-				return c.SendFile("./views/automations/new.html")
-			}
-			if strings.Contains(path, "/edit") {
-				return c.SendFile("./views/automations/new.html")
-			}
-			return c.SendFile("./views/automations/index.html")
-		}
-		if strings.HasPrefix(path, "/notifications") {
-			return c.SendFile("./views/notifications/index.html")
-		}
-		return c.Next()
+	app.Get("/logout", func(c *fiber.Ctx) error {
+		c.ClearCookie("token")
+		c.ClearCookie("refresh_token")
+		return c.Redirect("/login")
 	})
 
 	return app.Group("")

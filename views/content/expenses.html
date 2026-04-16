@@ -1,0 +1,456 @@
+<!-- Expenses Content -->
+<div class="p-6" x-data="expensesContent()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Expenses</h1>
+            <p class="text-slate-500 text-sm mt-1">Track and manage business expenses</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button @click="exportExpenses()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                Export
+            </button>
+            <button @click="openAddModal()" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                Add Expense
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500">Total Expenses</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(stats.total)">KES 0</p>
+                </div>
+                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <i data-lucide="trending-down" class="w-5 h-5 text-red-600"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500">This Month</p>
+                    <p class="text-xl font-bold text-blue-600" x-text="formatCurrency(stats.thisMonth)">KES 0</p>
+                </div>
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <i data-lucide="calendar" class="w-5 h-5 text-blue-600"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500">Pending</p>
+                    <p class="text-xl font-bold text-amber-600" x-text="stats.pending">0</p>
+                </div>
+                <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <i data-lucide="clock" class="w-5 h-5 text-amber-600"></i>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-500">Categories</p>
+                    <p class="text-xl font-bold text-purple-600" x-text="categories.length">0</p>
+                </div>
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <i data-lucide="folder" class="w-5 h-5 text-purple-600"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-6">
+        <div class="flex items-center gap-4 flex-wrap">
+            <div class="relative flex-1 min-w-[200px]">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" x-model="search" @input.debounce.300ms="loadExpenses()" 
+                    placeholder="Search expenses..."
+                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200">
+            </div>
+            <select x-model="filterStatus" @change="loadExpenses()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="paid">Paid</option>
+                <option value="rejected">Rejected</option>
+            </select>
+            <select x-model="filterCategory" @change="loadExpenses()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                <option value="">All Categories</option>
+                <template x-for="cat in categories" :key="cat.id">
+                    <option :value="cat.id" x-text="cat.name"></option>
+                </template>
+            </select>
+            <input type="date" x-model="filterStartDate" @change="loadExpenses()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm">
+            <span class="text-slate-400">to</span>
+            <input type="date" x-model="filterEndDate" @change="loadExpenses()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm">
+            <button @click="clearFilters()" class="px-4 py-2.5 text-slate-600 hover:text-slate-900 text-sm">Clear</button>
+        </div>
+    </div>
+
+    <!-- Expenses Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <template x-if="loading">
+            <div class="p-12 text-center">
+                <div class="w-8 h-8 border-2 border-trust border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p class="text-slate-500">Loading expenses...</p>
+            </div>
+        </template>
+        
+        <table x-show="!loading" class="w-full">
+            <thead class="bg-slate-50 border-b border-slate-200">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Date</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Title</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Category</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Vendor</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Status</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                <template x-for="expense in expenses" :key="expense.id">
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="px-4 py-4 text-sm text-slate-600" x-text="formatDate(expense.date)">-</td>
+                        <td class="px-4 py-4">
+                            <p class="font-medium text-slate-900" x-text="expense.title"></p>
+                            <p class="text-xs text-slate-500" x-text="expense.description || '-'"></p>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="px-2.5 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700" x-text="expense.category_name || '-'">-</span>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-600" x-text="expense.vendor || '-'">-</td>
+                        <td class="px-4 py-4 text-right font-semibold text-slate-900" x-text="formatCurrency(expense.amount)">KES 0</td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                :class="getStatusClass(expense.status)"
+                                x-text="expense.status">-</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <button @click="editExpense(expense)" class="p-2 hover:bg-slate-100 rounded-lg" title="Edit">
+                                    <i data-lucide="edit-2" class="w-4 h-4 text-slate-500"></i>
+                                </button>
+                                <button @click="deleteExpense(expense)" class="p-2 hover:bg-red-50 rounded-lg text-red-500" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+                <template x-if="!loading && expenses.length === 0">
+                    <tr><td colspan="7" class="px-4 py-16">
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i data-lucide="receipt" class="w-8 h-8 text-slate-400"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-slate-900 mb-2">No expenses yet</h3>
+                            <p class="text-slate-500 mb-4">Track your first business expense</p>
+                            <button @click="openAddModal()" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Expense
+                            </button>
+                        </div>
+                    </td></tr>
+                </template>
+            </tbody>
+        </table>
+
+        <!-- Pagination -->
+        <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+            <p class="text-sm text-slate-500">Showing <span x-text="expenses.length">0</span> expenses</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div x-show="modalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = false">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white">
+            <h2 class="text-xl font-bold text-slate-900" x-text="editingExpense ? 'Edit Expense' : 'Add Expense'"></h2>
+            <button @click="modalOpen = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form @submit.prevent="saveExpense()" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Title *</label>
+                <input type="text" x-model="form.title" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <textarea x-model="form.description" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Amount *</label>
+                    <input type="number" step="0.01" x-model="form.amount" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Date *</label>
+                    <input type="date" x-model="form.date" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                    <select x-model="form.category_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                        <option value="">Select category</option>
+                        <template x-for="cat in categories" :key="cat.id">
+                            <option :value="cat.id" x-text="cat.name"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Vendor</label>
+                    <input type="text" x-model="form.vendor" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                    <select x-model="form.payment_method" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                        <option value="">Select method</option>
+                        <option value="cash">Cash</option>
+                        <option value="bank">Bank Transfer</option>
+                        <option value="mpesa">M-Pesa</option>
+                        <option value="card">Card</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                    <select x-model="form.status" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Reference</label>
+                <input type="text" x-model="form.reference" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+            </div>
+            <div class="flex justify-end gap-3 pt-4">
+                <button type="button" @click="modalOpen = false" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button type="submit" class="px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Expense</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Modal -->
+<div x-show="deleteModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="deleteModalOpen = false">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div class="flex items-center gap-4 mb-4">
+            <div class="p-3 rounded-xl bg-red-100">
+                <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+            </div>
+            <div>
+                <h3 class="font-semibold text-slate-900">Delete Expense?</h3>
+                <p class="text-sm text-slate-500">This action cannot be undone</p>
+            </div>
+        </div>
+        <p class="text-slate-600 mb-6">Are you sure you want to delete <span x-text="deletingExpense?.title" class="font-medium"></span>?</p>
+        <div class="flex gap-3">
+            <button @click="deleteModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+            <button @click="confirmDelete()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+    <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+    <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+</div>
+
+<script>
+function expensesContent() {
+    return {
+        loading: true,
+        expenses: [],
+        categories: [],
+        search: '',
+        filterStatus: '',
+        filterCategory: '',
+        filterStartDate: '',
+        filterEndDate: '',
+        stats: { total: 0, thisMonth: 0, pending: 0, categories: 0 },
+        
+        modalOpen: false,
+        editingExpense: null,
+        deleteModalOpen: false,
+        deletingExpense: null,
+        form: {
+            title: '', description: '', amount: 0, date: '', category_id: '', vendor: '', payment_method: '', status: 'pending', reference: ''
+        },
+        toast: { show: false, message: '', type: 'success' },
+
+        async init() {
+            await this.loadCategories();
+            await this.loadExpenses();
+            await this.loadStats();
+            lucide.createIcons();
+        },
+
+        async loadExpenses() {
+            this.loading = true;
+            try {
+                const params = new URLSearchParams();
+                if (this.search) params.append('search', this.search);
+                if (this.filterStatus) params.append('status', this.filterStatus);
+                if (this.filterCategory) params.append('category_id', this.filterCategory);
+                if (this.filterStartDate) params.append('start_date', this.filterStartDate);
+                if (this.filterEndDate) params.append('end_date', this.filterEndDate);
+                
+                const data = await InvoiceFastAPI.request('/tenant/expenses?' + params.toString());
+                this.expenses = data.expenses || [];
+            } catch(e) {
+                console.error('Failed to load expenses:', e);
+                this.expenses = [];
+            } finally {
+                this.loading = false;
+                lucide.createIcons();
+            }
+        },
+
+        async loadCategories() {
+            try {
+                const data = await InvoiceFastAPI.request('/tenant/expenses/categories');
+                this.categories = data.categories || [];
+            } catch(e) {
+                this.categories = [];
+            }
+        },
+
+        async loadStats() {
+            try {
+                const data = await InvoiceFastAPI.request('/tenant/expenses/summary');
+                this.stats = { 
+                    total: data.total || 0, 
+                    thisMonth: data.this_month || 0, 
+                    pending: data.pending || 0, 
+                    categories: this.categories.length 
+                };
+            } catch(e) {
+                this.stats = { total: 0, thisMonth: 0, pending: 0, categories: 0 };
+            }
+        },
+
+        clearFilters() {
+            this.search = '';
+            this.filterStatus = '';
+            this.filterCategory = '';
+            this.filterStartDate = '';
+            this.filterEndDate = '';
+            this.loadExpenses();
+        },
+
+        openAddModal() {
+            this.editingExpense = null;
+            this.form = {
+                title: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], 
+                category_id: '', vendor: '', payment_method: '', status: 'pending', reference: ''
+            };
+            this.modalOpen = true;
+            this.$nextTick(() => lucide.createIcons());
+        },
+
+        editExpense(expense) {
+            this.editingExpense = expense;
+            this.form = {
+                title: expense.title,
+                description: expense.description || '',
+                amount: expense.amount,
+                date: expense.date,
+                category_id: expense.category_id || '',
+                vendor: expense.vendor || '',
+                payment_method: expense.payment_method || '',
+                status: expense.status,
+                reference: expense.reference || ''
+            };
+            this.modalOpen = true;
+            this.$nextTick(() => lucide.createIcons());
+        },
+
+        async saveExpense() {
+            try {
+                if (this.editingExpense) {
+                    await InvoiceFastAPI.request('/tenant/expenses/' + this.editingExpense.id, {
+                        method: 'PUT',
+                        body: JSON.stringify(this.form)
+                    });
+                    this.showToast('Expense updated', 'success');
+                } else {
+                    await InvoiceFastAPI.request('/tenant/expenses', {
+                        method: 'POST',
+                        body: JSON.stringify(this.form)
+                    });
+                    this.showToast('Expense created', 'success');
+                }
+                this.modalOpen = false;
+                await this.loadExpenses();
+                await this.loadStats();
+            } catch(e) {
+                this.showToast('Failed to save expense', 'error');
+            }
+        },
+
+        deleteExpense(expense) {
+            this.deletingExpense = expense;
+            this.deleteModalOpen = true;
+        },
+
+        async confirmDelete() {
+            try {
+                await InvoiceFastAPI.request('/tenant/expenses/' + this.deletingExpense.id, {
+                    method: 'DELETE'
+                });
+                this.showToast('Expense deleted', 'success');
+                this.deleteModalOpen = false;
+                await this.loadExpenses();
+                await this.loadStats();
+            } catch(e) {
+                this.showToast('Failed to delete expense', 'error');
+            }
+        },
+
+        exportExpenses() {
+            window.location.href = '/tenant/expenses/export';
+        },
+
+        formatCurrency(amount) {
+            return 'KES ' + (amount || 0).toLocaleString();
+        },
+
+        formatDate(date) {
+            if (!date) return '-';
+            return new Date(date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' });
+        },
+
+        getStatusClass(status) {
+            const classes = {
+                'pending': 'bg-amber-100 text-amber-700',
+                'approved': 'bg-blue-100 text-blue-700',
+                'paid': 'bg-green-100 text-green-700',
+                'rejected': 'bg-red-100 text-red-700'
+            };
+            return classes[status] || 'bg-slate-100 text-slate-700';
+        },
+
+        showToast(message, type = 'success') {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
+        }
+    }
+}
+</script>
