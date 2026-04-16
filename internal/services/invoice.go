@@ -248,13 +248,10 @@ func (s *InvoiceService) validateCreateRequest(userID, clientID string, req *Cre
 		return errors.New("user ID is required")
 	}
 	if strings.TrimSpace(clientID) == "" {
-		return errors.New("client ID is required")
+		return errors.New("client_id is required")
 	}
 	if req.DueDate.IsZero() {
-		return errors.New("due date is required")
-	}
-	if req.DueDate.Before(time.Now().UTC().AddDate(0, 0, -1)) {
-		return errors.New("due date cannot be in the past")
+		return errors.New("due_date is required")
 	}
 	return nil
 }
@@ -1220,7 +1217,7 @@ type CreateInvoiceRequest struct {
 	Currency      string               `json:"currency"`
 	TaxRate       float64              `json:"tax_rate"`
 	Discount      float64              `json:"discount"`
-	DueDate       time.Time            `json:"due_date" binding:"required"`
+	DueDate       time.Time            `json:"due_date"`
 	Notes         string               `json:"notes"`
 	Terms         string               `json:"terms"`
 	BrandColor    string               `json:"brand_color"`
