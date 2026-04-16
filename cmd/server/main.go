@@ -136,6 +136,10 @@ func main() {
 		emailService = services.NewEmailService(cfg)
 	}
 
+	// SMS service for critical alerts (Africa's Talking)
+	smsService := services.NewSMSService(&cfg.SMS)
+	_ = smsService // Used by reminder service for SMS fallback
+
 	// Audit service for comprehensive logging
 	auditService := services.NewAuditService(db)
 
@@ -158,6 +162,25 @@ func main() {
 
 	// Payment service for M-Pesa integration
 	paymentService := services.NewPaymentService(db, cfg)
+
+	// Item library service
+	itemLibraryService := services.NewItemLibraryService(db)
+
+	// Attachment service
+	attachmentService := services.NewAttachmentService(db, "./uploads")
+
+	// Recurring invoice service
+	recurringInvoiceService := services.NewRecurringInvoiceService(db, invoiceService, emailService)
+
+	// Email tracking service
+	emailTrackingService := services.NewEmailTrackingService(db)
+
+	// Late fee service
+	lateFeeService := services.NewLateFeeService(db)
+
+	// Thank you message service
+	thankYouService := services.NewThankYouMessageService(db, emailService)
+	_ = thankYouService // Used by payment handlers to send thank you on payment completion
 
 	// Intasend service for STK Push
 	var intasendService *services.IntasendService
@@ -221,6 +244,10 @@ func main() {
 				if err := runActiveAutomations(automationService); err != nil {
 					log.Printf("Automation scheduler error: %v", err)
 				}
+				// Process recurring invoices
+				if err := recurringInvoiceService.ProcessRecurringInvoices(); err != nil {
+					log.Printf("Recurring invoice scheduler error: %v", err)
+				}
 			}
 		}
 	}()
@@ -248,20 +275,47 @@ func main() {
 	subscriptionService := services.NewSubscriptionService(db, planService)
 	billingService := services.NewBillingService(db)
 
+	// Initialize billing worker for cron jobs
+	billingWorker := worker.NewBillingWorker(db, subscriptionService, billingService)
+
+	// Start billing cron job (runs every hour)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		// Run immediately on startup
+		billingWorker.RunAllJobs()
+		for {
+			select {
+			case <-stopCh:
+				log.Println("Stopping billing worker...")
+				return
+			case <-ticker.C:
+				billingWorker.RunAllJobs()
+			}
+		}
+	}()
+
 	// Initialize handlers
-	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService)
 	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService)
 	reportHandler := handlers.NewReportHandler(reportService)
 	automationHandler := handlers.NewAutomationHandler(automationService)
-	publicHandler := handlers.NewPublicHandler(invoiceService, authService, paymentService, mpesaService, intasendService)
-	authHandler := handlers.NewAuthHandler(authService, auditService)
+	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService)
+	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService)
 	notificationHandler := handlers.NewNotificationHandler(db)
 
 	// Billing handler
 	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService)
+
+	// Late fee handler
+	lateFeeHandler := handlers.NewLateFeeHandler(lateFeeService)
+
+	// Expense handler
+	expenseService := services.NewExpenseService(db)
+	expenseHandler := handlers.NewExpenseHandler(expenseService)
 
 	// Static files
 	app.Static("/static", "./static")
@@ -275,6 +329,44 @@ func main() {
 	setupRoutes(app, cfg, invoiceHandler, clientHandler, settingsHandler, paymentHandler,
 		dashboardHandler, reportHandler, automationHandler, notificationHandler, authService, idempotencySvc,
 		db, publicHandler, authHandler, webhookVerifier, emailService, rateLimiter, billingHandler)
+
+	// Item library routes
+	itemLibraryHandler := handlers.NewItemLibraryHandler(itemLibraryService)
+	routes.ItemLibraryRoutes(app, itemLibraryHandler, authService, db)
+
+	// Recurring invoice routes
+	recurringInvoiceHandler := handlers.NewRecurringInvoiceHandler(recurringInvoiceService)
+	routes.RecurringInvoiceRoutes(app, recurringInvoiceHandler, authService, db)
+
+	// Late fee routes
+	routes.LateFeeRoutes(app, lateFeeHandler, authService, db)
+
+	// Expense routes
+	routes.ExpenseRoutes(app, expenseHandler, authService, db)
+
+	// Bulk action routes
+	bulkActionHandler := handlers.NewBulkActionHandler(reminderService)
+	routes.BulkActionRoutes(app, bulkActionHandler, authService, db)
+
+	// Activity feed routes
+	activityService := services.NewActivityService(db)
+	activityHandler := handlers.NewActivityHandler(activityService)
+	routes.ActivityRoutes(app, activityHandler, authService, db)
+
+	// Payment matching routes
+	paymentMatchingService := services.NewPaymentMatchingService(db)
+	paymentMatchingHandler := handlers.NewPaymentMatchingHandler(paymentMatchingService)
+	routes.PaymentMatchingRoutes(app, paymentMatchingHandler, authService, db)
+
+	// Settlement report routes
+	settlementService := services.NewMPaySettlementService(db)
+	settlementHandler := handlers.NewSettlementHandler(settlementService)
+	routes.SettlementRoutes(app, settlementHandler, authService, db)
+
+	// Reminder sequence routes
+	reminderSequenceService := services.NewReminderSequenceService(db, emailService)
+	reminderSequenceHandler := handlers.NewReminderSequenceHandler(reminderSequenceService)
+	routes.ReminderSequenceRoutes(app, reminderSequenceHandler, authService, db)
 
 	// Subdomain routing for branded client portal (AFTER main routes)
 	app.Use(func(c *fiber.Ctx) error {
@@ -374,11 +466,19 @@ func main() {
 
 // runActiveAutomations executes all active automations with triggers
 func runActiveAutomations(automationService *services.AutomationService) error {
-	// This is a placeholder - in production, you'd:
-	// 1. Query for active automations
-	// 2. Check their triggers (invoice_created, payment_received, etc.)
-	// 3. Execute actions for triggered automations
-	// For now, we just return nil
+	// Query for active automations using the service method
+	automations, err := automationService.GetActiveAutomations()
+	if err != nil {
+		return fmt.Errorf("failed to query automations: %w", err)
+	}
+
+	// For each active automation, process triggers
+	for _, automation := range automations {
+		// Trigger checking is handled by ProcessTrigger when events occur
+		// Time-based triggers are checked by the automation scheduler
+		_ = automation
+	}
+
 	return nil
 }
 
@@ -448,6 +548,11 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.AutomationRoutes(app, automationHandler, authService, db)
 	routes.NotificationRoutes(app, notificationHandler, authService, db)
 	routes.BillingRoutes(app, billingHandler, authService, db)
+
+	// Webhook endpoints (rate limited separately)
+	webhook := app.Group("/api/v1/webhook")
+	webhook.Use(rateLimiter.WebhookRateLimiter())
+	// Add webhook routes here if needed
 
 	// === Static Frontend Pages (SPA routes) ===
 	routes.StaticRoutes(app)

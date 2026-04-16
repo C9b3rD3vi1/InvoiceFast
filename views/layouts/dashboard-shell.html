@@ -45,7 +45,7 @@
         }
     </style>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50" x-data="dashboardShell()" x-init="init()">
     <!-- NProgress container -->
     <div id="nprogress" style="display:none;"></div>
 
@@ -236,13 +236,49 @@
 
                     <!-- Global Search -->
                     <div class="flex-1 max-w-md mx-4">
-                        <div class="relative">
+                        <div class="relative" x-data="{ open: false }">
                             <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                             </svg>
                             <input type="text" 
                                    placeholder="Search invoices, clients..." 
+                                   @focus="open = true"
+                                   @input.debounce.300ms="search($event.target.value)"
+                                   @keydown.escape="open = false"
                                    class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-trust focus:border-transparent text-sm">
+                            <!-- Search Results Dropdown -->
+                            <div x-show="open && (searchResults.invoices.length > 0 || searchResults.clients.length > 0)" 
+                                 x-cloak
+                                 class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 max-h-80 overflow-y-auto z-50">
+                                <template x-if="searchResults.invoices.length > 0">
+                                    <div class="p-2 border-b border-slate-100">
+                                        <p class="text-xs font-medium text-slate-500 px-2 py-1">Invoices</p>
+                                        <template x-for="inv in searchResults.invoices.slice(0, 5)" :key="inv.id">
+                                            <a :href="'/invoices/' + inv.id" class="flex items-center gap-2 px-2 py-2 hover:bg-slate-50 rounded">
+                                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                <div>
+                                                    <p class="text-sm font-medium" x-text="inv.number"></p>
+                                                    <p class="text-xs text-slate-500" x-text="inv.client_name"></p>
+                                                </div>
+                                            </a>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="searchResults.clients.length > 0">
+                                    <div class="p-2">
+                                        <p class="text-xs font-medium text-slate-500 px-2 py-1">Clients</p>
+                                        <template x-for="client in searchResults.clients.slice(0, 5)" :key="client.id">
+                                            <a :href="'/clients/' + client.id" class="flex items-center gap-2 px-2 py-2 hover:bg-slate-50 rounded">
+                                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                                <div>
+                                                    <p class="text-sm font-medium" x-text="client.name"></p>
+                                                    <p class="text-xs text-slate-500" x-text="client.email"></p>
+                                                </div>
+                                            </a>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </div>
 
@@ -262,10 +298,10 @@
                         </a>
 
                         <!-- User Profile Dropdown -->
-                        <div class="relative">
-                            <button onclick="toggleUserMenu()" class="flex items-center gap-2 p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" @click.outside="open = false" class="flex items-center gap-2 p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
                                 <div class="w-8 h-8 bg-trust rounded-full flex items-center justify-center">
-                                    <span class="text-white font-medium text-sm">{{.UserInitials}}</span>
+                                    <span class="text-white font-medium text-sm" x-text="user.initials || '{{.UserInitials}}'">{{.UserInitials}}</span>
                                 </div>
                                 <svg class="w-4 h-4 text-slate-500 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
@@ -273,10 +309,10 @@
                             </button>
 
                             <!-- Dropdown Menu -->
-                            <div id="user-menu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                            <div x-show="open" x-cloak class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
                                 <div class="px-4 py-2 border-b border-slate-100">
-                                    <p class="text-sm font-medium text-slate-900">{{.UserName}}</p>
-                                    <p class="text-xs text-slate-500">{{.UserEmail}}</p>
+                                    <p class="text-sm font-medium text-slate-900" x-text="user.name || '{{.UserName}}'">{{.UserName}}</p>
+                                    <p class="text-xs text-slate-500" x-text="user.email || '{{.UserEmail}}'">{{.UserEmail}}</p>
                                 </div>
                                 <a href="/settings/profile" class="flex items-center gap-2 px-4 py-2 text-slate-700 hover:bg-slate-50">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,6 +348,105 @@
     </div>
 
     <script>
+        // Dashboard shell Alpine.js component
+        function dashboardShell() {
+            return {
+                user: {
+                    name: '',
+                    email: '',
+                    initials: ''
+                },
+                searchResults: {
+                    invoices: [],
+                    clients: []
+                },
+                searchTimeout: null,
+
+                async init() {
+                    // Load user profile
+                    await this.loadUser();
+                    lucide.createIcons();
+                },
+
+                async loadUser() {
+                    try {
+                        const response = await fetch('/api/v1/tenant/me', {
+                            headers: this.getAuthHeaders()
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.user = {
+                                name: data.name || '',
+                                email: data.email || '',
+                                initials: this.getInitials(data.name)
+                            };
+                        }
+                    } catch(e) {
+                        console.log('Using default user data');
+                    }
+                },
+
+                async search(query) {
+                    if (!query || query.length < 2) {
+                        this.searchResults = { invoices: [], clients: [] };
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/api/v1/tenant/search?q=' + encodeURIComponent(query), {
+                            headers: this.getAuthHeaders()
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.searchResults = {
+                                invoices: data.invoices || [],
+                                clients: data.clients || []
+                            };
+                        }
+                    } catch(e) {
+                        // Fallback to direct API calls
+                        await this.searchFallback(query);
+                    }
+                },
+
+                async searchFallback(query) {
+                    // Search invoices
+                    try {
+                        const invResp = await fetch('/api/v1/tenant/invoices?search=' + encodeURIComponent(query), {
+                            headers: this.getAuthHeaders()
+                        });
+                        if (invResp.ok) {
+                            const invData = await invResp.json();
+                            this.searchResults.invoices = invData.invoices || [];
+                        }
+                    } catch(e) {}
+
+                    // Search clients
+                    try {
+                        const clientResp = await fetch('/api/v1/tenant/clients?search=' + encodeURIComponent(query), {
+                            headers: this.getAuthHeaders()
+                        });
+                        if (clientResp.ok) {
+                            const clientData = await clientResp.json();
+                            this.searchResults.clients = clientData.clients || [];
+                        }
+                    } catch(e) {}
+                },
+
+                getInitials(name) {
+                    if (!name) return 'U';
+                    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                },
+
+                getAuthHeaders() {
+                    return {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    };
+                }
+            }
+        }
+
         // Sidebar toggle for mobile
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
@@ -325,21 +460,6 @@
                 overlay.classList.add('hidden');
             }
         }
-
-        // User menu toggle
-        function toggleUserMenu() {
-            const menu = document.getElementById('user-menu');
-            menu.classList.toggle('hidden');
-        }
-
-        // Close menus when clicking outside
-        document.addEventListener('click', function(e) {
-            const userMenu = document.getElementById('user-menu');
-            const userButton = e.target.closest('button');
-            if (!userButton && !userMenu.contains(e.target)) {
-                userMenu.classList.add('hidden');
-            }
-        });
     </script>
 </body>
 </html>
