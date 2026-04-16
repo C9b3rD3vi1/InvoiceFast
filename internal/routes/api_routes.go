@@ -9,34 +9,13 @@ import (
 var layoutService = services.NewLayoutService()
 
 func getLayoutData(c *fiber.Ctx) services.LayoutData {
-	userName := "User"
-	userEmail := "user@example.com"
-	tenantName := "My Company"
-
-	if u := c.Locals("user_name"); u != nil {
-		if n, ok := u.(string); ok {
-			userName = n
-		}
-	}
-	if e := c.Locals("user_email"); e != nil {
-		if em, ok := e.(string); ok {
-			userEmail = em
-		}
-	}
-	if t := c.Locals("tenant_name"); t != nil {
-		if tn, ok := t.(string); ok {
-			tenantName = tn
-		}
-	}
-
-	initials := services.GetInitials(userName)
-
+	// Default values - will be overridden by Alpine.js client-side
 	return services.LayoutData{
 		Title:        "",
-		TenantName:   tenantName,
-		UserName:     userName,
-		UserEmail:    userEmail,
-		UserInitials: initials,
+		TenantName:   "Loading...",
+		UserName:     "Loading...",
+		UserEmail:    "Loading...",
+		UserInitials: "L",
 	}
 }
 
