@@ -290,12 +290,43 @@
                             <span class="text-sm font-medium text-green-700">KRA Sync: OK</span>
                         </div>
 
-                        <!-- Notifications -->
-                        <a href="/notifications" class="p-2 text-slate-600 hover:text-trust">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-                            </svg>
-                        </a>
+                        <!-- Notifications Dropdown -->
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open; if(open) loadNotifications()" @click.outside="open = false" class="p-2 text-slate-600 hover:text-trust relative">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                                </svg>
+                                <span x-show="unreadCount > 0" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center" x-text="unreadCount"></span>
+                            </button>
+                            
+                            <!-- Notifications Dropdown -->
+                            <div x-show="open" x-cloak class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-slate-200 z-50">
+                                <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                                    <h3 class="font-semibold text-slate-900">Notifications</h3>
+                                    <a href="/notifications" class="text-xs text-trust hover:underline">View all</a>
+                                </div>
+                                <div class="max-h-96 overflow-y-auto">
+                                    <template x-if="notifications.length === 0">
+                                        <div class="p-8 text-center">
+                                            <svg class="w-12 h-12 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                            <p class="text-sm text-slate-500">No notifications yet</p>
+                                        </div>
+                                    </template>
+                                    <template x-for="notif in notifications.slice(0, 10)" :key="notif.id">
+                                        <div class="px-4 py-3 border-b border-slate-50 hover:bg-slate-50 cursor-pointer" @click="markAsRead(notif)">
+                                            <div class="flex items-start gap-3">
+                                                <div class="w-2 h-2 rounded-full mt-2" :class="notif.read ? 'bg-slate-200' : 'bg-trust'"></div>
+                                                <div class="flex-1">
+                                                    <p class="text-sm font-medium text-slate-900" x-text="notif.title"></p>
+                                                    <p class="text-xs text-slate-500" x-text="notif.message"></p>
+                                                    <p class="text-xs text-slate-400 mt-1" x-text="formatTime(notif.created_at)"></p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
 
                         <!-- User Profile Dropdown -->
                         <div class="relative" x-data="{ open: false }">
@@ -360,11 +391,16 @@
                     invoices: [],
                     clients: []
                 },
+                notifications: [],
+                unreadCount: 0,
                 searchTimeout: null,
 
                 async init() {
-                    // Load user profile
-                    await this.loadUser();
+                    // Load user profile and notifications
+                    await Promise.all([
+                        this.loadUser(),
+                        this.loadNotifications()
+                    ]);
                     lucide.createIcons();
                 },
 
@@ -384,6 +420,49 @@
                     } catch(e) {
                         console.log('Using default user data');
                     }
+                },
+
+                async loadNotifications() {
+                    try {
+                        const response = await fetch('/api/v1/tenant/notifications', {
+                            headers: this.getAuthHeaders()
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.notifications = data.notifications || [];
+                            // Calculate unread count
+                            this.unreadCount = this.notifications.filter(n => !n.read).length;
+                        }
+                    } catch(e) {
+                        console.log('No notifications');
+                    }
+                },
+
+                async markAsRead(notif) {
+                    if (notif.read) return;
+                    try {
+                        await fetch('/api/v1/tenant/notifications/' + notif.id + '/read', {
+                            method: 'PUT',
+                            headers: this.getAuthHeaders()
+                        });
+                        notif.read = true;
+                        this.unreadCount = Math.max(0, this.unreadCount - 1);
+                    } catch(e) {}
+                },
+
+                formatTime(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    const now = new Date();
+                    const diff = now - date;
+                    const mins = Math.floor(diff / 60000);
+                    if (mins < 1) return 'Just now';
+                    if (mins < 60) return mins + 'm ago';
+                    const hours = Math.floor(mins / 60);
+                    if (hours < 24) return hours + 'h ago';
+                    const days = Math.floor(hours / 24);
+                    if (days < 7) return days + 'd ago';
+                    return date.toLocaleDateString();
                 },
 
                 async search(query) {
