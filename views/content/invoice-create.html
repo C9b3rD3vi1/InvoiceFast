@@ -567,25 +567,25 @@ function invoiceCreate() {
         },
 
         formatInvoiceData() {
+            // Transform items to match backend expected format
+            const items = this.invoice.items.map(item => ({
+                description: item.name || item.description,
+                quantity: parseFloat(item.quantity) || 1,
+                unit_price: parseFloat(item.unit_price) || 0,
+                tax_rate: parseFloat(item.tax_rate) || 0,
+                discount_rate: parseFloat(item.discount_rate) || 0,
+            }));
+
             return {
-                invoice_number: this.invoice.invoice_number,
-                title: this.invoice.title,
                 client_id: this.invoice.client_id,
-                currency: this.invoice.currency,
-                issue_date: this.invoice.issue_date,
                 due_date: this.invoice.due_date,
-                payment_terms: parseInt(this.invoice.payment_terms),
-                status: this.invoice.status,
+                currency: this.invoice.currency,
+                reference: this.invoice.invoice_number,
                 notes: this.invoice.notes,
                 terms: this.invoice.terms,
-                items: this.invoice.items,
-                recurring: this.invoice.recurring,
-                recurring_interval: this.invoice.recurring_interval,
-                recurring_count: this.invoice.recurring_count,
-                auto_reminder: this.invoice.auto_reminder,
-                partial_payment: this.invoice.partial_payment,
-                deposit_required: this.invoice.deposit_required,
-                deposit_percent: this.invoice.deposit_percent,
+                items: items,
+                tax_rate: parseFloat(this.invoice.tax_rate) || 0,
+                discount: parseFloat(this.invoice.discount) || 0,
             };
         }
     };
