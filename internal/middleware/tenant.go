@@ -71,6 +71,9 @@ func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.
 		}
 		if userID != "" {
 			c.Locals(UserIDKey, userID)
+			// Also store for layout
+			c.Locals("user_id", userID)
+			c.Locals("tenant_id", tenantID)
 		}
 
 		if authErr != nil && c.Path() != "/api/v1/auth/login" {

@@ -406,19 +406,32 @@
 
                 async loadUser() {
                     try {
+                        const token = localStorage.getItem('token');
+                        if (!token) {
+                            console.log('No token found');
+                            return;
+                        }
                         const response = await fetch('/api/v1/tenant/me', {
-                            headers: this.getAuthHeaders()
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer ' + token
+                            }
                         });
+                        console.log('User API response:', response.status);
                         if (response.ok) {
                             const data = await response.json();
+                            console.log('User data:', data);
                             this.user = {
                                 name: data.name || '',
                                 email: data.email || '',
                                 initials: this.getInitials(data.name)
                             };
+                        } else {
+                            const err = await response.text();
+                            console.log('User API error:', err);
                         }
                     } catch(e) {
-                        console.log('Using default user data');
+                        console.log('User load error:', e);
                     }
                 },
 
