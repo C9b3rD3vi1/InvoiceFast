@@ -1,0 +1,630 @@
+<!-- Invoices List Content -->
+<div class="p-6" x-data="invoicesContent()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Invoices</h1>
+            <p class="text-slate-500 text-sm mt-1">Manage and track all your invoices</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button @click="exportInvoices()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                Export
+            </button>
+            <a href="/invoices/new" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 shadow-lg shadow-trust/30">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                Create Invoice
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
+        <template x-for="stat in stats" :key="stat.label">
+            <div class="bg-white rounded-2xl p-4 border border-slate-200 hover:shadow-lg hover:shadow-slate-200/50 transition-all cursor-pointer" @click="filterByStat(stat.status)">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="p-2 rounded-xl" :class="stat.bg">
+                        <i :data-lucide="stat.icon" class="w-4 h-4" :class="stat.color"></i>
+                    </div>
+                    <span class="text-xs font-medium px-2 py-1 rounded-full" :class="stat.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                        <span x-text="stat.trend > 0 ? '+' + stat.trend : stat.trend"></span>%
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500 truncate" x-text="stat.label"></p>
+                <p class="text-xl font-bold text-slate-900 mt-1" x-text="stat.value"></p>
+            </div>
+        </template>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
+        <div class="flex items-center gap-4 flex-wrap">
+            <div class="relative flex-1 min-w-[200px]">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" x-model="search" @input.debounce.300ms="applyFilters()" 
+                    placeholder="Search invoices by number, client..."
+                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust focus:border-transparent">
+            </div>
+            <select x-model="filterStatus" @change="applyFilters()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                <option value="">All Status</option>
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="viewed">Viewed</option>
+                <option value="partially_paid">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+            <select x-model="filterClient" @change="applyFilters()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm min-w-[150px]">
+                <option value="">All Clients</option>
+                <template x-for="client in clients" :key="client.id">
+                    <option :value="client.id" x-text="client.name"></option>
+                </template>
+            </select>
+            <div class="flex items-center gap-2">
+                <input type="date" x-model="filterDateFrom" @change="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm">
+                <span class="text-slate-400">to</span>
+                <input type="date" x-model="filterDateTo" @change="applyFilters()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm">
+            </div>
+            <select x-model="sortBy" @change="applyFilters()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                <option value="created_at desc">Newest First</option>
+                <option value="created_at asc">Oldest First</option>
+                <option value="due_date asc">Due Date</option>
+                <option value="total desc">Amount High-Low</option>
+                <option value="total asc">Amount Low-High</option>
+            </select>
+            <button @click="clearFilters()" class="px-4 py-2.5 text-slate-600 hover:text-slate-900 text-sm">Clear</button>
+        </div>
+    </div>
+
+    <!-- Bulk Actions -->
+    <div x-show="selectedInvoices.length > 0" class="mb-4" x-transition>
+        <div class="bg-trust/10 rounded-xl px-4 py-3 flex items-center justify-between">
+            <span class="text-trust font-medium"><span x-text="selectedInvoices.length"></span> invoices selected</span>
+            <div class="flex items-center gap-2">
+                <button @click="bulkSend()" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="send" class="w-4 h-4"></i> Send
+                </button>
+                <button @click="bulkMarkPaid()" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i> Mark Paid
+                </button>
+                <button @click="bulkExport()" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i> Export
+                </button>
+                <button @click="bulkDelete()" class="px-3 py-1.5 text-sm text-red-600 hover:bg-white/50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                </button>
+                <button @click="selectedInvoices = []" class="px-3 py-1.5 text-sm hover:bg-white/50 rounded-lg">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoices Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-4 text-left">
+                            <input type="checkbox" @change="toggleSelectAll()" :checked="allSelected" class="rounded">
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Invoice</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Client</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Paid</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Balance</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">KRA</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Due Date</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Tags</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-if="loading">
+                        <tr><td colspan="10" class="px-4 py-12"><div class="flex items-center justify-center"><div class="w-8 h-8 border-2 border-trust border-t-transparent rounded-full animate-spin"></div></div></td></tr>
+                    </template>
+                    <template x-for="invoice in invoices" :key="invoice.id">
+                        <tr class="hover:bg-slate-50/50 transition-colors" :class="selectedInvoices.includes(invoice.id) ? 'bg-trust/5' : ''">
+                            <td class="px-4 py-4">
+                                <input type="checkbox" :checked="selectedInvoices.includes(invoice.id)" @change="toggleSelect(invoice.id)" class="rounded">
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-3">
+                                    <a :href="'/invoices/' + invoice.id" class="font-semibold text-trust hover:underline" x-text="invoice.invoice_number">INV-001</a>
+                                    <div class="w-12 h-6" x-show="invoice.status === 'overdue'">
+                                        <svg viewBox="0 0 48 24" class="w-full h-full">
+                                            <polyline points="0,20 8,18 16,15 24,17 32,10 40,8 48,5" class="spark-line" stroke="#ef4444" fill="none" stroke-width="2"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-slate-400" x-text="formatDate(invoice.created_at)"></p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold"
+                                        :class="getAvatarGradient(invoice.client_id)">
+                                        <span x-text="invoice.client_name?.charAt(0).toUpperCase()">C</span>
+                                    </div>
+                                    <span class="text-sm text-slate-700" x-text="invoice.client_name || '-'"></span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <p class="font-semibold text-slate-900" x-text="formatCurrency(invoice.total)">KES 0</p>
+                                <p class="text-xs text-slate-400" x-text="invoice.currency || 'KES'"></p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <p class="text-green-600 font-medium" x-text="formatCurrency(invoice.paid_amount || 0)">KES 0</p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <p class="font-medium" :class="(invoice.total - (invoice.paid_amount || 0)) > 0 ? 'text-red-600' : 'text-slate-600'" 
+                                    x-text="formatCurrency(invoice.total - (invoice.paid_amount || 0))">KES 0</p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" :class="getStatusClass(invoice.status)" x-text="getStatusLabel(invoice.status)"></span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <template x-if="invoice.kra_icn">
+                                    <div class="flex items-center gap-1 text-green-600" title="KRA Verified">
+                                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                                        <span class="text-xs font-mono" x-text="invoice.kra_icn?.slice(-8)"></span>
+                                    </div>
+                                </template>
+                                <template x-if="!invoice.kra_icn">
+                                    <span class="text-xs text-slate-400">-</span>
+                                </template>
+                            </td>
+                            <td class="px-4 py-4">
+                                <p class="text-sm" :class="isOverdue(invoice.due_date, invoice.status) ? 'text-red-600 font-medium' : 'text-slate-600'" 
+                                    x-text="formatDate(invoice.due_date)">-</p>
+                                <p class="text-xs" :class="isOverdue(invoice.due_date, invoice.status) ? 'text-red-500' : 'text-slate-400'" 
+                                    x-text="getDaysOverdue(invoice.due_date)"></p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex flex-wrap gap-1">
+                                    <template x-for="tag in (invoice.tags || []).slice(0, 2)" :key="tag">
+                                        <span class="px-2 py-0.5 rounded-md text-xs font-medium" :class="getTagClass(tag)" x-text="tag"></span>
+                                    </template>
+                                    <template x-if="invoice.tags?.length > 2">
+                                        <span class="px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-500">+<span x-text="invoice.tags.length - 2"></span></span>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <div class="relative" x-data="{ open: false }">
+                                    <button @click="open = !open" @click.outside="open = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                                        <i data-lucide="more-vertical" class="w-4 h-4"></i>
+                                    </button>
+                                    <div x-show="open" x-cloak class="dropdown-menu absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50">
+                                        <a :href="'/invoices/' + invoice.id" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="eye" class="w-4 h-4"></i> View Invoice
+                                        </a>
+                                        <a :href="'/invoices/' + invoice.id + '/edit'" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="edit-2" class="w-4 h-4"></i> Edit
+                                        </a>
+                                        <button @click="duplicateInvoice(invoice.id); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="copy" class="w-4 h-4"></i> Duplicate
+                                        </button>
+                                        <button @click="downloadPDF(invoice.id); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="download" class="w-4 h-4"></i> Download PDF
+                                        </button>
+                                        <button @click="sendInvoice(invoice.id); open = false" x-show="invoice.status === 'draft'" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="send" class="w-4 h-4"></i> Send Invoice
+                                        </button>
+                                        <button @click="sendReminder(invoice.id); open = false" x-show="invoice.status !== 'draft' && invoice.status !== 'paid'" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="bell" class="w-4 h-4"></i> Send Reminder
+                                        </button>
+                                        <hr class="my-1">
+                                        <button @click="openActionModal('markpaid', invoice); open = false" x-show="invoice.status !== 'paid'" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="check-circle" class="w-4 h-4"></i> Mark as Paid
+                                        </button>
+                                        <button @click="openActionModal('cancel', invoice); open = false" x-show="invoice.status !== 'cancelled' && invoice.status !== 'paid'" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                                            <i data-lucide="x-circle" class="w-4 h-4"></i> Cancel
+                                        </button>
+                                        <hr class="my-1">
+                                        <button @click="openActionModal('delete', invoice); open = false" class="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="!loading && invoices.length === 0">
+                        <tr><td colspan="10" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="file-text" class="w-8 h-8 text-slate-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-slate-900 mb-2">No invoices found</h3>
+                                <p class="text-slate-500 mb-4">Get started by creating your first invoice</p>
+                                <a href="/invoices/new" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Create Invoice
+                                </a>
+                            </div>
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+            <p class="text-sm text-slate-500">Showing <span x-text="(page - 1) * perPage + 1">1</span> to <span x-text="Math.min(page * perPage, total)">10</span> of <span x-text="total">0</span> invoices</p>
+            <div class="flex items-center gap-2">
+                <button @click="goToPage(page - 1)" :disabled="page <= 1" class="px-3 py-2 rounded-lg border border-slate-200 text-sm disabled:opacity-50 hover:bg-slate-50">
+                    <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <template x-for="p in visiblePages" :key="p">
+                    <button @click="goToPage(p)" class="px-3 py-2 rounded-lg text-sm" :class="p === page ? 'bg-trust text-white' : 'hover:bg-slate-50'" x-text="p"></button>
+                </template>
+                <button @click="goToPage(page + 1)" :disabled="page >= totalPages" class="px-3 py-2 rounded-lg border border-slate-200 text-sm disabled:opacity-50 hover:bg-slate-50">
+                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Confirmation Modal -->
+    <div x-show="actionModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="closeActionModal()">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <template x-if="actionModalType === 'delete'">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="trash-2" class="w-8 h-8 text-red-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Delete Invoice</h3>
+                    <p class="text-slate-500 mb-6">Are you sure you want to delete <span x-text="actionInvoice?.invoice_number" class="font-semibold"></span>? This action cannot be undone.</p>
+                    <div class="flex gap-3">
+                        <button @click="closeActionModal()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmAction()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+                    </div>
+                </div>
+            </template>
+            <template x-if="actionModalType === 'cancel'">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="x-circle" class="w-8 h-8 text-amber-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Cancel Invoice</h3>
+                    <p class="text-slate-500 mb-6">Are you sure you want to cancel <span x-text="actionInvoice?.invoice_number" class="font-semibold"></span>?</p>
+                    <div class="flex gap-3">
+                        <button @click="closeActionModal()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmAction()" class="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600">Cancel Invoice</button>
+                    </div>
+                </div>
+            </template>
+            <template x-if="actionModalType === 'markpaid'">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i data-lucide="check-circle" class="w-8 h-8 text-green-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Mark as Paid</h3>
+                    <p class="text-slate-500 mb-6">Mark <span x-text="actionInvoice?.invoice_number" class="font-semibold"></span> as fully paid?</p>
+                    <div class="flex gap-3">
+                        <button @click="closeActionModal()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmAction()" class="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700">Confirm Payment</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+        <button @click="toast.show = false" class="p-1 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+    </div>
+</div>
+
+<script>
+function invoicesContent() {
+    return {
+        loading: true,
+        invoices: [],
+        clients: [],
+        total: 0,
+        page: 1,
+        perPage: 15,
+        totalPages: 1,
+        search: '',
+        filterStatus: '',
+        filterClient: '',
+        filterDateFrom: '',
+        filterDateTo: '',
+        sortBy: 'created_at desc',
+        selectedInvoices: [],
+        actionModalOpen: false,
+        actionModalType: '',
+        actionInvoice: null,
+        toast: { show: false, message: '', type: 'success' },
+        stats: [
+            { label: 'Total', value: '0', icon: 'file-text', color: 'text-trust', bg: 'bg-trust/10', trend: 0, status: '' },
+            { label: 'Paid', value: '0', icon: 'check-circle', color: 'text-green-600', bg: 'bg-green-100', trend: 12, status: 'paid' },
+            { label: 'Pending', value: '0', icon: 'clock', color: 'text-amber-600', bg: 'bg-amber-100', trend: -3, status: 'sent' },
+            { label: 'Overdue', value: '0', icon: 'alert-circle', color: 'text-red-600', bg: 'bg-red-100', trend: 8, status: 'overdue' },
+            { label: 'Draft', value: '0', icon: 'file', color: 'text-slate-600', bg: 'bg-slate-100', trend: 0, status: 'draft' },
+            { label: 'Revenue', value: 'KES 0', icon: 'dollar-sign', color: 'text-emerald-600', bg: 'bg-emerald-100', trend: 15, status: '' },
+            { label: 'Outstanding', value: 'KES 0', icon: 'credit-card', color: 'text-red-600', bg: 'bg-red-100', trend: -5, status: '' },
+        ],
+        
+        get allSelected() {
+            return this.invoices.length > 0 && this.selectedInvoices.length === this.invoices.length;
+        },
+        
+        get visiblePages() {
+            const pages = [];
+            const start = Math.max(1, this.page - 2);
+            const end = Math.min(this.totalPages, this.page + 2);
+            for (let i = start; i <= end; i++) pages.push(i);
+            return pages;
+        },
+
+        async init() {
+            lucide.createIcons();
+            await this.loadClients();
+            await this.loadInvoices();
+        },
+
+        async loadClients() {
+            try {
+                const data = await InvoiceFastAPI.clients.list({ limit: 100 });
+                this.clients = data.clients || [];
+            } catch(err) {
+                console.error('Failed to load clients:', err);
+            }
+        },
+
+        async loadInvoices() {
+            this.loading = true;
+            try {
+                const params = new URLSearchParams({
+                    page: this.page,
+                    limit: this.perPage,
+                });
+                if (this.search) params.append('search', this.search);
+                if (this.filterStatus) params.append('status', this.filterStatus);
+                if (this.filterClient) params.append('client_id', this.filterClient);
+                if (this.filterDateFrom) params.append('date_from', this.filterDateFrom);
+                if (this.filterDateTo) params.append('date_to', this.filterDateTo);
+                if (this.sortBy) params.append('sort', this.sortBy);
+
+                const data = await InvoiceFastAPI.invoices.list(Object.fromEntries(params));
+                this.invoices = data.invoices || [];
+                this.total = data.total || 0;
+                this.totalPages = Math.ceil(this.total / this.perPage) || 1;
+                this.calculateStats();
+            } catch(err) {
+                console.error('Failed to load invoices:', err);
+                this.invoices = [];
+            } finally {
+                this.loading = false;
+                lucide.createIcons();
+            }
+        },
+
+        calculateStats() {
+            const total = this.invoices.length;
+            const paid = this.invoices.filter(i => i.status === 'paid').length;
+            const pending = this.invoices.filter(i => (i.status === 'sent' || i.status === 'viewed')).length;
+            const overdue = this.invoices.filter(i => i.status === 'overdue').length;
+            const draft = this.invoices.filter(i => i.status === 'draft').length;
+            
+            let revenue = 0, outstanding = 0;
+            this.invoices.forEach(inv => {
+                revenue += inv.paid_amount || 0;
+                outstanding += (inv.total || 0) - (inv.paid_amount || 0);
+            });
+
+            this.stats[0].value = total.toString();
+            this.stats[1].value = paid.toString();
+            this.stats[2].value = pending.toString();
+            this.stats[3].value = overdue.toString();
+            this.stats[4].value = draft.toString();
+            this.stats[5].value = this.formatCurrency(revenue);
+            this.stats[6].value = this.formatCurrency(Math.max(0, outstanding);
+        },
+
+        applyFilters() {
+            this.page = 1;
+            this.loadInvoices();
+        },
+
+        clearFilters() {
+            this.search = '';
+            this.filterStatus = '';
+            this.filterClient = '';
+            this.filterDateFrom = '';
+            this.filterDateTo = '';
+            this.sortBy = 'created_at desc';
+            this.applyFilters();
+        },
+
+        filterByStat(status) {
+            if (this.filterStatus === status) {
+                this.filterStatus = '';
+            } else {
+                this.filterStatus = status;
+            }
+            this.applyFilters();
+        },
+
+        async goToPage(p) {
+            this.page = p;
+            await this.loadInvoices();
+        },
+
+        toggleSelect(id) {
+            const idx = this.selectedInvoices.indexOf(id);
+            if (idx > -1) this.selectedInvoices.splice(idx, 1);
+            else this.selectedInvoices.push(id);
+        },
+
+        toggleSelectAll() {
+            if (this.allSelected) this.selectedInvoices = [];
+            else this.selectedInvoices = this.invoices.map(i => i.id);
+        },
+
+        formatCurrency(amount) {
+            return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', minimumFractionDigits: 0 }).format(amount || 0);
+        },
+
+        formatDate(date) {
+            if (!date) return '-';
+            return new Date(date).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' });
+        },
+
+        isOverdue(dueDate, status) {
+            if (!dueDate || status === 'paid' || status === 'cancelled') return false;
+            return new Date(dueDate) < new Date();
+        },
+
+        getDaysOverdue(dueDate) {
+            if (!dueDate) return '';
+            const diff = Math.floor((new Date() - new Date(dueDate)) / (1000 * 60 * 60 * 24));
+            if (diff <= 0) return '';
+            return diff + ' days overdue';
+        },
+
+        getStatusClass(status) {
+            const classes = {
+                'draft': 'bg-slate-100 text-slate-700',
+                'sent': 'bg-blue-100 text-blue-700',
+                'viewed': 'bg-indigo-100 text-indigo-700',
+                'partially_paid': 'bg-yellow-100 text-yellow-700',
+                'paid': 'bg-green-100 text-green-700',
+                'overdue': 'bg-red-100 text-red-700',
+                'cancelled': 'bg-slate-100 text-slate-500',
+            };
+            return classes[status] || 'bg-slate-100 text-slate-600';
+        },
+
+        getStatusLabel(status) {
+            const labels = {
+                'draft': 'Draft',
+                'sent': 'Sent',
+                'viewed': 'Viewed',
+                'partially_paid': 'Partial',
+                'paid': 'Paid',
+                'overdue': 'Overdue',
+                'cancelled': 'Cancelled',
+            };
+            return labels[status] || status;
+        },
+
+        getTagClass(tag) {
+            const classes = {
+                'Urgent': 'bg-red-100 text-red-700',
+                'VIP': 'bg-yellow-100 text-yellow-700',
+                'Subscription': 'bg-purple-100 text-purple-700',
+                'Government': 'bg-blue-100 text-blue-700',
+                'Internal': 'bg-slate-100 text-slate-700',
+            };
+            return classes[tag] || 'bg-slate-100 text-slate-600';
+        },
+
+        getAvatarGradient(id) {
+            const gradients = [
+                'bg-gradient-to-br from-purple-500 to-indigo-600',
+                'bg-gradient-to-br from-pink-500 to-rose-600',
+                'bg-gradient-to-br from-cyan-500 to-blue-600',
+                'bg-gradient-to-br from-emerald-500 to-green-600',
+                'bg-gradient-to-br from-amber-500 to-orange-600',
+            ];
+            return gradients[id?.charCodeAt(0) % gradients.length] || gradients[0];
+        },
+
+        duplicateInvoice(id) {
+            window.location.href = '/invoices/new?duplicate=' + id;
+        },
+
+        downloadPDF(id) {
+            InvoiceFastAPI.invoices.getPdf(id);
+        },
+
+        async sendInvoice(id) {
+            try {
+                await InvoiceFastAPI.invoices.send(id);
+                this.showToast('Invoice sent successfully', 'success');
+                await this.loadInvoices();
+            } catch(err) {
+                this.showToast('Failed to send invoice', 'error');
+            }
+        },
+
+        async sendReminder(id) {
+            try {
+                await InvoiceFastAPI.invoices.remind(id);
+                this.showToast('Reminder sent', 'success');
+            } catch(err) {
+                this.showToast('Failed to send reminder', 'error');
+            }
+        },
+
+        exportInvoices() {
+            alert('Exporting invoices...');
+        },
+
+        bulkSend() {
+            alert('Sending ' + this.selectedInvoices.length + ' invoices');
+        },
+
+        bulkMarkPaid() {
+            alert('Marking ' + this.selectedInvoices.length + ' invoices as paid');
+        },
+
+        bulkExport() {
+            alert('Exporting ' + this.selectedInvoices.length + ' invoices');
+        },
+
+        bulkDelete() {
+            if (!confirm('Delete ' + this.selectedInvoices.length + ' invoices?')) return;
+            this.selectedInvoices = [];
+            this.loadInvoices();
+        },
+
+        openActionModal(type, invoice) {
+            this.actionModalType = type;
+            this.actionInvoice = invoice;
+            this.actionModalOpen = true;
+        },
+
+        closeActionModal() {
+            this.actionModalOpen = false;
+            this.actionInvoice = null;
+        },
+
+        async confirmAction() {
+            if (!this.actionInvoice) return;
+            
+            try {
+                if (this.actionModalType === 'delete') {
+                    await InvoiceFastAPI.invoices.delete(this.actionInvoice.id);
+                    this.showToast('Invoice deleted', 'success');
+                } else if (this.actionModalType === 'cancel') {
+                    await InvoiceFastAPI.invoices.update(this.actionInvoice.id, { status: 'cancelled' });
+                    this.showToast('Invoice cancelled', 'success');
+                } else if (this.actionModalType === 'markpaid') {
+                    await InvoiceFastAPI.invoices.update(this.actionInvoice.id, { status: 'paid' });
+                    this.showToast('Invoice marked as paid', 'success');
+                }
+                this.closeActionModal();
+                await this.loadInvoices();
+            } catch(err) {
+                this.showToast('Action failed', 'error');
+            }
+        },
+
+        showToast(message, type) {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
+        }
+    };
+}
+</script>

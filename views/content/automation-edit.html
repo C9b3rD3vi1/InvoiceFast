@@ -1,0 +1,383 @@
+<!-- Automation Editor Content -->
+<div class="p-6" x-data="automationEditor()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-4">
+            <a href="/automations" class="p-2 hover:bg-slate-100 rounded-lg">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900" x-text="isEditing ? 'Edit Automation' : 'Create Automation'">Create Automation</h1>
+                <p class="text-slate-500 text-sm mt-1">Set up automated workflows</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button @click="saveAutomation('draft')" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                Save Draft
+            </button>
+            <button @click="saveAutomation('active')" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 shadow-lg shadow-trust/30">
+                <i data-lucide="play" class="w-4 h-4"></i>
+                <span x-text="isEditing ? 'Update' : 'Activate'">Activate</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+        <!-- Left Panel: Trigger & Actions -->
+        <div class="col-span-1 space-y-4">
+            <!-- Trigger Type -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <i data-lucide="zap" class="w-4 h-4 text-trust"></i>
+                    Trigger
+                </h3>
+                <select x-model="automation.trigger_type" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+                    <option value="invoice_created">Invoice Created</option>
+                    <option value="invoice_sent">Invoice Sent</option>
+                    <option value="invoice_paid">Invoice Paid</option>
+                    <option value="invoice_overdue">Invoice Overdue</option>
+                    <option value="payment_received">Payment Received</option>
+                    <option value="client_created">Client Created</option>
+                    <option value="schedule">Schedule</option>
+                </select>
+                
+                <div x-show="automation.trigger_type === 'schedule'" class="mt-3 space-y-2">
+                    <select x-model="automation.schedule.cron" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                        <option value="0 9 * * *">Daily at 9 AM</option>
+                        <option value="0 9 * * 1">Weekly on Monday</option>
+                        <option value="0 1 1 * *">Monthly on 1st</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <i data-lucide="activity" class="w-4 h-4 text-trust"></i>
+                    Actions
+                </h3>
+                
+                <div class="space-y-3">
+                    <template x-for="(action, index) in automation.actions" :key="index">
+                        <div class="p-3 border border-slate-200 rounded-xl">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium" x-text="action.type_display || action.type"></span>
+                                <button @click="removeAction(index)" class="p-1 text-red-500 hover:bg-red-50 rounded">
+                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <select x-model="action.type" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm mb-2">
+                                <option value="send_invoice">Send Invoice</option>
+                                <option value="send_reminder">Send Reminder</option>
+                                <option value="send_sms">Send SMS</option>
+                                <option value="send_email">Send Email</option>
+                                <option value="update_status">Update Status</option>
+                                <option value="webhook">Call Webhook</option>
+                                <option value="add_tag">Add Tag</option>
+                            </select>
+                            
+                            <template x-if="action.type === 'send_email' || action.type === 'send_sms'">
+                                <textarea x-model="action.message" placeholder="Message..." rows="2" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"></textarea>
+                            </template>
+                            
+                            <template x-if="action.type === 'webhook'">
+                                <input type="url" x-model="action.url" placeholder="https://..." class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                            </template>
+                        </div>
+                    </template>
+                    
+                    <button @click="addAction()" class="w-full py-2 border border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-trust hover:text-trust flex items-center justify-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        Add Action
+                    </button>
+                </div>
+            </div>
+
+            <!-- Conditions -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                    <i data-lucide="git-branch" class="w-4 h-4 text-trust"></i>
+                    Conditions (Optional)
+                </h3>
+                
+                <div class="space-y-2">
+                    <template x-for="(condition, index) in automation.conditions" :key="index">
+                        <div class="p-3 border border-slate-200 rounded-xl">
+                            <div class="flex items-center justify-between mb-2">
+                                <button @click="removeCondition(index)" class="p-1 text-red-500 hover:bg-red-50 rounded">
+                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <select x-model="condition.field" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm mb-2">
+                                <option value="amount">Amount</option>
+                                <option value="status">Status</option>
+                                <option value="client_name">Client Name</option>
+                                <option value="overdue_days">Days Overdue</option>
+                            </select>
+                            <select x-model="condition.operator" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm mb-2">
+                                <option value="equals">Equals</option>
+                                <option value="greater_than">Greater than</option>
+                                <option value="less_than">Less than</option>
+                                <option value="contains">Contains</option>
+                            </select>
+                            <input type="text" x-model="condition.value" placeholder="Value" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                        </div>
+                    </template>
+                    
+                    <button @click="addCondition()" class="w-full py-2 border border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-trust hover:text-trust">
+                        + Add Condition
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Preview & Settings -->
+        <div class="col-span-2 space-y-4">
+            <!-- Basic Info -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900 mb-3">Automation Details</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                        <input type="text" x-model="automation.name" placeholder="e.g., Send payment reminder" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                        <textarea x-model="automation.description" rows="2" placeholder="What does this automation do?" class="w-full px-4 py-2.5 rounded-xl border border-slate-200"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                        <select x-model="automation.category" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            <option value="invoices">Invoices</option>
+                            <option value="payments">Payments</option>
+                            <option value="reminders">Reminders</option>
+                            <option value="reports">Reports</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                        <select x-model="automation.status" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            <option value="active">Active</option>
+                            <option value="paused">Paused</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workflow Preview -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900 mb-3">Workflow Preview</h3>
+                <div class="flex items-center gap-4 overflow-x-auto pb-2">
+                    <!-- Trigger Node -->
+                    <div class="flex-shrink-0">
+                        <div class="w-16 h-16 bg-trust/10 rounded-2xl border-2 border-trust flex items-center justify-center">
+                            <i data-lucide="zap" class="w-6 h-6 text-trust"></i>
+                        </div>
+                        <p class="text-xs text-center mt-2 text-slate-500" x-text="getTriggerLabel()">Trigger</p>
+                    </div>
+                    
+                    <template x-for="(condition, i) in automation.conditions" :key="'c'+i">
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-0.5 bg-slate-300"></div>
+                            <div class="w-12 h-12 bg-amber-100 rounded-xl border-2 border-amber-300 flex items-center justify-center">
+                                <i data-lucide="git-branch" class="w-5 h-5 text-amber-600"></i>
+                            </div>
+                            <div class="w-4 h-0.5 bg-slate-300"></div>
+                        </div>
+                    </template>
+                    
+                    <!-- Action Nodes -->
+                    <template x-for="(action, i) in automation.actions" :key="'a'+i">
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-0.5 bg-slate-300"></div>
+                            <div class="flex-shrink-0">
+                                <div class="w-16 h-16 bg-green-100 rounded-2xl border-2 border-green-400 flex items-center justify-center">
+                                    <i :data-lucide="getActionIcon(action.type)" class="w-6 h-6 text-green-600"></i>
+                                </div>
+                                <p class="text-xs text-center mt-2 text-slate-500" x-text="getActionLabel(action.type)"></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Quick Templates -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900 mb-3">Quick Start Templates</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <button @click="useTemplate('payment_reminder')" class="p-3 border border-slate-200 rounded-xl text-left hover:border-trust hover:bg-trust/5 transition-all">
+                        <i data-lucide="bell" class="w-5 h-5 text-trust mb-1"></i>
+                        <p class="text-sm font-medium">Payment Reminder</p>
+                        <p class="text-xs text-slate-500">Remind clients before due date</p>
+                    </button>
+                    <button @click="useTemplate('overdue_followup')" class="p-3 border border-slate-200 rounded-xl text-left hover:border-trust hover:bg-trust/5 transition-all">
+                        <i data-lucide="alert-circle" class="w-5 h-5 text-red-500 mb-1"></i>
+                        <p class="text-sm font-medium">Overdue Follow-up</p>
+                        <p class="text-xs text-slate-500">Follow up on overdue invoices</p>
+                    </button>
+                    <button @click="useTemplate('thank_you')" class="p-3 border border-slate-200 rounded-xl text-left hover:border-trust hover:bg-trust/5 transition-all">
+                        <i data-lucide="heart" class="w-5 h-5 text-pink-500 mb-1"></i>
+                        <p class="text-sm font-medium">Thank You</p>
+                        <p class="text-xs text-slate-500">Thank client after payment</p>
+                    </button>
+                    <button @click="useTemplate('weekly_report')" class="p-3 border border-slate-200 rounded-xl text-left hover:border-trust hover:bg-trust/5 transition-all">
+                        <i data-lucide="bar-chart" class="w-5 h-5 text-blue-500 mb-1"></i>
+                        <p class="text-sm font-medium">Weekly Report</p>
+                        <p class="text-xs text-slate-500">Send weekly summary</p>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function automationEditor() {
+    return {
+        isEditing: false,
+        automation: {
+            name: '',
+            description: '',
+            category: 'invoices',
+            status: 'draft',
+            trigger_type: 'invoice_paid',
+            trigger_config: {},
+            conditions: [],
+            actions: [{ type: 'send_email', type_display: 'Send Email', message: '' }],
+            schedule: { cron: '0 9 * * *' }
+        },
+
+        async init() {
+            lucide.createIcons();
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id') || urlParams.get('edit');
+            
+            if (id) {
+                this.isEditing = true;
+                await this.loadAutomation(id);
+            }
+        },
+
+        async loadAutomation(id) {
+            try {
+                const data = await InvoiceFastAPI.automations.get(id);
+                this.automation = { ...this.automation, ...data };
+            } catch(err) {
+                console.error('Failed to load automation:', err);
+            }
+        },
+
+        async saveAutomation(status) {
+            this.automation.status = status;
+            
+            try {
+                if (this.isEditing) {
+                    await InvoiceFastAPI.automations.update(this.automation.id, this.automation);
+                } else {
+                    await InvoiceFastAPI.automations.create(this.automation);
+                }
+                alert('Automation saved successfully');
+                window.location.href = '/automations';
+            } catch(err) {
+                alert('Failed to save automation');
+            }
+        },
+
+        addAction() {
+            this.automation.actions.push({ type: 'send_email', message: '' });
+        },
+
+        removeAction(index) {
+            this.automation.actions.splice(index, 1);
+        },
+
+        addCondition() {
+            this.automation.conditions.push({ field: 'amount', operator: 'greater_than', value: '' });
+        },
+
+        removeCondition(index) {
+            this.automation.conditions.splice(index, 1);
+        },
+
+        getTriggerLabel() {
+            const labels = {
+                'invoice_created': 'Invoice\nCreated',
+                'invoice_sent': 'Invoice\nSent',
+                'invoice_paid': 'Invoice\nPaid',
+                'invoice_overdue': 'Invoice\nOverdue',
+                'payment_received': 'Payment\nReceived',
+                'client_created': 'Client\nCreated',
+                'schedule': 'Schedule'
+            };
+            return labels[this.automation.trigger_type] || 'Trigger';
+        },
+
+        getActionIcon(type) {
+            const icons = {
+                'send_invoice': 'send',
+                'send_reminder': 'bell',
+                'send_sms': 'message-circle',
+                'send_email': 'mail',
+                'update_status': 'refresh-cw',
+                'webhook': 'link',
+                'add_tag': 'tag'
+            };
+            return icons[type] || 'activity';
+        },
+
+        getActionLabel(type) {
+            const labels = {
+                'send_invoice': 'Send Invoice',
+                'send_reminder': 'Send Reminder',
+                'send_sms': 'Send SMS',
+                'send_email': 'Send Email',
+                'update_status': 'Update Status',
+                'webhook': 'Webhook',
+                'add_tag': 'Add Tag'
+            };
+            return labels[type] || type;
+        },
+
+        useTemplate(template) {
+            const templates = {
+                'payment_reminder': {
+                    name: 'Payment Reminder',
+                    description: 'Send reminder before due date',
+                    trigger_type: 'schedule',
+                    schedule: { cron: '0 9 * * *' },
+                    conditions: [{ field: 'status', operator: 'equals', value: 'sent' }],
+                    actions: [{ type: 'send_reminder', message: 'Reminder: Your invoice is due soon.' }]
+                },
+                'overdue_followup': {
+                    name: 'Overdue Follow-up',
+                    description: 'Follow up on overdue invoices',
+                    trigger_type: 'invoice_overdue',
+                    conditions: [{ field: 'overdue_days', operator: 'greater_than', value: '3' }],
+                    actions: [{ type: 'send_email', message: 'Your invoice is overdue. Please pay ASAP.' }]
+                },
+                'thank_you': {
+                    name: 'Thank You',
+                    description: 'Thank client after payment',
+                    trigger_type: 'invoice_paid',
+                    actions: [{ type: 'send_email', message: 'Thank you for your payment!' }]
+                },
+                'weekly_report': {
+                    name: 'Weekly Report',
+                    description: 'Send weekly summary',
+                    trigger_type: 'schedule',
+                    schedule: { cron: '0 9 * * 1' },
+                    actions: [{ type: 'webhook', url: '' }]
+                }
+            };
+            
+            const t = templates[template];
+            if (t) {
+                this.automation = { ...this.automation, ...t };
+            }
+        }
+    };
+}
+</script>

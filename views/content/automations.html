@@ -1,0 +1,198 @@
+<!-- Automations Content -->
+<div class="p-6" x-data="automationsContent()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Automations</h1>
+            <p class="text-slate-500 text-sm mt-1">Automate your invoicing workflows</p>
+        </div>
+        <a href="/automations/new" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Create Automation
+        </a>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="p-2 bg-trust/10 rounded-lg mb-2">
+                <i data-lucide="zap" class="w-5 h-5 text-trust"></i>
+            </div>
+            <p class="text-xs text-slate-500">Total Automations</p>
+            <p class="text-xl font-bold text-slate-900" x-text="stats.total">0</p>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="p-2 bg-green-100 rounded-lg mb-2">
+                <i data-lucide="play" class="w-5 h-5 text-green-600"></i>
+            </div>
+            <p class="text-xs text-slate-500">Active</p>
+            <p class="text-xl font-bold text-green-600" x-text="stats.active">0</p>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="p-2 bg-blue-100 rounded-lg mb-2">
+                <i data-lucide="clock" class="w-5 h-5 text-blue-600"></i>
+            </div>
+            <p class="text-xs text-slate-500">Scheduled</p>
+            <p class="text-xl font-bold text-blue-600" x-text="stats.scheduled">0</p>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-slate-200">
+            <div class="p-2 bg-slate-100 rounded-lg mb-2">
+                <i data-lucide="pause" class="w-5 h-5 text-slate-600"></i>
+            </div>
+            <p class="text-xs text-slate-500">Paused</p>
+            <p class="text-xl font-bold text-slate-600" x-text="stats.paused">0</p>
+        </div>
+    </div>
+
+    <!-- Automation Types -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <template x-for="type in automationTypes" :key="type.id">
+            <button @click="filterByType(type.id)" 
+                class="bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-lg transition-all text-left"
+                :class="filterType === type.id ? 'ring-2 ring-trust' : ''">
+                <div class="p-2 rounded-xl w-fit mb-3" :class="type.bg">
+                    <i :data-lucide="type.icon" class="w-5 h-5" :class="type.color"></i>
+                </div>
+                <p class="font-medium text-slate-900" x-text="type.label"></p>
+                <p class="text-xs text-slate-500 mt-1" x-text="type.description"></p>
+            </button>
+        </template>
+    </div>
+
+    <!-- Automations List -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <table class="w-full">
+            <thead class="bg-slate-50 border-b border-slate-200">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Automation</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Trigger</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Runs</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                <template x-if="loading">
+                    <tr><td colspan="5" class="px-4 py-12 text-center text-slate-500">Loading...</td></tr>
+                </template>
+                <template x-for="automation in automations" :key="automation.id">
+                    <tr class="hover:bg-slate-50/50">
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg" :class="getTypeClass(automation.type)">
+                                    <i :data-lucide="getTypeIcon(automation.type)" class="w-4 h-4"></i>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-slate-900" x-text="automation.name">Automation</p>
+                                    <p class="text-xs text-slate-500" x-text="automation.description"></p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-sm text-slate-600" x-text="automation.trigger || '-'">On invoice created</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" :class="getStatusClass(automation.status)" x-text="automation.status"></span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-sm text-slate-600" x-text="automation.run_count || 0">0</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <button @click="toggleAutomation(automation)" class="p-2 hover:bg-slate-100 rounded-lg" title="Toggle">
+                                    <i :data-lucide="automation.status === 'active' ? 'pause' : 'play'" class="w-4 h-4"></i>
+                                </button>
+                                <a :href="'/automations/' + automation.id + '/edit'" class="p-2 hover:bg-slate-100 rounded-lg" title="Edit">
+                                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                                </button>
+                                <button @click="deleteAutomation(automation)" class="p-2 hover:bg-red-50 rounded-lg text-red-500" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+                <template x-if="!loading && automations.length === 0">
+                    <tr><td colspan="5" class="px-4 py-16">
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i data-lucide="zap" class="w-8 h-8 text-slate-400"></i>
+                            </div>
+                            <h3 class="text-lg font-semibold text-slate-900 mb-2">No automations yet</h3>
+                            <p class="text-slate-500 mb-4">Create your first automation to automate workflows</p>
+                            <a href="/automations/new" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Create Automation
+                            </a>
+                        </div>
+                    </td></tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function automationsContent() {
+    return {
+        loading: true,
+        automations: [],
+        filterType: '',
+        stats: { total: 0, active: 0, scheduled: 0, paused: 0 },
+        automationTypes: [
+            { id: 'reminder', label: 'Payment Reminders', description: 'Send due date reminders', icon: 'bell', color: 'text-amber-600', bg: 'bg-amber-100' },
+            { id: 'followup', label: 'Follow-ups', description: 'Follow up on unpaid', icon: 'message-circle', color: 'text-blue-600', bg: 'bg-blue-100' },
+            { id: 'latefee', label: 'Late Fees', description: 'Apply late payment fees', icon: 'alert-circle', color: 'text-red-600', bg: 'bg-red-100' },
+            { id: 'recurring', label: 'Recurring', description: 'Repeat invoices', icon: 'repeat', color: 'text-purple-600', bg: 'bg-purple-100' },
+            { id: 'approval', label: 'Approvals', description: 'Invoice approvals', icon: 'check-circle', color: 'text-green-600', bg: 'bg-green-100' },
+            { id: 'webhook', label: 'Webhooks', description: 'External triggers', icon: 'webhook', color: 'text-cyan-600', bg: 'bg-cyan-100' },
+        ],
+
+        async init() {
+            lucide.createIcons();
+            await this.loadAutomations();
+        },
+
+        async loadAutomations() {
+            this.loading = true;
+            try {
+                const data = await InvoiceFastAPI.automations.list();
+                this.automations = data.automations || [];
+                this.stats = data.stats || this.stats;
+            } catch(err) {
+                console.error('Failed to load automations:', err);
+            } finally {
+                this.loading = false;
+                lucide.createIcons();
+            }
+        },
+
+        filterByType(type) {
+            this.filterType = this.filterType === type ? '' : type;
+        },
+
+        getTypeIcon(type) {
+            const icons = { reminder: 'bell', followup: 'message-circle', latefee: 'alert-circle', recurring: 'repeat', approval: 'check-circle', webhook: 'webhook' };
+            return icons[type] || 'zap';
+        },
+
+        getTypeClass(type) {
+            const classes = { reminder: 'bg-amber-100 text-amber-600', followup: 'bg-blue-100 text-blue-600', latefee: 'bg-red-100 text-red-600', recurring: 'bg-purple-100 text-purple-600', approval: 'bg-green-100 text-green-600', webhook: 'bg-cyan-100 text-cyan-600' };
+            return classes[type] || 'bg-slate-100 text-slate-600';
+        },
+
+        getStatusClass(status) {
+            return status === 'active' ? 'bg-green-100 text-green-700' : status === 'paused' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700';
+        },
+
+        async toggleAutomation(automation) {
+            await this.loadAutomations();
+        },
+
+        deleteAutomation(automation) {
+            if (confirm('Delete ' + automation.name + '?')) {
+                this.loadAutomations();
+            }
+        }
+    };
+}
+</script>

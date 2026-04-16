@@ -1,0 +1,209 @@
+<!-- Pricing Content -->
+<div class="p-6" x-data="pricingContent()" x-init="init()">
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-slate-900">Simple, Transparent Pricing</h1>
+        <p class="text-slate-500 mt-2">Choose the plan that fits your business needs</p>
+        
+        <!-- Billing Toggle -->
+        <div class="flex items-center justify-center gap-3 mt-6">
+            <button @click="billingCycle = 'monthly'" 
+                class="px-6 py-2.5 rounded-xl font-medium transition-all"
+                :class="billingCycle === 'monthly' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">
+                Monthly
+            </button>
+            <button @click="billingCycle = 'yearly'" 
+                class="px-6 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2"
+                :class="billingCycle === 'yearly' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">
+                Yearly
+                <span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Save 20%</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Plans Grid -->
+    <div class="grid grid-cols-3 gap-6 mb-8">
+        <template x-for="plan in plans" :key="plan.id">
+            <div class="bg-white rounded-2xl border-2 p-6 transition-all"
+                :class="plan.id === currentPlan?.id ? 'border-trust shadow-xl shadow-trust/20' : 'border-slate-200 hover:border-slate-300'">
+                
+                <template x-if="plan.popular">
+                    <div class="text-center -mt-8 mb-4">
+                        <span class="px-4 py-1 bg-purple-600 text-white text-sm font-medium rounded-full">Most Popular</span>
+                    </div>
+                </template>
+                
+                <div class="text-center mb-6">
+                    <h3 class="text-xl font-bold text-slate-900" x-text="plan.name">Starter</h3>
+                    <p class="text-sm text-slate-500 mt-1" x-text="plan.description">For small business</p>
+                </div>
+                
+                <div class="text-center mb-6">
+                    <template x-if="billingCycle === 'yearly' && plan.yearlyPrice">
+                        <div>
+                            <p class="text-4xl font-bold text-slate-900">
+                                $<span x-text="plan.yearlyPrice"></span>
+                            </p>
+                            <p class="text-sm text-slate-500">/year (save 20%)</p>
+                        </div>
+                    </template>
+                    <template x-if="billingCycle === 'monthly' || !plan.yearlyPrice">
+                        <div>
+                            <p class="text-4xl font-bold text-slate-900">
+                                $<span x-text="plan.price"></span>
+                            </p>
+                            <p class="text-sm text-slate-500">/month</p>
+                        </div>
+                    </template>
+                </div>
+                
+                <div class="space-y-3 mb-6">
+                    <template x-for="feature in plan.features" :key="feature">
+                        <div class="flex items-center gap-3 text-sm text-slate-600">
+                            <i data-lucide="check" class="w-4 h-4 text-green-500 shrink-0"></i>
+                            <span x-text="feature"></span>
+                        </div>
+                    </template>
+                </div>
+                
+                <button @click="selectPlan(plan)" 
+                    class="w-full py-3 rounded-xl font-semibold transition-all"
+                    :class="plan.id === currentPlan?.id 
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                        : 'bg-trust text-white hover:bg-trust-dark'">
+                    <template x-if="plan.id === currentPlan?.id">
+                        Current Plan
+                    </template>
+                    <template x-if="plan.id !== currentPlan?.id">
+                        Get Started
+                    </template>
+                </button>
+            </div>
+        </template>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-slate-200">
+            <h3 class="text-lg font-semibold text-slate-900">Compare Plans</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Feature</th>
+                        <template x-for="plan in plans" :key="plan.id">
+                            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase" x-text="plan.name"></th>
+                        </template>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-for="row in comparisonTable" :key="row.feature">
+                        <tr>
+                            <td class="px-6 py-4 text-sm text-slate-600" x-text="row.feature"></td>
+                            <template x-for="plan in plans" :key="plan.id">
+                                <td class="px-6 py-4 text-center">
+                                    <template x-if="row[plan.id] === true">
+                                        <i data-lucide="check" class="w-5 h-5 text-green-500 mx-auto"></i>
+                                    </template>
+                                    <template x-if="row[plan.id] === false">
+                                        <i data-lucide="x" class="w-5 h-5 text-slate-300 mx-auto"></i>
+                                    </template>
+                                    <template x-if="typeof row[plan.id] === 'string'">
+                                        <span class="text-sm text-slate-900" x-text="row[plan.id]"></span>
+                                    </template>
+                                </td>
+                            </template>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="mb-8">
+        <h3 class="text-lg font-semibold text-slate-900 mb-4 text-center">Frequently Asked Questions</h3>
+        <div class="grid grid-cols-2 gap-4">
+            <template x-for="faq in faqs" :key="faq.question">
+                <div class="bg-white rounded-xl border border-slate-200 p-4">
+                    <h4 class="font-medium text-slate-900 mb-2" x-text="faq.question"></h4>
+                    <p class="text-sm text-slate-500" x-text="faq.answer"></p>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Contact CTA -->
+    <div class="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-8 text-center text-white">
+        <h3 class="text-2xl font-bold mb-2">Need something custom?</h3>
+        <p class="text-white/80 mb-4">We offer custom plans for enterprises with special needs</p>
+        <a href="/contact" class="inline-flex items-center gap-2 px-6 py-3 bg-white text-purple-600 rounded-xl font-semibold hover:bg-white/90">
+            <i data-lucide="mail" class="w-4 h-4"></i>
+            Contact Sales
+        </a>
+    </div>
+</div>
+
+<script>
+function pricingContent() {
+    return {
+        billingCycle: 'monthly',
+        currentPlan: { id: 'free' },
+        plans: [
+            { id: 'free', name: 'Free', price: '0', yearlyPrice: '0', description: 'Perfect for starting out', popular: false,
+              features: ['10 invoices/month', '5 clients', '1 team member', '1GB storage', 'Basic reports', 'Email support'] },
+            { id: 'starter', name: 'Starter', price: '19', yearlyPrice: '182', description: 'For growing businesses', popular: true,
+              features: ['100 invoices/month', '50 clients', '3 team members', '10GB storage', 'Advanced reports', 'Priority support', 'Custom branding'] },
+            { id: 'pro', name: 'Pro', price: '49', yearlyPrice: '470', description: 'For scaling teams', popular: false,
+              features: ['Unlimited invoices', 'Unlimited clients', 'Unlimited team members', '100GB storage', 'VIP support', 'Advanced analytics', 'API access', 'White-label'] }
+        ],
+        comparisonTable: [
+            { feature: 'Invoices/month', free: '10', starter: '100', pro: 'Unlimited' },
+            { feature: 'Clients', free: '5', starter: '50', pro: 'Unlimited' },
+            { feature: 'Team Members', free: '1', starter: '3', pro: 'Unlimited' },
+            { feature: 'Storage', free: '1GB', starter: '10GB', pro: '100GB' },
+            { feature: 'Custom Branding', free: false, starter: true, pro: true },
+            { feature: 'API Access', free: false, starter: false, pro: true },
+            { feature: 'Priority Support', free: false, starter: true, pro: true },
+            { feature: 'Invoice Reminders', free: true, starter: true, pro: true },
+            { feature: 'Payment Links', free: true, starter: true, pro: true },
+        ],
+        faqs: [
+            { question: 'Can I change plans anytime?', answer: 'Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.' },
+            { question: 'What payment methods do you accept?', answer: 'We accept M-Pesa, Visa, Mastercard, and bank transfers for Kenyan businesses.' },
+            { question: 'Is there a free trial?', answer: 'Yes, all paid plans come with a 14-day free trial. No credit card required.' },
+            { question: 'What happens when I exceed my limits?', answer: 'We notify you before limits are reached. You can upgrade anytime or pay for overages.' }
+        ],
+
+        async init() {
+            lucide.createIcons();
+            await this.loadCurrentPlan();
+            await this.loadPlans();
+        },
+
+        async loadCurrentPlan() {
+            try {
+                const subscription = await InvoiceFastAPI.billing.getSubscription();
+                this.currentPlan = subscription?.plan || { id: 'free' };
+            } catch(err) {
+                console.error('Failed to load plan:', err);
+            }
+        },
+        
+        async loadPlans() {
+            try {
+                const plans = await InvoiceFastAPI.request('/tenant/billing/plans');
+                this.plans = plans || this.plans;
+            } catch(err) {
+                console.error('Failed to load plans:', err);
+            }
+        },
+
+        selectPlan(plan) {
+            if (plan.id === this.currentPlan?.id) return;
+            window.location.href = '/settings/billing?upgrade=' + plan.id;
+        }
+    };
+}
+</script>

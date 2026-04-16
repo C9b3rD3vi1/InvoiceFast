@@ -1,0 +1,844 @@
+<!-- Invoice View Content -->
+<div class="p-6" x-data="invoiceView()" x-init="init()">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-0 -mx-6 mb-6 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="/invoices" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </a>
+                <div>
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-2xl font-bold text-slate-900" x-text="invoice?.invoice_number">Invoice</h1>
+                        <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" :class="getStatusClass(invoice?.status)" x-text="getStatusLabel(invoice?.status)"></span>
+                    </div>
+                    <p class="text-slate-500 text-sm mt-1" x-text="invoice?.title || 'No title'"></p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button @click="downloadPDF()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    PDF
+                </button>
+                <button @click="sendEmail()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                    <i data-lucide="mail" class="w-4 h-4"></i>
+                    Email
+                </button>
+                <button @click="sendWhatsApp()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                    <i data-lucide="message-circle" class="w-4 h-4"></i>
+                    WhatsApp
+                </button>
+                <a :href="'/invoices/' + invoiceId + '/edit'" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2">
+                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                    Edit
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="col-span-2 space-y-6">
+            <!-- Invoice Details Card -->
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-900">Invoice Details</h3>
+                    <div class="flex items-center gap-2">
+                        <template x-if="invoice?.status === 'draft'">
+                            <button @click="sendInvoice()" class="px-3 py-1.5 bg-trust text-white rounded-lg text-sm hover:bg-trust-dark flex items-center gap-1">
+                                <i data-lucide="send" class="w-4 h-4"></i> Send
+                            </button>
+                        </template>
+                        <template x-if="invoice?.status !== 'paid' && invoice?.status !== 'cancelled'">
+                            <button @click="markAsPaid()" class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 flex items-center gap-1">
+                                <i data-lucide="check" class="w-4 h-4"></i> Mark Paid
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                
+                <div class="p-6">
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="text-xs font-semibold text-slate-500 uppercase mb-3">From</h4>
+                            <p class="font-semibold text-slate-900" x-text="tenant?.name || 'Your Company'">Your Company</p>
+                            <p class="text-sm text-slate-600 mt-1" x-text="tenant?.email || ''"></p>
+                            <p class="text-sm text-slate-600" x-text="tenant?.address || ''"></p>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-semibold text-slate-500 uppercase mb-3">Bill To</h4>
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold"
+                                    :class="getAvatarGradient(invoice?.client_id)">
+                                    <span x-text="invoice?.client_name?.charAt(0).toUpperCase()">C</span>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-slate-900" x-text="invoice?.client_name">Client Name</p>
+                                    <p class="text-sm text-slate-500" x-text="invoice?.client_email || ''"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-4 mt-6">
+                        <div>
+                            <p class="text-xs text-slate-500">Invoice Number</p>
+                            <p class="font-medium text-slate-900" x-text="invoice?.invoice_number">-</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500">Issue Date</p>
+                            <p class="font-medium text-slate-900" x-text="formatDate(invoice?.issue_date)">-</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500">Due Date</p>
+                            <p class="font-medium" :class="isOverdue() ? 'text-red-600' : 'text-slate-900'" x-text="formatDate(invoice?.due_date)">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Line Items -->
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200">
+                    <h3 class="font-semibold text-slate-900">Line Items</h3>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Item</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Qty</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Unit Price</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Tax</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Discount</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="item in invoice?.items" :key="item.id">
+                                <tr class="hover:bg-slate-50/50">
+                                    <td class="px-6 py-4">
+                                        <p class="font-medium text-slate-900" x-text="item.name">Item Name</p>
+                                        <p class="text-sm text-slate-500" x-text="item.description"></p>
+                                    </td>
+                                    <td class="px-6 py-4 text-right" x-text="item.quantity">1</td>
+                                    <td class="px-6 py-4 text-right" x-text="formatCurrency(item.unit_price)">KES 0</td>
+                                    <td class="px-6 py-4 text-right" x-text="item.tax_rate + '%'">16%</td>
+                                    <td class="px-6 py-4 text-right" x-text="item.discount_rate + '%'">0%</td>
+                                    <td class="px-6 py-4 text-right font-semibold" x-text="formatCurrency(item.total)">KES 0</td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Notes & Terms -->
+            <template x-if="invoice?.notes || invoice?.terms">
+                <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                    <template x-if="invoice?.notes">
+                        <div class="mb-4">
+                            <h4 class="text-sm font-semibold text-slate-700 mb-2">Notes</h4>
+                            <p class="text-sm text-slate-600" x-text="invoice.notes"></p>
+                        </div>
+                    </template>
+                    <template x-if="invoice?.terms">
+                        <div>
+                            <h4 class="text-sm font-semibold text-slate-700 mb-2">Terms & Conditions</h4>
+                            <p class="text-sm text-slate-600" x-text="invoice.terms"></p>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Payment History -->
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <h3 class="font-semibold text-slate-900">Payment History</h3>
+                    <template x-if="invoice?.status !== 'paid'">
+                        <button @click="openPaymentModal()" class="px-3 py-1.5 bg-trust text-white rounded-lg text-sm hover:bg-trust-dark flex items-center gap-1">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Record Payment
+                        </button>
+                    </template>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Payment ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Method</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Date</th>
+                                <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Reference</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template x-for="payment in payments" :key="payment.id">
+                                <tr class="hover:bg-slate-50/50">
+                                    <td class="px-6 py-4 text-sm font-mono" x-text="payment.id?.slice(0, 8)">-</td>
+                                    <td class="px-6 py-4">
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700" x-text="payment.method">-</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm" x-text="formatDate(payment.date)">-</td>
+                                    <td class="px-6 py-4 text-right font-medium" x-text="formatCurrency(payment.amount)">KES 0</td>
+                                    <td class="px-6 py-4">
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700" x-text="payment.status">Completed</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-slate-500" x-text="payment.reference || '-'">-</td>
+                                </tr>
+                            </template>
+                            <template x-if="payments.length === 0">
+                                <tr>
+                                    <td colspan="6" class="px-6 py-8 text-center text-slate-500">
+                                        No payments recorded yet
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Financial Summary -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Summary</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Subtotal</span>
+                        <span class="font-medium" x-text="formatCurrency(invoice?.subtotal)">KES 0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Tax</span>
+                        <span class="font-medium" x-text="formatCurrency(invoice?.tax_amount)">KES 0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Discount</span>
+                        <span class="font-medium text-green-600" x-text="'-' + formatCurrency(invoice?.discount_amount)">KES 0</span>
+                    </div>
+                    <hr class="border-slate-200">
+                    <div class="flex justify-between text-lg font-bold">
+                        <span class="text-slate-900">Total</span>
+                        <span class="text-trust" x-text="formatCurrency(invoice?.total)">KES 0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Paid</span>
+                        <span class="font-medium text-green-600" x-text="formatCurrency(invoice?.paid_amount)">KES 0</span>
+                    </div>
+                    <hr class="border-slate-200">
+                    <div class="flex justify-between font-semibold">
+                        <span class="text-slate-900">Balance Due</span>
+                        <span class="text-red-600" x-text="formatCurrency(balanceDue)">KES 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Quick Actions</h3>
+                <div class="space-y-2">
+                    <a :href="'/invoices/' + invoiceId + '/edit'" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="edit-2" class="w-4 h-4"></i> Edit Invoice
+                    </a>
+                    <button @click="downloadPDF()" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> Download PDF
+                    </button>
+                    <button @click="sendEmail()" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="mail" class="w-4 h-4"></i> Send Email
+                    </button>
+                    <button @click="sendWhatsApp()" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="message-circle" class="w-4 h-4"></i> Send WhatsApp
+                    </button>
+                    <hr class="border-slate-200 my-2">
+                    <button @click="modalOpen = 'send'" x-show="invoice?.status === 'draft'" class="w-full px-4 py-2.5 bg-trust/10 rounded-xl text-left text-sm text-trust hover:bg-trust/20 flex items-center gap-2">
+                        <i data-lucide="send" class="w-4 h-4"></i> Send Invoice
+                    </button>
+                    <button @click="modalOpen = 'duplicate'" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="copy" class="w-4 h-4"></i> Duplicate
+                    </button>
+                    <button @click="modalOpen = 'reminder'" x-show="invoice?.status !== 'draft' && invoice?.status !== 'paid' && invoice?.status !== 'cancelled'" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="bell" class="w-4 h-4"></i> Reminder
+                    </button>
+                    <button @click="modalOpen = 'markpaid'" x-show="invoice?.status !== 'paid' && invoice?.status !== 'cancelled'" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Mark Paid
+                    </button>
+                    <button @click="modalOpen = 'payment'" x-show="invoice?.status !== 'paid' && invoice?.status !== 'cancelled'" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-left text-sm hover:bg-slate-50 flex items-center gap-2">
+                        <i data-lucide="credit-card" class="w-4 h-4"></i> Request Payment
+                    </button>
+                    <hr class="border-slate-200 my-2">
+                    <button @click="modalOpen = 'cancel'" x-show="invoice?.status !== 'cancelled'" class="w-full px-4 py-2.5 border border-red-200 rounded-xl text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        <i data-lucide="x-circle" class="w-4 h-4"></i> Cancel
+                    </button>
+                    <button @click="modalOpen = 'delete'" class="w-full px-4 py-2.5 border border-red-200 rounded-xl text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                    </button>
+                </div>
+            </div>
+
+            <!-- KRA eTIMS Status -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-trust"></i>
+                    KRA eTIMS Status
+                </h3>
+                <template x-if="kraLoading">
+                    <div class="flex items-center gap-2 text-slate-500 text-sm">
+                        <div class="w-4 h-4 border-2 border-trust border-t-transparent rounded-full animate-spin"></div>
+                        Checking KRA status...
+                    </div>
+                </template>
+                <template x-if="!kraLoading && !invoice?.kra_icn">
+                    <div class="text-center">
+                        <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                            <i data-lucide="alert-circle" class="w-6 h-6 text-slate-400"></i>
+                        </div>
+                        <p class="text-sm text-slate-600 mb-3">Not submitted to KRA</p>
+                        <button @click="submitToKRA()" :disabled="kraSubmitting" class="w-full px-4 py-2.5 bg-trust text-white rounded-xl text-sm hover:bg-trust-dark disabled:opacity-50 flex items-center justify-center gap-2">
+                            <template x-if="kraSubmitting"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                            <template x-if="!kraSubmitting"><i data-lucide="upload-cloud" class="w-4 h-4"></i></template>
+                            <span x-text="kraSubmitting ? 'Submitting...' : 'Submit to KRA'"></span>
+                        </button>
+                    </div>
+                </template>
+                <template x-if="!kraLoading && invoice?.kra_icn">
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2 text-green-600">
+                            <i data-lucide="check-circle" class="w-4 h-4"></i>
+                            <span class="text-sm font-medium">KRA Verified</span>
+                        </div>
+                        <div class="p-3 bg-slate-50 rounded-lg">
+                            <p class="text-xs text-slate-500 mb-1">ICN (Invoice Confirmation Number)</p>
+                            <p class="font-mono font-semibold text-slate-900 text-sm" x-text="invoice?.kra_icn"></p>
+                        </div>
+                        <div x-show="invoice?.kra_qr_code" class="p-3 bg-slate-50 rounded-lg">
+                            <p class="text-xs text-slate-500 mb-2">KRA QR Code</p>
+                            <div class="bg-white p-2 rounded border border-slate-200 inline-block">
+                                <img :src="'data:image/png;base64,' + invoice?.kra_qr_code" class="w-24 h-24" alt="KRA QR Code">
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="downloadQR()" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs hover:bg-slate-50 flex items-center justify-center gap-1">
+                                <i data-lucide="download" class="w-3 h-3"></i> QR
+                            </button>
+                            <button @click="resubmitToKRA()" :disabled="kraSubmitting" class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs hover:bg-slate-50 flex items-center justify-center gap-1 disabled:opacity-50">
+                                <i data-lucide="refresh" class="w-3 h-3"></i> Resubmit
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="kraError">
+                    <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p class="text-sm text-red-600" x-text="kraError"></p>
+                        <button @click="kraError = null" class="text-xs text-red-500 underline mt-1">Dismiss</button>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Activity Timeline -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 class="font-semibold text-slate-900 mb-4">Activity</h3>
+                <div class="space-y-4">
+                    <template x-for="activity in timeline" :key="activity.id">
+                        <div class="flex gap-3">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center" :class="activity.bg">
+                                <i :data-lucide="activity.icon" class="w-4 h-4" :class="activity.color"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-slate-900" x-text="activity.title"></p>
+                                <p class="text-xs text-slate-500" x-text="activity.time"></p>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Duplicate Modal -->
+    <div x-show="modalOpen === 'duplicate'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="copy" class="w-8 h-8 text-purple-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Duplicate Invoice</h3>
+                <p class="text-slate-500 mb-6">Create a copy of <span x-text="invoice?.invoice_number" class="font-semibold"></span>?</p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button @click="confirmDuplicate()" class="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700">Duplicate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reminder Modal -->
+    <div x-show="modalOpen === 'reminder'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="bell" class="w-8 h-8 text-amber-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Send Reminder</h3>
+                <p class="text-slate-500 mb-6">Send a payment reminder to <span x-text="invoice?.client_name" class="font-semibold"></span>?</p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button @click="confirmSendReminder()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Send Reminder</template>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Request Modal -->
+    <div x-show="modalOpen === 'payment'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-trust/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="send" class="w-8 h-8 text-trust"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Request Payment</h3>
+                <p class="text-slate-500 mb-2">Send payment link to</p>
+                <p class="font-semibold text-slate-900 mb-6" x-text="invoice?.client_email || invoice?.client_name"></p>
+                <div class="bg-slate-50 rounded-xl p-4 mb-6">
+                    <p class="text-xs text-slate-500">Amount Due</p>
+                    <p class="text-2xl font-bold text-trust" x-text="formatCurrency(balanceDue)">KES 0</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button @click="confirmRequestPayment()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Send Request</template>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Invoice Modal -->
+    <div x-show="modalOpen === 'cancel'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="x-circle" class="w-8 h-8 text-red-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Cancel Invoice</h3>
+                <p class="text-slate-500 mb-2">Are you sure you want to cancel</p>
+                <p class="font-semibold text-slate-900 mb-6"><span x-text="invoice?.invoice_number"></span>?</p>
+                <p class="text-sm text-red-500 bg-red-50 rounded-lg p-3 mb-4">This action cannot be undone.</p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Keep Invoice</button>
+                <button @click="confirmCancel()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Cancel Invoice</template>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Invoice Modal -->
+    <div x-show="modalOpen === 'delete'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="trash-2" class="w-8 h-8 text-red-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Delete Invoice</h3>
+                <p class="text-slate-500 mb-2">Permanently delete</p>
+                <p class="font-semibold text-slate-900 mb-6"><span x-text="invoice?.invoice_number"></span>?</p>
+                <p class="text-sm text-red-500 bg-red-50 rounded-lg p-3 mb-4">This action cannot be undone.</p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Keep Invoice</button>
+                <button @click="confirmDelete()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Delete</template>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mark as Paid Modal -->
+    <div x-show="modalOpen === 'markpaid'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="check-circle" class="w-8 h-8 text-green-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Mark as Paid</h3>
+                <p class="font-semibold text-slate-900 mb-2" x-text="invoice?.invoice_number"></p>
+                <p class="text-slate-500 mb-4">as fully paid?</p>
+                <div class="bg-green-50 rounded-xl p-4 mb-6">
+                    <p class="text-xs text-green-600 mb-1">Amount</p>
+                    <p class="text-2xl font-bold text-green-600" x-text="formatCurrency(balanceDue)">KES 0</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button @click="confirmMarkPaid()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Confirm Payment</template>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Send Invoice Modal -->
+    <div x-show="modalOpen === 'send'" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = null">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="send" class="w-8 h-8 text-blue-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Send Invoice</h3>
+                <p class="text-slate-500 mb-6">Send <span x-text="invoice?.invoice_number" class="font-semibold"></span> to <span x-text="invoice?.client_email || invoice?.client_name"></span>?</p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="modalOpen = null" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button @click="confirmSend()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Send Invoice</template>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Record Payment Modal -->
+    <div x-show="paymentModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="paymentModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 class="text-xl font-bold text-slate-900 mb-4">Record Payment</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Amount</label>
+                    <input type="number" x-model="paymentData.amount" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                    <select x-model="paymentData.method" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                        <option value="mpesa">M-Pesa</option>
+                        <option value="card">Card</option>
+                        <option value="bank">Bank Transfer</option>
+                        <option value="cash">Cash</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Reference</label>
+                    <input type="text" x-model="paymentData.reference" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button @click="paymentModalOpen = false" :disabled="actionLoading" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button @click="recordPayment()" :disabled="actionLoading" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark disabled:opacity-50 flex items-center justify-center gap-2">
+                    <template x-if="actionLoading"><div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div></template>
+                    <template x-if="!actionLoading">Record Payment</template>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function invoiceView() {
+    return {
+        loading: true,
+        invoice: null,
+        tenant: null,
+        payments: [],
+        timeline: [],
+        modalOpen: null,
+        actionLoading: false,
+        paymentModalOpen: false,
+        paymentData: { amount: 0, method: 'mpesa', reference: '' },
+        kraLoading: false,
+        kraSubmitting: false,
+        kraError: null,
+        invoiceId: '',
+
+        get balanceDue() {
+            return (this.invoice?.total || 0) - (this.invoice?.paid_amount || 0);
+        },
+
+        async init() {
+            if (!requireAuth()) return;
+            lucide.createIcons();
+            
+            const path = window.location.pathname;
+            const parts = path.split('/').filter(Boolean);
+            this.invoiceId = parts[parts.length - 1];
+            
+            await this.loadInvoice(this.invoiceId);
+            await this.loadPayments(this.invoiceId);
+            this.buildTimeline();
+        },
+
+        async loadInvoice(id) {
+            this.loading = true;
+            try {
+                this.invoice = await InvoiceFastAPI.invoices.get(id);
+                this.paymentData.amount = this.balanceDue;
+            } catch(err) {
+                console.error('Failed to load invoice:', err);
+                this.invoice = null;
+            } finally {
+                this.loading = false;
+                lucide.createIcons();
+            }
+        },
+
+        async loadPayments(id) {
+            this.payments = [];
+        },
+
+        formatCurrency(amount) {
+            return new Intl.NumberFormat('en-KE', { 
+                style: 'currency', 
+                currency: this.invoice?.currency || 'KES',
+                minimumFractionDigits: 0 
+            }).format(amount || 0);
+        },
+
+        formatDate(date) {
+            if (!date) return '-';
+            return new Date(date).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' });
+        },
+
+        isOverdue() {
+            if (!this.invoice?.due_date || this.invoice?.status === 'paid') return false;
+            return new Date(this.invoice.due_date) < new Date();
+        },
+
+        getStatusClass(status) {
+            const classes = {
+                'draft': 'bg-slate-100 text-slate-700',
+                'sent': 'bg-blue-100 text-blue-700',
+                'paid': 'bg-green-100 text-green-700',
+                'overdue': 'bg-red-100 text-red-700',
+                'cancelled': 'bg-red-100 text-red-700'
+            };
+            return classes[status] || 'bg-slate-100 text-slate-600';
+        },
+
+        getStatusLabel(status) {
+            const labels = {
+                'draft': 'Draft',
+                'sent': 'Sent',
+                'paid': 'Paid',
+                'overdue': 'Overdue',
+                'cancelled': 'Cancelled'
+            };
+            return labels[status] || status;
+        },
+
+        getAvatarGradient(id) {
+            const gradients = [
+                'bg-gradient-to-br from-purple-500 to-indigo-600',
+                'bg-gradient-to-br from-pink-500 to-rose-600',
+                'bg-gradient-to-br from-cyan-500 to-blue-600',
+                'bg-gradient-to-br from-emerald-500 to-green-600',
+                'bg-gradient-to-br from-amber-500 to-orange-600',
+            ];
+            return gradients[id?.charCodeAt(0) % gradients.length] || gradients[0];
+        },
+
+        buildTimeline() {
+            this.timeline = [
+                { id: 1, title: 'Invoice created', time: this.formatDate(this.invoice?.created_at), icon: 'plus-circle', color: 'text-trust', bg: 'bg-trust/10' }
+            ];
+            if (this.invoice?.status === 'sent') {
+                this.timeline.push({ id: 2, title: 'Invoice sent', time: 'Recently', icon: 'send', color: 'text-blue-600', bg: 'bg-blue-10' });
+            }
+        },
+
+        openPaymentModal() {
+            this.paymentData.amount = this.balanceDue;
+            this.paymentModalOpen = true;
+        },
+
+        async downloadPDF() {
+            try {
+                await InvoiceFastAPI.invoices.getPdf(this.invoiceId);
+            } catch(err) {
+                alert('Failed to download PDF');
+            }
+        },
+
+        async sendEmail() {
+            try {
+                await InvoiceFastAPI.invoices.send(this.invoiceId);
+                alert('Invoice sent via email');
+            } catch(err) {
+                alert('Failed to send email');
+            }
+        },
+
+        async sendWhatsApp() {
+            alert('WhatsApp integration coming soon');
+        },
+
+        async sendInvoice() {
+            this.modalOpen = 'send';
+        },
+
+        async confirmSend() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.send(this.invoiceId);
+                this.modalOpen = null;
+                alert('Invoice sent');
+                this.loadInvoice(this.invoiceId);
+            } catch(err) {
+                alert('Failed to send invoice');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async markAsPaid() {
+            this.modalOpen = 'markpaid';
+        },
+
+        async confirmMarkPaid() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.update(this.invoiceId, { status: 'paid' });
+                this.modalOpen = null;
+                alert('Invoice marked as paid');
+                this.loadInvoice(this.invoiceId);
+            } catch(err) {
+                alert('Failed to update invoice');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async recordPayment() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.payments.create({
+                    invoice_id: this.invoiceId,
+                    amount: this.paymentData.amount,
+                    method: this.paymentData.method,
+                    reference: this.paymentData.reference
+                });
+                this.paymentModalOpen = false;
+                alert('Payment recorded');
+                this.loadInvoice(this.invoiceId);
+            } catch(err) {
+                alert('Failed to record payment');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async confirmDuplicate() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.duplicate(this.invoiceId);
+                this.modalOpen = null;
+                alert('Invoice duplicated');
+                window.location.href = '/invoices';
+            } catch(err) {
+                alert('Failed to duplicate invoice');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async confirmSendReminder() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.remind(this.invoiceId);
+                this.modalOpen = null;
+                alert('Reminder sent');
+            } catch(err) {
+                alert('Failed to send reminder');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async confirmRequestPayment() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.requestPayment(this.invoiceId);
+                this.modalOpen = null;
+                alert('Payment request sent');
+            } catch(err) {
+                alert('Failed to send payment request');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async confirmCancel() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.update(this.invoiceId, { status: 'cancelled' });
+                this.modalOpen = null;
+                alert('Invoice cancelled');
+                this.loadInvoice(this.invoiceId);
+            } catch(err) {
+                alert('Failed to cancel invoice');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async confirmDelete() {
+            this.actionLoading = true;
+            try {
+                await InvoiceFastAPI.invoices.delete(this.invoiceId);
+                this.modalOpen = null;
+                alert('Invoice deleted');
+                window.location.href = '/invoices';
+            } catch(err) {
+                alert('Failed to delete invoice');
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async submitToKRA() {
+            this.kraSubmitting = true;
+            try {
+                await InvoiceFastAPI.invoices.submitToKRA(this.invoiceId);
+                alert('Submitted to KRA');
+                this.loadInvoice(this.invoiceId);
+            } catch(err) {
+                this.kraError = err.message || 'Failed to submit to KRA';
+            } finally {
+                this.kraSubmitting = false;
+            }
+        },
+
+        async resubmitToKRA() {
+            this.submitToKRA();
+        },
+
+        downloadQR() {
+            if (this.invoice?.kra_qr_code) {
+                const link = document.createElement('a');
+                link.href = 'data:image/png;base64,' + this.invoice.kra_qr_code;
+                link.download = 'kra-qr-' + this.invoice.invoice_number + '.png';
+                link.click();
+            }
+        }
+    };
+}
+</script>

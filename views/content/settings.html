@@ -1,0 +1,733 @@
+<!-- Settings Content -->
+<div class="p-6" x-data="settingsContent()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Settings</h1>
+            <p class="text-slate-500 text-sm mt-1">Manage your workspace configuration</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" x-model="searchQuery" @input="filterSections()" placeholder="Search settings..." 
+                    class="pl-10 pr-4 py-2 w-64 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust focus:border-transparent">
+            </div>
+            <button @click="showPreview = !showPreview" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-50">
+                <i :data-lucide="showPreview ? 'eye-off' : 'eye'" class="w-5 h-5 text-slate-600"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="flex gap-6">
+        <!-- Settings Navigation -->
+        <div class="w-72 shrink-0">
+            <div class="bg-white rounded-2xl border border-slate-200 p-2 sticky top-6">
+                <template x-for="section in filteredSections" :key="section.id">
+                    <button @click="activeSection = section.id" 
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all"
+                        :class="activeSection === section.id ? 'bg-trust text-white' : 'text-slate-600 hover:bg-slate-50'">
+                        <i :data-lucide="section.icon" class="w-5 h-5"></i>
+                        <div class="flex-1">
+                            <p class="font-medium" x-text="section.label"></p>
+                            <p class="text-xs" :class="activeSection === section.id ? 'text-white/70' : 'text-slate-400'" x-text="section.description"></p>
+                        </div>
+                        <template x-if="section.badge">
+                            <span class="px-2 py-0.5 text-xs rounded-full" :class="activeSection === section.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'" x-text="section.badge"></span>
+                        </template>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        <!-- Settings Panels -->
+        <div class="flex-1 overflow-y-auto" style="height: calc(100vh - 180px);">
+            <div class="max-w-4xl space-y-6">
+                <!-- Overview -->
+                <div x-show="activeSection === 'overview'" class="space-y-6 animate-fade-in">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white rounded-2xl p-4 border border-slate-200 hover:shadow-lg transition-all cursor-pointer" @click="activeSection = 'business'">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="p-2 rounded-xl bg-blue-100">
+                                    <i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i>
+                                </div>
+                                <span class="text-xs font-medium" :class="profileComplete >= 80 ? 'text-green-600' : 'text-yellow-600'" x-text="profileComplete >= 80 ? 'Complete' : 'Incomplete'"></span>
+                            </div>
+                            <p class="text-xs text-slate-500">Business Profile</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="profileComplete + '%'"></p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-slate-200 hover:shadow-lg transition-all cursor-pointer" @click="activeSection = 'profile'">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="p-2 rounded-xl bg-green-100">
+                                    <i data-lucide="shield-check" class="w-4 h-4 text-green-600"></i>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500">Security Score</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="securityScore + '%'"></p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-slate-200 hover:shadow-lg transition-all cursor-pointer" @click="activeSection = 'team'">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="p-2 rounded-xl bg-purple-100">
+                                    <i data-lucide="users" class="w-4 h-4 text-purple-600"></i>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500">Team Members</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="teamMembers.length"></p>
+                        </div>
+                        <div class="bg-white rounded-2xl p-4 border border-slate-200 hover:shadow-lg transition-all cursor-pointer" @click="activeSection = 'integrations'">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="p-2 rounded-xl bg-orange-100">
+                                    <i data-lucide="zap" class="w-4 h-4 text-orange-600"></i>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500">Integrations</p>
+                            <p class="text-xl font-bold text-slate-900 mt-1" x-text="integrationsActive + '/' + integrations.length"></p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Quick Actions</h3>
+                        <div class="grid grid-cols-3 gap-4">
+                            <button @click="activeSection = 'business'" class="p-4 rounded-xl border border-slate-200 hover:border-trust hover:bg-trust/5 transition-all text-left">
+                                <i data-lucide="building-2" class="w-6 h-6 text-trust mb-2"></i>
+                                <p class="font-medium text-slate-900">Business Profile</p>
+                                <p class="text-sm text-slate-500">Company details</p>
+                            </button>
+                            <button @click="activeSection = 'team'" class="p-4 rounded-xl border border-slate-200 hover:border-trust hover:bg-trust/5 transition-all text-left">
+                                <i data-lucide="users" class="w-6 h-6 text-trust mb-2"></i>
+                                <p class="font-medium text-slate-900">Team Members</p>
+                                <p class="text-sm text-slate-500">Manage users</p>
+                            </button>
+                            <button @click="activeSection = 'billing'" class="p-4 rounded-xl border border-slate-200 hover:border-trust hover:bg-trust/5 transition-all text-left">
+                                <i data-lucide="credit-card" class="w-6 h-6 text-trust mb-2"></i>
+                                <p class="font-medium text-slate-900">Billing</p>
+                                <p class="text-sm text-slate-500">Subscription</p>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Business Settings -->
+                <div x-show="activeSection === 'business'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 class="font-semibold text-slate-900">Company Information</h3>
+                                <p class="text-sm text-slate-500">Basic company details</p>
+                            </div>
+                            <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">Verified</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Company Name *</label>
+                                <input type="text" x-model="business.name" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Business Email</label>
+                                <input type="email" x-model="business.email" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+                                <input type="tel" x-model="business.phone" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Website</label>
+                                <input type="url" x-model="business.website" placeholder="https://" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Tax ID / KRA PIN</label>
+                                <input type="text" x-model="business.kra_pin" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Registration Number</label>
+                                <input type="text" x-model="business.registrationNumber" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Industry</label>
+                                <select x-model="business.industry" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                                    <option value="">Select industry</option>
+                                    <option value="technology">Technology</option>
+                                    <option value="retail">Retail</option>
+                                    <option value="services">Professional Services</option>
+                                    <option value="manufacturing">Manufacturing</option>
+                                    <option value="healthcare">Healthcare</option>
+                                    <option value="education">Education</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Country</label>
+                                <select x-model="business.country" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                                    <option value="KE">Kenya</option>
+                                    <option value="NG">Nigeria</option>
+                                    <option value="GH">Ghana</option>
+                                    <option value="TZ">Tanzania</option>
+                                    <option value="UG">Uganda</option>
+                                    <option value="US">United States</option>
+                                    <option value="GB">United Kingdom</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Timezone</label>
+                                <select x-model="business.timezone" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                                    <option value="Africa/Nairobi">East Africa (EAT)</option>
+                                    <option value="Africa/Lagos">West Africa (WAT)</option>
+                                    <option value="UTC">UTC</option>
+                                </select>
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                                <textarea x-model="business.address" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Branding</h3>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Company Logo</label>
+                                <div class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-trust cursor-pointer transition-all">
+                                    <template x-if="business.logoUrl">
+                                        <img :src="business.logoUrl" class="h-16 mx-auto mb-2">
+                                    </template>
+                                    <template x-if="!business.logoUrl">
+                                        <i data-lucide="upload" class="w-8 h-8 text-slate-400 mx-auto mb-2"></i>
+                                    </template>
+                                    <p class="text-sm text-slate-500">Click to upload logo</p>
+                                    <p class="text-xs text-slate-400 mt-1">PNG, JPG up to 2MB</p>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Brand Color</label>
+                                <div class="flex items-center gap-4">
+                                    <input type="color" x-model="business.brandColor" class="w-20 h-20 rounded-xl cursor-pointer border-0">
+                                    <div class="flex-1">
+                                        <input type="text" x-model="business.brandColor" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono">
+                                        <p class="text-xs text-slate-500 mt-1">Used in invoices & emails</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3">
+                        <button @click="resetBusiness()" class="px-6 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Reset</button>
+                        <button @click="saveBusiness()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Changes</button>
+                    </div>
+                </div>
+
+                <!-- Profile & Security -->
+                <div x-show="activeSection === 'profile'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Profile Information</h3>
+                        <div class="flex items-start gap-6 mb-6">
+                            <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold" x-text="profile.name?.charAt(0).toUpperCase() || 'U'">U</div>
+                            <div class="flex-1">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                                        <input type="text" x-model="profile.name" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">Job Title</label>
+                                        <input type="text" x-model="profile.jobTitle" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                                        <input type="email" x-model="profile.email" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50" disabled>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                                        <input type="tel" x-model="profile.phone" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex justify-end gap-3">
+                            <button @click="saveProfile()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Profile</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Security</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
+                                <div class="flex items-center gap-4">
+                                    <div class="p-2 rounded-lg bg-slate-100">
+                                        <i data-lucide="key" class="w-5 h-5 text-slate-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-900">Password</p>
+                                        <p class="text-sm text-slate-500">Last changed 30 days ago</p>
+                                    </div>
+                                </div>
+                                <button @click="showChangePassword = true" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50">Change</button>
+                            </div>
+                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
+                                <div class="flex items-center gap-4">
+                                    <div class="p-2 rounded-lg bg-slate-100">
+                                        <i data-lucide="smartphone" class="w-5 h-5 text-slate-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-900">Two-Factor Authentication</p>
+                                        <p class="text-sm text-slate-500" x-text="profile.twoFactorEnabled ? 'Enabled' : 'Add extra security'"></p>
+                                    </div>
+                                </div>
+                                <button @click="profile.twoFactorEnabled = !profile.twoFactorEnabled" class="relative w-12 h-6 rounded-full transition-colors" :class="profile.twoFactorEnabled ? 'bg-trust' : 'bg-slate-200'">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="profile.twoFactorEnabled ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
+                                <div class="flex items-center gap-4">
+                                    <div class="p-2 rounded-lg bg-slate-100">
+                                        <i data-lucide="mail" class="w-5 h-5 text-slate-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-900">Login Alerts</p>
+                                        <p class="text-sm text-slate-500">Get notified of new logins</p>
+                                    </div>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="security.loginAlerts ? 'bg-trust' : 'bg-slate-200'" @click="security.loginAlerts = !security.loginAlerts">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="security.loginAlerts ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Invoice Settings -->
+                <div x-show="activeSection === 'invoice'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Invoice Defaults</h3>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Invoice Prefix</label>
+                                <input type="text" x-model="invoice.prefix" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Next Invoice Number</label>
+                                <input type="number" x-model="invoice.nextNumber" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Default Currency</label>
+                                <select x-model="invoice.currency" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    <option value="KES">KES - Kenyan Shilling</option>
+                                    <option value="USD">USD - US Dollar</option>
+                                    <option value="EUR">EUR - Euro</option>
+                                    <option value="GBP">GBP - British Pound</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Default Tax Rate (%)</label>
+                                <input type="number" x-model="invoice.defaultTaxRate" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Payment Terms</label>
+                                <select x-model="invoice.paymentTerms" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    <option value="0">Due on Receipt</option>
+                                    <option value="7">Net 7</option>
+                                    <option value="14">Net 14</option>
+                                    <option value="30">Net 30</option>
+                                    <option value="60">Net 60</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Invoice Options</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Allow Partial Payments</p>
+                                    <p class="text-sm text-slate-500">Clients can pay invoices in installments</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="invoice.allowPartialPayments ? 'bg-trust' : 'bg-slate-200'" @click="invoice.allowPartialPayments = !invoice.allowPartialPayments">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="invoice.allowPartialPayments ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Allow Discounts</p>
+                                    <p class="text-sm text-slate-500">Enable discount on line items</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="invoice.allowDiscounts ? 'bg-trust' : 'bg-slate-200'" @click="invoice.allowDiscounts = !invoice.allowDiscounts">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="invoice.allowDiscounts ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Allow Deposits</p>
+                                    <p class="text-sm text-slate-500">Accept partial deposits</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="invoice.allowDeposits ? 'bg-trust' : 'bg-slate-200'" @click="invoice.allowDeposits = !invoice.allowDeposits">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="invoice.allowDeposits ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Auto-Number Invoices</p>
+                                    <p class="text-sm text-slate-500">Automatically generate invoice numbers</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="invoice.autoNumber ? 'bg-trust' : 'bg-slate-200'" @click="invoice.autoNumber = !invoice.autoNumber">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="invoice.autoNumber ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3">
+                        <button @click="saveInvoice()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Changes</button>
+                    </div>
+                </div>
+
+                <!-- Payment Settings -->
+                <div x-show="activeSection === 'payment'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">M-Pesa Configuration</h3>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Consumer Key</label>
+                                <input type="text" x-model="payments.mpesa.consumerKey" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Consumer Secret</label>
+                                <input type="password" x-model="payments.mpesa.consumerSecret" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Shortcode</label>
+                                <input type="text" x-model="payments.mpesa.shortcode" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Business Shortcode</label>
+                                <input type="text" x-model="payments.mpesa.businessShortcode" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Payment Options</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Enable M-Pesa</p>
+                                    <p class="text-sm text-slate-500">Accept M-Pesa payments</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="payments.mpesa.enabled ? 'bg-trust' : 'bg-slate-200'" @click="payments.mpesa.enabled = !payments.mpesa.enabled">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="payments.mpesa.enabled ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Enable Card Payments</p>
+                                    <p class="text-sm text-slate-500">Accept visa/MasterCard</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="payments.card.enabled ? 'bg-trust' : 'bg-slate-200'" @click="payments.card.enabled = !payments.card.enabled">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="payments.card.enabled ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3">
+                        <button @click="savePayments()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Changes</button>
+                    </div>
+                </div>
+
+                <!-- Notifications Settings -->
+                <div x-show="activeSection === 'notifications'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">Notification Preferences</h3>
+                        <div class="space-y-4">
+                            <label class="flex items-center justify-between p-4 rounded-xl border border-slate-200">
+                                <div>
+                                    <p class="font-medium text-slate-900">Email Notifications</p>
+                                    <p class="text-sm text-slate-500">Receive invoices and payment alerts via email</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="notifications.email ? 'bg-trust' : 'bg-slate-200'" @click="notifications.email = !notifications.email">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="notifications.email ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </label>
+                            <label class="flex items-center justify-between p-4 rounded-xl border border-slate-200">
+                                <div>
+                                    <p class="font-medium text-slate-900">SMS Notifications</p>
+                                    <p class="text-sm text-slate-500">Receive alerts via SMS</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="notifications.sms ? 'bg-trust' : 'bg-slate-200'" @click="notifications.sms = !notifications.sms">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="notifications.sms ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </label>
+                            <label class="flex items-center justify-between p-4 rounded-xl border border-slate-200">
+                                <div>
+                                    <p class="font-medium text-slate-900">WhatsApp Notifications</p>
+                                    <p class="text-sm text-slate-500">Receive alerts via WhatsApp</p>
+                                </div>
+                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="notifications.whatsapp ? 'bg-trust' : 'bg-slate-200'" @click="notifications.whatsapp = !notifications.whatsapp">
+                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="notifications.whatsapp ? 'left-7' : 'left-1'"></span>
+                                </button>
+                            </label>
+                        </div>
+                        <div class="mt-4">
+                            <button @click="saveNotifications()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team Settings -->
+                <div x-show="activeSection === 'team'" class="space-y-6 animate-fade-in">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold text-slate-900">Team Members</h3>
+                        <button @click="openInviteModal()" class="px-4 py-2.5 bg-trust text-white rounded-xl font-medium hover:bg-trust-dark flex items-center gap-2">
+                            <i data-lucide="user-plus" class="w-4 h-4"></i>
+                            Invite Member
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                        <table class="w-full">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Member</th>
+                                    <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Role</th>
+                                    <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Last Active</th>
+                                    <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-for="member in teamMembers" :key="member.id">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold" x-text="member.name?.charAt(0)">J</div>
+                                                <div>
+                                                    <p class="font-medium text-slate-900" x-text="member.name"></p>
+                                                    <p class="text-sm text-slate-500" x-text="member.email"></p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <select x-model="member.role" @change="updateMemberRole(member)" class="px-3 py-1.5 rounded-lg border border-slate-200 text-sm">
+                                                <option value="owner">Owner</option>
+                                                <option value="admin">Admin</option>
+                                                <option value="finance">Finance Manager</option>
+                                                <option value="staff">Staff</option>
+                                                <option value="viewer">Viewer</option>
+                                            </select>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-medium" :class="member.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'" x-text="member.status === 'active' ? 'Active' : 'Pending'"></span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-slate-500" x-text="member.lastActive || 'Never'"></td>
+                                        <td class="px-6 py-4 text-right">
+                                            <template x-if="member.role !== 'owner'">
+                                                <button @click="removeMember(member.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                                </button>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Billing Settings -->
+                <div x-show="activeSection === 'billing'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <p class="text-sm text-slate-500">Current Plan</p>
+                                <h3 class="text-2xl font-bold text-slate-900" x-text="billing.plan || 'Free Plan'">Free Plan</h3>
+                            </div>
+                            <span class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-medium" x-text="billing.price || '$0/month'">$0/month</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-4 mb-6">
+                            <div class="p-4 bg-slate-50 rounded-xl">
+                                <p class="text-sm text-slate-500">Invoices</p>
+                                <p class="text-xl font-bold text-slate-900" x-text="billing.invoicesUsed + ' / ' + billing.invoicesLimit">0 / Unlimited</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 rounded-xl">
+                                <p class="text-sm text-slate-500">Clients</p>
+                                <p class="text-xl font-bold text-slate-900" x-text="billing.clientsUsed + ' / ' + billing.clientsLimit">0 / Unlimited</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 rounded-xl">
+                                <p class="text-sm text-slate-500">Team Members</p>
+                                <p class="text-xl font-bold text-slate-900" x-text="teamMembers.length + ' / ' + billing.teamLimit">0 / 1</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 rounded-xl">
+                                <p class="text-sm text-slate-500">Storage</p>
+                                <p class="text-xl font-bold text-slate-900" x-text="billing.storageUsed + ' / ' + billing.storageLimit">0 / 1GB</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button @click="upgradePlan()" class="px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Upgrade Plan</button>
+                            <button class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">View Plans</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+        <button @click="toast.show = false" class="p-1 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+    </div>
+</div>
+
+<script>
+function settingsContent() {
+    return {
+        searchQuery: '',
+        showPreview: false,
+        showChangePassword: false,
+        activeSection: 'overview',
+        sections: [
+            { id: 'overview', label: 'Overview', icon: 'layout-dashboard', description: 'Quick overview' },
+            { id: 'business', label: 'Business', icon: 'building-2', description: 'Company details' },
+            { id: 'profile', label: 'Profile', icon: 'user', description: 'Account & security' },
+            { id: 'invoice', label: 'Invoices', icon: 'file-text', description: 'Invoice settings' },
+            { id: 'payment', label: 'Payments', icon: 'credit-card', description: 'M-Pesa & cards' },
+            { id: 'notifications', label: 'Notifications', icon: 'bell', description: 'Alert preferences' },
+            { id: 'team', label: 'Team', icon: 'users', description: 'Manage users', badge: '0' },
+            { id: 'billing', label: 'Billing', icon: 'credit-card', description: 'Subscription' },
+            { id: 'integrations', label: 'Integrations', icon: 'plug', description: 'Connect tools' },
+        ],
+        profile: { name: '', email: '', jobTitle: '', phone: '', twoFactorEnabled: false },
+        security: { loginAlerts: true },
+        business: { name: '', email: '', phone: '', website: '', kra_pin: '', registrationNumber: '', industry: '', address: '', country: 'KE', timezone: 'Africa/Nairobi', logoUrl: '', brandColor: '#0277BD' },
+        invoice: { prefix: 'INV', nextNumber: 1, currency: 'KES', defaultTaxRate: 16, paymentTerms: '30', allowPartialPayments: true, allowDiscounts: true, allowDeposits: false, autoNumber: true },
+        notifications: { email: true, sms: false, whatsapp: false },
+        payments: { mpesa: { enabled: true, consumerKey: '', consumerSecret: '', shortcode: '', businessShortcode: '' }, card: { enabled: false } },
+        teamMembers: [],
+        billing: { plan: 'Free Plan', price: '$0/month', invoicesUsed: 0, invoicesLimit: 'Unlimited', clientsUsed: 0, clientsLimit: 'Unlimited', teamLimit: 1, storageUsed: '0', storageLimit: '1GB' },
+        integrations: [],
+        securityScore: 85,
+        profileComplete: 60,
+        toast: { show: false, message: '', type: 'success' },
+
+        get filteredSections() {
+            if (!this.searchQuery) return this.sections;
+            const q = this.searchQuery.toLowerCase();
+            return this.sections.filter(s => s.label.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+        },
+
+        get integrationsActive() {
+            return this.integrations.filter(i => i.active).length;
+        },
+
+        async init() {
+            lucide.createIcons();
+            await this.loadSettings();
+        },
+
+        async loadSettings() {
+            try {
+                const data = await InvoiceFastAPI.settings.get();
+                if (data.business) this.business = { ...this.business, ...data.business };
+                if (data.profile) this.profile = { ...this.profile, ...data.profile };
+                if (data.invoice) this.invoice = { ...this.invoice, ...data.invoice };
+                if (data.notifications) this.notifications = { ...this.notifications, ...data.notifications };
+                if (data.payments) this.payments = { ...this.payments, ...data.payments };
+                this.teamMembers = data.team || [];
+                this.integrations = data.integrations || [];
+                this.billing = data.billing || this.billing;
+            } catch(err) {
+                console.error('Failed to load settings:', err);
+            }
+        },
+
+        async saveBusiness() {
+            try {
+                await InvoiceFastAPI.settings.updateBusiness(this.business);
+                this.showToast('Business settings saved', 'success');
+            } catch(err) {
+                this.showToast('Failed to save settings', 'error');
+            }
+        },
+
+        async saveProfile() {
+            try {
+                await InvoiceFastAPI.settings.updateProfile(this.profile);
+                this.showToast('Profile saved', 'success');
+            } catch(err) {
+                this.showToast('Failed to save profile', 'error');
+            }
+        },
+
+        async saveInvoice() {
+            try {
+                await InvoiceFastAPI.settings.updateInvoice(this.invoice);
+                this.showToast('Invoice settings saved', 'success');
+            } catch(err) {
+                this.showToast('Failed to save settings', 'error');
+            }
+        },
+
+        async savePayments() {
+            try {
+                await InvoiceFastAPI.settings.updatePayments(this.payments);
+                this.showToast('Payment settings saved', 'success');
+            } catch(err) {
+                this.showToast('Failed to save settings', 'error');
+            }
+        },
+
+        async saveNotifications() {
+            try {
+                await InvoiceFastAPI.settings.updateNotifications(this.notifications);
+                this.showToast('Notification settings saved', 'success');
+            } catch(err) {
+                this.showToast('Failed to save settings', 'error');
+            }
+        },
+
+        resetBusiness() {
+            this.loadSettings();
+        },
+
+        openInviteModal() {
+            alert('Invite member modal');
+        },
+
+        async updateMemberRole(member) {
+            try {
+                await InvoiceFastAPI.team.updateRole(member.id, { role: member.role });
+                this.showToast('Role updated', 'success');
+            } catch(err) {
+                this.showToast('Failed to update role', 'error');
+            }
+        },
+
+        async removeMember(id) {
+            if (!confirm('Remove this team member?')) return;
+            try {
+                await InvoiceFastAPI.team.remove(id);
+                this.teamMembers = this.teamMembers.filter(m => m.id !== id);
+                this.showToast('Member removed', 'success');
+            } catch(err) {
+                this.showToast('Failed to remove member', 'error');
+            }
+        },
+
+        upgradePlan() {
+            window.location.href = '/billing';
+        },
+
+        filterSections() {
+            // handled by computed property
+        },
+
+        showToast(message, type) {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
+        }
+    };
+}
+</script>

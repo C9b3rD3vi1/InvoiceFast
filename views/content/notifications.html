@@ -1,0 +1,182 @@
+<!-- Notifications Content -->
+<div class="p-6" x-data="notificationsContent()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Notifications</h1>
+            <p class="text-slate-500 text-sm mt-1">View all your notifications and alerts</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button @click="markAllRead()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+                <i data-lucide="check-check" class="w-4 h-4"></i>
+                Mark All Read
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="flex items-center gap-2 mb-6 border-b border-slate-200">
+        <button @click="filter = ''" 
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+            :class="filter === '' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            All
+        </button>
+        <button @click="filter = 'unread'" 
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+            :class="filter === 'unread' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Unread
+            <span x-show="unreadCount > 0" class="ml-1 px-1.5 py-0.5 bg-trust text-white text-xs rounded-full" x-text="unreadCount"></span>
+        </button>
+        <button @click="filter = 'invoice'" 
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+            :class="filter === 'invoice' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Invoices
+        </button>
+        <button @click="filter = 'payment'" 
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+            :class="filter === 'payment' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Payments
+        </button>
+        <button @click="filter = 'reminder'" 
+            class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
+            :class="filter === 'reminder' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Reminders
+        </button>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <template x-if="loading">
+            <div class="p-12 text-center text-slate-500">
+                <div class="w-8 h-8 border-2 border-trust border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                Loading notifications...
+            </div>
+        </template>
+        
+        <template x-for="notification in filteredNotifications" :key="notification.id">
+            <div @click="clickNotification(notification)" 
+                class="px-6 py-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+                :class="notification.read ? '' : 'bg-trust/5'">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                        :class="getTypeClass(notification.type)">
+                        <i :data-lucide="getTypeIcon(notification.type)" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <p class="font-medium text-slate-900 truncate" x-text="notification.title">Notification Title</p>
+                            <span class="text-xs text-slate-400 shrink-0" x-text="formatTime(notification.created_at)">2h ago</span>
+                        </div>
+                        <p class="text-sm text-slate-600 truncate" x-text="notification.message || notification.description">Notification message...</p>
+                        <template x-if="notification.link">
+                            <a :href="notification.link" class="text-sm text-trust hover:underline mt-1 inline-block">View Details</a>
+                        </template>
+                    </div>
+                    <template x-if="!notification.read">
+                        <div class="w-2 h-2 bg-trust rounded-full shrink-0 mt-2"></div>
+                    </template>
+                </div>
+            </div>
+        </template>
+        
+        <template x-if="!loading && filteredNotifications.length === 0">
+            <div class="p-16 text-center">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="bell-off" class="w-8 h-8 text-slate-400"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-900 mb-2">No notifications</h3>
+                <p class="text-slate-500">You're all caught up!</p>
+            </div>
+        </template>
+
+        <!-- Pagination -->
+        <template x-if="hasMore">
+            <div class="px-6 py-4 border-t border-slate-200">
+                <button @click="loadMore()" class="w-full py-2 text-center text-trust hover:text-trust-dark font-medium">
+                    Load More
+                </button>
+            </div>
+        </template>
+    </div>
+</div>
+
+<script>
+function notificationsContent() {
+    return {
+        loading: true,
+        notifications: [],
+        filter: '',
+        page: 1,
+        hasMore: false,
+        unreadCount: 0,
+
+        get filteredNotifications() {
+            if (!this.filter) return this.notifications;
+            return this.notifications.filter(n => n.type === this.filter || (!n.read && this.filter === 'unread'));
+        },
+
+        async init() {
+            lucide.createIcons();
+            await this.loadNotifications();
+        },
+
+        async loadNotifications() {
+            this.loading = true;
+            try {
+                const data = await InvoiceFastAPI.notifications.list({ page: this.page, limit: 20, unread_only: this.filter === 'unread' });
+                this.notifications = data.notifications || [];
+                this.unreadCount = data.unread_count || 0;
+                this.hasMore = this.notifications.length >= 20;
+            } catch(err) {
+                console.error('Failed to load notifications:', err);
+            } finally {
+                this.loading = false;
+                lucide.createIcons();
+            }
+        },
+
+        getTypeIcon(type) {
+            const icons = { invoice: 'file-text', payment: 'credit-card', reminder: 'bell', client: 'users', system: 'settings', automation: 'zap' };
+            return icons[type] || 'bell';
+        },
+
+        getTypeClass(type) {
+            const classes = { invoice: 'bg-blue-100 text-blue-600', payment: 'bg-green-100 text-green-600', reminder: 'bg-amber-100 text-amber-600', client: 'bg-purple-100 text-purple-600', system: 'bg-slate-100 text-slate-600', automation: 'bg-cyan-100 text-cyan-600' };
+            return classes[type] || 'bg-slate-100 text-slate-600';
+        },
+
+        formatTime(date) {
+            if (!date) return '';
+            const d = new Date(date);
+            const now = new Date();
+            const diff = now - d;
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            if (hours < 1) return 'Just now';
+            if (hours < 24) return hours + 'h ago';
+            const days = Math.floor(hours / 24);
+            if (days < 7) return days + 'd ago';
+            return d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+        },
+
+        async clickNotification(notification) {
+            if (!notification.read) {
+                notification.read = true;
+                this.unreadCount = Math.max(0, this.unreadCount - 1);
+                await InvoiceFastAPI.notifications.markRead(notification.id);
+            }
+            if (notification.link) {
+                window.location.href = notification.link;
+            }
+        },
+
+        async markAllRead() {
+            await this.loadNotifications();
+        },
+
+        loadMore() {
+            this.page++;
+            this.loadNotifications();
+        }
+    };
+}
+</script>
