@@ -19,6 +19,7 @@ import (
 	appLogger "invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
+	"invoicefast/internal/pdf"
 	"invoicefast/internal/routes"
 	"invoicefast/internal/services"
 	"invoicefast/internal/worker"
@@ -296,7 +297,16 @@ func main() {
 	}()
 
 	// Initialize handlers
-	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService)
+	// Initialize PDF service
+	pdfService := &services.PDFService{}
+
+	// Initialize PDF generator
+	pdfGenerator := pdf.NewPDFGenerator("./templates", "./data/pdfs")
+
+	// Initialize WhatsApp service
+	whatsappService := services.NewWhatsAppService()
+
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService)

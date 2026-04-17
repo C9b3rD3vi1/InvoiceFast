@@ -14,6 +14,15 @@ func DashboardRoutes(app *fiber.App, h *handlers.DashboardHandler, authService *
 	group := app.Group("/api/v1/tenant/dashboard")
 	group.Use(middleware.TenantMiddleware(authService, db))
 
+	// Add no-cache headers for all dashboard endpoints
+	group.Use(func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+		c.Set("Pragma", "no-cache")
+		c.Set("Expires", "0")
+		c.Set("Surrogate-Control", "no-store")
+		return c.Next()
+	})
+
 	// Main endpoints
 	group.Get("/", h.GetDashboard)
 	group.Get("/summary", h.GetDashboardSummary)
@@ -22,6 +31,9 @@ func DashboardRoutes(app *fiber.App, h *handlers.DashboardHandler, authService *
 	group.Get("/stats", h.GetStats)
 	group.Get("/invoices", h.GetRecentInvoices)
 	group.Get("/clients", h.GetRecentClients)
+
+	// HTMX endpoints for partial rendering
+	group.Get("/htmx/invoices", h.GetHTMXInvoices)
 
 	// Charts
 	group.Get("/charts/revenue", h.GetRevenueChart)

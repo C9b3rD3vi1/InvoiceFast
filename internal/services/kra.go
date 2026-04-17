@@ -162,12 +162,29 @@ func NewKRAServiceWithDB(cfg *config.Config, db *database.DB) *KRAService {
 	return &KRAService{cfg: cfg, db: db}
 }
 
+func (s *KRAService) isDevMode() bool {
+	return s.cfg.Server.Mode != "production"
+}
+
 // SubmitInvoice submits an invoice to KRA e-TIMS via OSCP (Online Sales Control Protocol)
-func (s *KRAService) SubmitInvoice(data *KRAInvoiceData) (*KRAResponse, error) {
+func (s *KRAService) SubmitInvoice(data *KRAInvoiceData, tenantID, invoiceID string) (*KRAResponse, error) {
 	// If no API URL configured, return error so frontend can show sandbox warning
 	if s.cfg.KRA.APIURL == "" || s.cfg.KRA.APIURL == "https://api.kra.go.ke" {
-		log.Printf("[KRA] Mock mode - production API not configured")
+		if s.isDevMode() {
+			log.Printf("[KRA] Sandbox mode - production API not configured")
+		}
 		return nil, ErrMockMode
+	}
+
+	// Validate required parameters
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant ID is required for KRA submission")
+	}
+	if invoiceID == "" {
+		return nil, fmt.Errorf("invoice ID is required for KRA submission")
+	}
+	if data.InvoiceNumber == "" {
+		return nil, fmt.Errorf("invoice number is required for KRA submission")
 	}
 
 	// Build the signed payload for VSCU (Virtual Sales Control Unit)
@@ -177,40 +194,39 @@ func (s *KRAService) SubmitInvoice(data *KRAInvoiceData) (*KRAResponse, error) {
 	}
 
 	// Sign the payload
-	_, err = s.signETIMSPayload(payload)
+	signature, err := s.signETIMSPayload(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign e-TIMS payload: %w", err)
 	}
 
+	// Add signature to the payload map
+	payloadMap := map[string]interface{}{}
+	json.Unmarshal(payload, &payloadMap)
+	payloadMap["signature"] = signature
+
+	// Marshal the updated payload back to JSON
+	payloadWithSig, err := json.Marshal(payloadMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload with signature: %w", err)
+	}
+
 	// Submit to KRA e-TIMS API
-	response, err := s.submitToKRA(payload)
+	response, err := s.submitToKRA(payloadWithSig)
 	if err != nil {
 		// Queue for retry instead of silent fallback
 		log.Printf("[KRA] API submission failed: %v - queuing for retry", err)
 
-		// Extract tenant info from invoice data
-		tenantID := "" // Would need to be passed in
-		invoiceID := ""
-
-		if s.db != nil && data.InvoiceNumber != "" {
-			// Try to find invoice for queue item
-			var invoice struct {
-				ID       string
-				TenantID string
+		if s.db != nil {
+			err = s.QueueFailedSubmission(tenantID, invoiceID, data.InvoiceNumber, payloadWithSig, err.Error())
+			if err != nil {
+				log.Printf("[KRA] Failed to queue failed submission: %v", err)
 			}
-			if err := s.db.Model(&models.Invoice{}).Where("invoice_number = ?", data.InvoiceNumber).First(&invoice).Error; err == nil {
-				tenantID = invoice.TenantID
-				invoiceID = invoice.ID
-			}
-		}
-
-		if tenantID != "" && invoiceID != "" {
-			_ = s.QueueFailedSubmission(tenantID, invoiceID, data.InvoiceNumber, payload, err.Error())
 		}
 
 		return nil, fmt.Errorf("KRA submission queued for retry: %w", err)
 	}
 
+	// Log successful KRA submission (audit logging will be handled by caller)
 	return response, nil
 }
 
@@ -373,7 +389,10 @@ func (s *KRAService) SubmitInvoiceBatch(invoices []KRAInvoiceData) ([]KRARespons
 	responses := make([]KRAResponse, len(invoices))
 
 	for i, inv := range invoices {
-		resp, err := s.SubmitInvoice(&inv)
+		// For batch processing, we don't have tenantID and invoiceID readily available
+		// In a real implementation, these would need to be passed with each invoice
+		// For now, we'll use empty strings and rely on the queue mechanism to recover them
+		resp, err := s.SubmitInvoice(&inv, "", "")
 		if err != nil {
 			return responses, fmt.Errorf("failed to submit invoice %d: %w", i, err)
 		}

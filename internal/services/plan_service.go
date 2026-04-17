@@ -41,50 +41,82 @@ func (s *PlanService) UpdatePlan(id string, updates map[string]interface{}) erro
 	return s.db.Model(&models.SubscriptionPlan{}).Where("id = ?", id).Updates(updates).Error
 }
 
+func (s *PlanService) GetExchangeRate() float64 {
+	return 150.0
+}
+
+func (s *PlanService) GetMonthlyPriceKES(plan *models.SubscriptionPlan) int64 {
+	rate := s.GetExchangeRate()
+	return int64(float64(plan.MonthlyPriceUSD) * rate)
+}
+
+func (s *PlanService) GetYearlyPriceKES(plan *models.SubscriptionPlan) int64 {
+	rate := s.GetExchangeRate()
+	return int64(float64(plan.YearlyPriceUSD) * rate)
+}
+
 func (s *PlanService) SeedDefaultPlans() error {
 	plans := []models.SubscriptionPlan{
 		{
-			ID:           uuid.New().String(),
-			Name:         "Starter",
-			Slug:         "starter",
-			Description:  "Perfect for small businesses",
-			MonthlyPrice: 2900,
-			YearlyPrice:  29000,
-			FeaturesJSON: `["invoices","clients","payments"]`,
-			LimitsJSON:   `{"invoices":50,"clients":25,"users":1}`,
-			IsActive:     true,
-			SortOrder:    1,
+			ID:              uuid.New().String(),
+			Name:            "Starter",
+			Slug:            "starter",
+			Description:     "Perfect for small businesses. Includes unlimited invoices, clients, payment tracking, reports, PDF export, and email reminders.",
+			MonthlyPriceUSD: 1000,
+			YearlyPriceUSD:  10000,
+			FeaturesJSON:    `["invoices","clients","payments","reports","pdf_export","email_reminders"]`,
+			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":1,"storage":1073741824}`,
+			IsActive:        true,
+			SortOrder:       1,
+			TrialDays:       14,
 		},
 		{
-			ID:           uuid.New().String(),
-			Name:         "Professional",
-			Slug:         "professional",
-			Description:  "For growing businesses",
-			MonthlyPrice: 7900,
-			YearlyPrice:  79000,
-			FeaturesJSON: `["invoices","clients","payments","reports","automations","api"]`,
-			LimitsJSON:   `{"invoices":500,"clients":200,"users":5}`,
-			IsActive:     true,
-			SortOrder:    2,
+			ID:              uuid.New().String(),
+			Name:            "Growth",
+			Slug:            "growth",
+			Description:     "For growing businesses. Includes all Starter features plus team members, advanced analytics, branding customization, and priority support.",
+			MonthlyPriceUSD: 2500,
+			YearlyPriceUSD:  25000,
+			FeaturesJSON:    `["invoices","clients","payments","reports","pdf_export","email_reminders","team_members","advanced_analytics","branding","priority_support"]`,
+			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":5,"storage":5368709120}`,
+			IsActive:        true,
+			SortOrder:       2,
+			TrialDays:       14,
 		},
 		{
-			ID:           uuid.New().String(),
-			Name:         "Enterprise",
-			Slug:         "enterprise",
-			Description:  "Unlimited everything",
-			MonthlyPrice: 19900,
-			YearlyPrice:  199000,
-			FeaturesJSON: `["invoices","clients","payments","reports","automations","api","dedicated_support"]`,
-			LimitsJSON:   `{"invoices":-1,"clients":-1,"users":-1}`,
-			IsActive:     true,
-			SortOrder:    3,
+			ID:              uuid.New().String(),
+			Name:            "Business",
+			Slug:            "business",
+			Description:     "Full-featured business solution. Includes all Growth features plus automation tools, API access, bulk actions, and workflow automation.",
+			MonthlyPriceUSD: 5000,
+			YearlyPriceUSD:  50000,
+			FeaturesJSON:    `["invoices","clients","payments","reports","pdf_export","email_reminders","team_members","advanced_analytics","branding","priority_support","automation","api_access","bulk_actions","workflow_automation"]`,
+			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":-1,"storage":107374182400}`,
+			IsActive:        true,
+			SortOrder:       3,
+			TrialDays:       14,
+		},
+		{
+			ID:              uuid.New().String(),
+			Name:            "Enterprise",
+			Slug:            "enterprise",
+			Description:     "Contact us for custom pricing. Unlimited everything with dedicated support, SLA, custom integrations, and white-label options.",
+			MonthlyPriceUSD: 0,
+			YearlyPriceUSD:  0,
+			FeaturesJSON:    `["invoices","clients","payments","reports","pdf_export","email_reminders","team_members","advanced_analytics","branding","priority_support","automation","api_access","bulk_actions","workflow_automation","dedicated_support","sla","custom_integrations","whitelabel"]`,
+			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":-1,"storage":-1}`,
+			IsActive:        true,
+			SortOrder:       4,
+			TrialDays:       14,
 		},
 	}
 
 	for _, plan := range plans {
 		var existing models.SubscriptionPlan
 		if err := s.db.First(&existing, "slug = ?", plan.Slug).Error; err != nil {
-			s.db.Create(&plan)
+			if err.Error() == "record not found" {
+				s.db.Create(&plan)
+			}
 		}
 	}
 

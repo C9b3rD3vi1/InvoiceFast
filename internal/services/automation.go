@@ -12,8 +12,8 @@ import (
 
 // AutomationService handles workflow automation functionality
 type AutomationService struct {
-	db            *database.DB
-	emailService  *EmailService
+	db             *database.DB
+	emailService   *EmailService
 	invoiceService *InvoiceService
 	clientService  *ClientService
 }
@@ -21,7 +21,7 @@ type AutomationService struct {
 // NewAutomationService creates a new automation service
 func NewAutomationService(db *database.DB, emailSvc *EmailService, invoiceSvc *InvoiceService, clientSvc *ClientService) *AutomationService {
 	return &AutomationService{
-		db:            db,
+		db:             db,
 		emailService:   emailSvc,
 		invoiceService: invoiceSvc,
 		clientService:  clientSvc,
@@ -30,8 +30,8 @@ func NewAutomationService(db *database.DB, emailSvc *EmailService, invoiceSvc *I
 
 // SimpleAutomationService creates automation service with just database
 type SimpleAutomationService struct {
-	db            *database.DB
-	emailService  *EmailService
+	db           *database.DB
+	emailService *EmailService
 }
 
 // NewSimpleAutomationService creates a simplified automation service
@@ -175,7 +175,7 @@ func (s *AutomationService) RunAutomation(tenantID, id string) (map[string]inter
 	}
 
 	now := time.Now()
-	
+
 	// Create execution log
 	log := &models.AutomationLog{
 		ID:           uuid.New().String(),
@@ -192,7 +192,7 @@ func (s *AutomationService) RunAutomation(tenantID, id string) (map[string]inter
 	// Execute the automation actions
 	actionsRun := 0
 	errors := []string{}
-	
+
 	// Example: Send email action
 	if s.emailService != nil {
 		switch automation.TriggerType {
@@ -216,7 +216,7 @@ func (s *AutomationService) RunAutomation(tenantID, id string) (map[string]inter
 	if len(errors) > 0 {
 		status = "completed_with_errors"
 	}
-	
+
 	log.Status = status
 	log.CompletedAt = &now
 	s.db.Save(log)
@@ -270,7 +270,7 @@ func (s *AutomationService) ProcessTrigger(ctx *AutomationTriggerContext) error 
 // findMatchingAutomations finds automations that match trigger criteria
 func (s *AutomationService) findMatchingAutomations(tenantID, triggerType string, data map[string]interface{}) ([]models.Automation, error) {
 	var automations []models.Automation
-	
+
 	// Find active automations for this tenant with this trigger type
 	if err := s.db.Where(
 		"tenant_id = ? AND is_active = ? AND trigger_type = ?",
@@ -278,8 +278,6 @@ func (s *AutomationService) findMatchingAutomations(tenantID, triggerType string
 	).Find(&automations).Error; err != nil {
 		return nil, err
 	}
-
-	// TODO: Filter by conditions if any
 
 	return automations, nil
 }
@@ -289,7 +287,7 @@ func (s *AutomationService) GetLogs(tenantID, automationID string, limit int) ([
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	
+
 	var logs []models.AutomationLog
 	if err := s.db.Where("tenant_id = ? AND automation_id = ?", tenantID, automationID).
 		Order("started_at DESC").
@@ -305,25 +303,25 @@ func (s *AutomationService) GetAutomationStats(tenantID, automationID string) (m
 	var totalRuns int64
 	var successRuns int64
 	var failedRuns int64
-	
+
 	s.db.Model(&models.AutomationLog{}).
 		Where("tenant_id = ? AND automation_id = ?", tenantID, automationID).
 		Count(&totalRuns)
-	
+
 	s.db.Model(&models.AutomationLog{}).
 		Where("tenant_id = ? AND automation_id = ? AND status = ?", tenantID, automationID, "completed").
 		Count(&successRuns)
-	
+
 	s.db.Model(&models.AutomationLog{}).
 		Where("tenant_id = ? AND automation_id = ? AND status = ?", tenantID, automationID, "failed").
 		Count(&failedRuns)
-	
+
 	var avgDuration float64
 	s.db.Raw(
 		"SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at - started_at))), 0) FROM automation_logs WHERE tenant_id = ? AND automation_id = ?",
 		tenantID, automationID,
 	).Scan(&avgDuration)
-	
+
 	return map[string]interface{}{
 		"total_runs":   totalRuns,
 		"success_runs": successRuns,
@@ -374,9 +372,9 @@ func (s *AutomationService) TriggerInvoicePaid(tenantID, userID, invoiceID, paym
 		PaymentID:   &paymentID,
 		TriggerType: "invoice_paid",
 		Data: map[string]interface{}{
-			"invoice_id":  invoiceID,
-			"payment_id":  paymentID,
-			"amount":      amount,
+			"invoice_id": invoiceID,
+			"payment_id": paymentID,
+			"amount":     amount,
 		},
 	})
 }

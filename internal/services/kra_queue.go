@@ -155,7 +155,7 @@ func (s *KRAQueueService) processQueueItem(item models.KRAQueueItem) {
 	}
 
 	// Attempt KRA submission
-	kraResp, err := s.kraSvc.SubmitInvoice(&kraData)
+	kraResp, err := s.kraSvc.SubmitInvoice(&kraData, item.TenantID, item.InvoiceID)
 	if err != nil {
 		s.handleRetry(&item, err)
 		return

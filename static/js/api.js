@@ -48,7 +48,14 @@ const InvoiceFastAPI = {
             throw new Error(data.error || 'Request failed');
         }
         
-        return res.json();
+        // Handle empty responses
+        const text = await res.text();
+        if (!text) return null;
+        try {
+            return JSON.parse(text);
+        } catch {
+            return text;
+        }
     },
     
     // Auth endpoints
@@ -161,7 +168,285 @@ const InvoiceFastAPI = {
         },
         
         async getActivity(limit = 10) {
-            return InvoiceFastAPI.request('/tenant/dashboard/activity?limit=' + limit);
+            return InvoiceFastAPI.request('/tenant/activity?limit=' + limit);
+        },
+    },
+    
+    // Activity Feed
+    activity: {
+        async getRecent(limit = 20) {
+            return InvoiceFastAPI.request('/tenant/activity?limit=' + limit);
+        },
+    },
+    
+    // Item Library
+    itemLibrary: {
+        async list() {
+            return InvoiceFastAPI.request('/tenant/items');
+        },
+        
+        async get(id) {
+            return InvoiceFastAPI.request('/tenant/items/' + id);
+        },
+        
+        async create(data) {
+            return InvoiceFastAPI.request('/tenant/items', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async update(id, data) {
+            return InvoiceFastAPI.request('/tenant/items/' + id, {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async delete(id) {
+            return InvoiceFastAPI.request('/tenant/items/' + id, {
+                method: 'DELETE',
+            });
+        },
+    },
+    
+    // Recurring Invoices
+    recurring: {
+        async list() {
+            return InvoiceFastAPI.request('/tenant/recurring');
+        },
+        
+        async enable(invoiceID, frequency) {
+            return InvoiceFastAPI.request('/tenant/recurring/' + invoiceID + '/enable', {
+                method: 'POST',
+                body: JSON.stringify({ frequency }),
+            });
+        },
+        
+        async disable(invoiceID) {
+            return InvoiceFastAPI.request('/tenant/recurring/' + invoiceID + '/disable', {
+                method: 'POST',
+            });
+        },
+        
+        async process() {
+            return InvoiceFastAPI.request('/tenant/recurring/process', {
+                method: 'POST',
+            });
+        },
+    },
+    
+    // Late Fees
+    lateFees: {
+        async getConfig() {
+            return InvoiceFastAPI.request('/tenant/late-fees/config');
+        },
+        
+        async updateConfig(data) {
+            return InvoiceFastAPI.request('/tenant/late-fees/config', {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async calculate(invoiceID) {
+            return InvoiceFastAPI.request('/tenant/late-fees/invoice/' + invoiceID + '/calculate');
+        },
+        
+        async saveConfig(data) {
+            return InvoiceFastAPI.request('/tenant/late-fees/config', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async getInvoiceFees(invoiceID) {
+            return InvoiceFastAPI.request('/tenant/late-fees/invoice/' + invoiceID);
+        },
+        
+        async waive(lateFeeID) {
+            return InvoiceFastAPI.request('/tenant/late-fees/' + lateFeeID + '/waive', {
+                method: 'POST',
+            });
+        },
+    },
+    
+    // Expenses
+    expenses: {
+        async list(filters = {}) {
+            const params = new URLSearchParams(filters).toString();
+            return InvoiceFastAPI.request('/tenant/expenses' + (params ? '?' + params : ''));
+        },
+        
+        async get(id) {
+            return InvoiceFastAPI.request('/tenant/expenses/' + id);
+        },
+        
+        async create(data) {
+            return InvoiceFastAPI.request('/tenant/expenses', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async update(id, data) {
+            return InvoiceFastAPI.request('/tenant/expenses/' + id, {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async delete(id) {
+            return InvoiceFastAPI.request('/tenant/expenses/' + id, {
+                method: 'DELETE',
+            });
+        },
+        
+        async getCategories() {
+            return InvoiceFastAPI.request('/tenant/expenses/categories');
+        },
+        
+        async createCategory(data) {
+            return InvoiceFastAPI.request('/tenant/expenses/categories', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async getSummary(startDate, endDate) {
+            let params = '';
+            if (startDate || endDate) {
+                params = '?';
+                if (startDate) params += 'start_date=' + startDate;
+                if (endDate) params += (startDate ? '&' : '') + 'end_date=' + endDate;
+            }
+            return InvoiceFastAPI.request('/tenant/expenses/summary' + params);
+        },
+    },
+    
+    // Reminder Sequences
+    reminderSequences: {
+        async list() {
+            return InvoiceFastAPI.request('/tenant/reminder-sequences');
+        },
+        
+        async create(data) {
+            return InvoiceFastAPI.request('/tenant/reminder-sequences', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async update(id, data) {
+            return InvoiceFastAPI.request('/tenant/reminder-sequences/' + id, {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        
+        async delete(id) {
+            return InvoiceFastAPI.request('/tenant/reminder-sequences/' + id, {
+                method: 'DELETE',
+            });
+        },
+    },
+    
+    // Bulk Actions
+    bulk: {
+        async sendOverdueReminders() {
+            return InvoiceFastAPI.request('/tenant/bulk/overdue-reminders', {
+                method: 'POST',
+            });
+        },
+    },
+    
+    // Payment Matching
+    paymentMatching: {
+        async getUnallocated() {
+            return InvoiceFastAPI.request('/tenant/payments/unallocated');
+        },
+        
+        async match(paymentID, invoiceID) {
+            return InvoiceFastAPI.request('/tenant/payments/' + paymentID + '/match', {
+                method: 'POST',
+                body: JSON.stringify({ invoice_id: invoiceID }),
+            });
+        },
+        
+        async manualMatch(data) {
+            return InvoiceFastAPI.request('/tenant/payments/manual-match', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+    },
+    
+    // Settlement Reports
+    settlement: {
+        async getDaily(date) {
+            const params = date ? '?date=' + date : '';
+            return InvoiceFastAPI.request('/tenant/settlement/daily' + params);
+        },
+        
+        async export(date) {
+            const token = InvoiceFastAPI.getToken();
+            if (token) {
+                const params = date ? '?date=' + date : '';
+                window.location.href = '/api/v1/tenant/settlement/export' + params;
+            }
+        },
+    },
+    
+    // Reports - Extended
+    reports: {
+        async getOverview(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/overview?period=' + period);
+        },
+        
+        async getRevenue(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/revenue?period=' + period);
+        },
+        
+        async getInvoices(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/invoices?period=' + period);
+        },
+        
+        async getPayments(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/payments?period=' + period);
+        },
+        
+        async getClients(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/clients?period=' + period);
+        },
+        
+        async getTax(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/tax?period=' + period);
+        },
+        
+        async getVAT(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/vat?period=' + period);
+        },
+        
+        async getAging() {
+            return InvoiceFastAPI.request('/tenant/reports/aging');
+        },
+        
+        async getIncomeStatement(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/income-statement?period=' + period);
+        },
+        
+        async getClientStatement(clientID, startDate, endDate) {
+            let params = '?client_id=' + clientID;
+            if (startDate) params += '&start_date=' + startDate;
+            if (endDate) params += '&end_date=' + endDate;
+            return InvoiceFastAPI.request('/tenant/reports/client/' + clientID + '/statement' + params);
+        },
+        
+        async export(format = 'csv', period = '30') {
+            const token = InvoiceFastAPI.getToken();
+            if (token) {
+                window.location.href = '/api/v1/tenant/reports/export?format=' + format + '&period=' + period;
+            }
         },
     },
     
@@ -214,6 +499,18 @@ const InvoiceFastAPI = {
             });
         },
         
+        async sendWhatsApp(id) {
+            return InvoiceFastAPI.request('/tenant/invoices/' + id + '/whatsapp', {
+                method: 'POST',
+            });
+        },
+        
+        async submitToKRA(id) {
+            return InvoiceFastAPI.request('/tenant/invoices/' + id + '/kra', {
+                method: 'POST',
+            });
+        },
+        
         async requestPayment(id) {
             return InvoiceFastAPI.request('/tenant/invoices/' + id + '/payment-request', {
                 method: 'POST',
@@ -221,15 +518,70 @@ const InvoiceFastAPI = {
         },
         
         async getPdf(id) {
-            const token = InvoiceFastAPI.getToken();
-            if (token) {
-                window.location.href = '/api/v1/tenant/invoices/' + id + '/pdf';
+            const token = this.getToken() || localStorage.getItem('token');
+            if (!token) {
+                throw new Error('No token available');
+            }
+            try {
+                console.log('Downloading PDF for invoice:', id);
+                const response = await fetch('/api/v1/tenant/invoices/' + id + '/pdf?token=' + encodeURIComponent(token));
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers.get('content-type'));
+                
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Download error response:', text);
+                    throw new Error(text || 'Download failed with status ' + response.status);
+                }
+                
+                const blob = await response.blob();
+                console.log('Blob size:', blob.size, 'Blob type:', blob.type);
+                
+                if (blob.size === 0) {
+                    throw new Error('Downloaded file is empty');
+                }
+                
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'invoice-' + id + '.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => window.URL.revokeObjectURL(url), 100);
+                return true;
+            } catch(err) {
+                console.error('PDF download failed:', err);
+                throw err;
             }
         },
         
         async duplicate(id) {
             return InvoiceFastAPI.request('/tenant/invoices/' + id + '/duplicate', {
                 method: 'POST',
+            });
+        },
+        
+        async getAttachments(invoiceId) {
+            return InvoiceFastAPI.request('/tenant/invoices/' + invoiceId + '/attachments');
+        },
+        
+        async uploadAttachment(invoiceId, file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const token = InvoiceFastAPI.getToken();
+            const response = await fetch('/api/v1/tenant/invoices/' + invoiceId + '/attachments', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData,
+            });
+            if (!response.ok) throw new Error('Failed to upload attachment');
+            return response.json();
+        },
+        
+        async deleteAttachment(invoiceId, attachmentId) {
+            return InvoiceFastAPI.request('/tenant/invoices/' + invoiceId + '/attachments/' + attachmentId, {
+                method: 'DELETE',
             });
         },
     },
@@ -264,6 +616,13 @@ const InvoiceFastAPI = {
                 method: 'DELETE',
             });
         },
+        
+        async getStatement(clientID, startDate, endDate) {
+            let params = '';
+            if (startDate) params = '?start_date=' + startDate;
+            if (endDate) params += '&end_date=' + endDate;
+            return InvoiceFastAPI.request('/tenant/reports/client/' + clientID + '/statement' + params);
+        },
     },
     
     // Payments
@@ -297,6 +656,13 @@ const InvoiceFastAPI = {
             });
         },
         
+        async createPayment(invoiceId, data) {
+            return InvoiceFastAPI.request('/tenant/invoices/' + invoiceId + '/payments', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
         async getReceipt(id) {
             const token = InvoiceFastAPI.getToken();
             if (token) {
@@ -309,39 +675,26 @@ const InvoiceFastAPI = {
                 method: 'POST',
             });
         },
-    },
-    
-    // Reports
-    reports: {
-        async getOverview(period = '30') {
-            return InvoiceFastAPI.request('/tenant/reports/overview?period=' + period);
+        
+        async getUnmatched() {
+            return InvoiceFastAPI.request('/tenant/payments/unmatched');
         },
         
-        async getRevenue(period = '30') {
-            return InvoiceFastAPI.request('/tenant/reports/revenue?period=' + period);
+        async getUnpaidInvoices() {
+            return InvoiceFastAPI.request('/tenant/invoices?status=sent,viewed,partially_paid,overdue&unpaid=true');
         },
         
-        async getInvoices(period = '30') {
-            return InvoiceFastAPI.request('/tenant/reports/invoices?period=' + period);
+        async matchPayment(paymentId, invoiceId, amount) {
+            return InvoiceFastAPI.request('/tenant/payments/' + paymentId + '/match', {
+                method: 'POST',
+                body: JSON.stringify({ invoice_id: invoiceId, amount }),
+            });
         },
         
-        async getPayments(period = '30') {
-            return InvoiceFastAPI.request('/tenant/reports/payments?period=' + period);
-        },
-        
-        async getClients(period = '30') {
-            return InvoiceFastAPI.request('/tenant/reports/clients?period=' + period);
-        },
-        
-        async getTax(period = '30') {
-            return InvoiceFastAPI.request('/tenant/reports/tax?period=' + period);
-        },
-        
-        async export(format = 'pdf', period = '30') {
-            const token = InvoiceFastAPI.getToken();
-            if (token) {
-                window.location.href = '/api/v1/tenant/reports/export?format=' + format + '&period=' + period;
-            }
+        async autoMatch() {
+            return InvoiceFastAPI.request('/tenant/payments/auto-match', {
+                method: 'POST',
+            });
         },
     },
     

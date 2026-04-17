@@ -82,6 +82,21 @@ func getValidPaymentTerms(terms int) int {
 	return terms
 }
 
+func getValidPaymentMethod(method string) string {
+	validMethods := map[string]bool{
+		"mpesa": true,
+		"bank":  true,
+		"card":  true,
+		"cash":  true,
+	}
+
+	method = strings.ToLower(strings.TrimSpace(method))
+	if validMethods[method] {
+		return method
+	}
+	return "mpesa" // Default
+}
+
 // GetClient retrieves a client by ID (tenant-scoped)
 func (s *ClientService) GetClient(tenantID, clientID string) (*models.Client, error) {
 	if strings.TrimSpace(tenantID) == "" {
@@ -219,6 +234,12 @@ func (s *ClientService) UpdateClient(tenantID, clientID string, req *UpdateClien
 	if req.Notes != nil {
 		client.Notes = strings.TrimSpace(*req.Notes)
 	}
+	if req.DefaultPaymentMethod != nil {
+		client.DefaultPaymentMethod = getValidPaymentMethod(*req.DefaultPaymentMethod)
+	}
+	if req.InternalNotes != nil {
+		client.InternalNotes = strings.TrimSpace(*req.InternalNotes)
+	}
 
 	if err := s.db.Save(client).Error; err != nil {
 		return nil, fmt.Errorf("failed to update client: %w", err)
@@ -315,14 +336,16 @@ type CreateClientRequest struct {
 }
 
 type UpdateClientRequest struct {
-	Name         *string `json:"name"`
-	Email        *string `json:"email"`
-	Phone        *string `json:"phone"`
-	Address      *string `json:"address"`
-	KRAPIN       *string `json:"kra_pin"`
-	Currency     *string `json:"currency"`
-	PaymentTerms *int    `json:"payment_terms"`
-	Notes        *string `json:"notes"`
+	Name                 *string `json:"name"`
+	Email                *string `json:"email"`
+	Phone                *string `json:"phone"`
+	Address              *string `json:"address"`
+	KRAPIN               *string `json:"kra_pin"`
+	Currency             *string `json:"currency"`
+	PaymentTerms         *int    `json:"payment_terms"`
+	Notes                *string `json:"notes"`
+	DefaultPaymentMethod *string `json:"default_payment_method"`
+	InternalNotes        *string `json:"internal_notes"`
 }
 
 type ClientFilter struct {

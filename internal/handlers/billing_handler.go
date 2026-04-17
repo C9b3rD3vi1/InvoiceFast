@@ -71,7 +71,12 @@ func (h *BillingHandler) CreateSubscription(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "plan_id required"})
 	}
 
-	sub, err := h.subService.CreateSubscription(tenantID, req.PlanID)
+	billingCycle := "monthly"
+	if req.BillingCycle != "" {
+		billingCycle = req.BillingCycle
+	}
+
+	sub, err := h.subService.CreateSubscription(tenantID, req.PlanID, billingCycle)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}

@@ -1,13 +1,19 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
+	"net/url"
+	"time"
 
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
+	"invoicefast/internal/pdf"
 	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 // InvoiceHandler handles invoice API endpoints
@@ -17,16 +23,23 @@ type InvoiceHandler struct {
 	mpesaService      *services.MPesaService
 	subService        *services.SubscriptionService
 	attachmentService *services.AttachmentService
+	pdfService        *services.PDFService
+	pdfGenerator      *pdf.PDFGenerator
+	emailService      *services.EmailService
+	whatsappService   *services.WhatsAppService
 }
 
 // NewInvoiceHandler creates InvoiceHandler
-func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService) *InvoiceHandler {
+func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, whatsappSvc *services.WhatsAppService) *InvoiceHandler {
 	return &InvoiceHandler{
 		invoiceService:    invoiceSvc,
 		kraService:        kraSvc,
 		mpesaService:      mpesaSvc,
 		subService:        subSvc,
 		attachmentService: attachmentSvc,
+		pdfService:        pdfSvc,
+		pdfGenerator:      pdfGen,
+		whatsappService:   whatsappSvc,
 	}
 }
 
@@ -122,7 +135,7 @@ func (h *InvoiceHandler) GetInvoice(c *fiber.Ctx) error {
 	}
 
 	invoiceID := c.Params("id")
-	invoice, err := h.invoiceService.GetInvoiceByID(invoiceID, tenantID)
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
 	}
@@ -147,7 +160,7 @@ func (h *InvoiceHandler) UpdateInvoice(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	invoice, err := h.invoiceService.UpdateInvoice(invoiceID, tenantID, &req)
+	invoice, err := h.invoiceService.UpdateInvoice(tenantID, invoiceID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -163,12 +176,44 @@ func (h *InvoiceHandler) SendInvoice(c *fiber.Ctx) error {
 	}
 
 	invoiceID := c.Params("id")
-	invoice, err := h.invoiceService.SendInvoice(invoiceID, tenantID, "")
+	invoice, err := h.invoiceService.SendInvoice(tenantID, invoiceID, "")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	return c.JSON(invoice)
+}
+
+// SendReminder - sends payment reminder to client
+func (h *InvoiceHandler) SendReminder(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	// Send reminder email using email service
+	if h.emailService != nil {
+		reminder := &services.ReminderEmailData{
+			InvoiceNumber: invoice.InvoiceNumber,
+			ClientName:    invoice.Client.Name,
+			ClientEmail:   invoice.Client.Email,
+			Amount:        invoice.Total - invoice.PaidAmount,
+			Currency:      invoice.Currency,
+			DueDate:       invoice.DueDate.Format("2006-01-02"),
+			InvoiceLink:   invoice.PaymentLink,
+		}
+		if err := h.emailService.SendPaymentReminder(reminder); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "failed to send reminder"})
+		}
+	}
+
+	return c.JSON(fiber.Map{"message": "reminder sent"})
 }
 
 // CancelInvoice - cancel invoice
@@ -212,6 +257,21 @@ func (h *InvoiceHandler) GetDashboardStats(c *fiber.Ctx) error {
 
 	period := c.Query("period", "month")
 	stats, err := h.invoiceService.GetDashboardStats(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(stats)
+}
+
+// GetInvoiceStats - get invoice-specific stats for the invoices list page
+func (h *InvoiceHandler) GetInvoiceStats(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	stats, err := h.invoiceService.GetInvoiceStats(tenantID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -306,14 +366,49 @@ func (h *InvoiceHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 
 // GetInvoicePDF gets the PDF for an invoice
 func (h *InvoiceHandler) GetInvoicePDF(c *fiber.Ctx) error {
-	token := c.Params("token")
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
 
-	invoice, err := h.invoiceService.GetInvoiceByMagicToken(token)
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
 	}
 
-	return c.JSON(fiber.Map{"invoice_id": invoice.ID, "invoice_number": invoice.InvoiceNumber})
+	// Generate HTML for the invoice using the preloaded User
+	htmlContent, err := h.pdfService.GenerateInvoiceHTML(invoice, &invoice.User)
+	if err != nil {
+		log.Printf("HTML generation failed for %s: %v", invoiceID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate invoice HTML"})
+	}
+	log.Printf("HTML generated for %s, length: %d", invoice.InvoiceNumber, len(htmlContent))
+
+	// Generate PDF if generator is available
+	if h.pdfGenerator != nil {
+		log.Printf("PDF generator available, generating PDF for %s", invoice.InvoiceNumber)
+		pdfOutput, err := h.pdfGenerator.HtmlToPDF(htmlContent, invoice.InvoiceNumber)
+		if err == nil && pdfOutput != nil && len(pdfOutput.Content) > 0 {
+			log.Printf("PDF generated successfully for %s, size: %d bytes", invoice.InvoiceNumber, len(pdfOutput.Content))
+			c.Set("Content-Type", "application/pdf")
+			c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", pdfOutput.Filename))
+			return c.Send(pdfOutput.Content)
+		}
+		// Fallback to HTML if PDF generation fails
+		log.Printf("PDF generation failed for %s: %v, html length: %d, falling back to HTML", invoice.InvoiceNumber, err, len(htmlContent))
+	} else {
+		log.Printf("PDF generator is nil, falling back to HTML")
+	}
+
+	// Fallback to HTML download
+	c.Set("Content-Type", "text/html")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.html", invoice.InvoiceNumber))
+	return c.SendString(htmlContent)
 }
 
 // SubmitToKRA submits an invoice to KRA eTIMS
@@ -352,6 +447,88 @@ func (h *InvoiceHandler) SubmitToKRA(c *fiber.Ctx) error {
 		"signature": kraResp.Signature,
 		"timestamp": kraResp.Timestamp,
 	})
+}
+
+// RecordPayment records a payment for an invoice
+func (h *InvoiceHandler) RecordPayment(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	var req struct {
+		Amount    float64 `json:"amount"`
+		Method    string  `json:"method"`
+		Reference string  `json:"reference"`
+		Date      string  `json:"date"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	// Get user ID from context
+	userID := ""
+	if uid := c.Locals("user_id"); uid != nil {
+		userID = uid.(string)
+	}
+
+	// Parse date
+	var paymentDate time.Time
+	if req.Date != "" {
+		paymentDate, _ = time.Parse("2006-01-02", req.Date)
+	} else {
+		paymentDate = time.Now()
+	}
+
+	// Create payment with all required fields - ensure status is explicitly set to completed
+	// Include ID to avoid constraint issues
+	payment := &models.Payment{
+		ID:          uuid.New().String(),
+		TenantID:    tenantID,
+		UserID:      userID,
+		InvoiceID:   invoiceID,
+		Amount:      req.Amount,
+		Currency:    "KES",
+		Method:      models.PaymentMethod(req.Method),
+		Status:      models.PaymentStatusCompleted,
+		Reference:   req.Reference,
+		CompletedAt: sql.NullTime{Time: paymentDate, Valid: true},
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Generate unique ID to bypass any unique constraints on tenant_id
+	payment.ID = uuid.New().String()
+
+	if err := h.invoiceService.RecordPayment(tenantID, invoiceID, payment); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "payment recorded"})
+}
+
+// DeleteInvoice deletes an invoice (hard delete)
+func (h *InvoiceHandler) DeleteInvoice(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	if err := h.invoiceService.DeleteInvoice(tenantID, invoiceID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "invoice deleted"})
 }
 
 // CreateCreditNote creates a credit note for an invoice
@@ -492,4 +669,95 @@ func (h *InvoiceHandler) DeleteInvoiceAttachment(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// SendWhatsApp sends invoice via WhatsApp with PDF attachment
+func (h *InvoiceHandler) SendWhatsApp(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	// Check if client has phone number
+	if invoice.Client.Phone == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "client has no phone number"})
+	}
+
+	// Build payment link
+	paymentLink := ""
+	if invoice.MagicToken != "" {
+		paymentLink = fmt.Sprintf("https://invoice.simuxtech.com/pay/%s", invoice.MagicToken)
+	}
+
+	// Build message
+	message := fmt.Sprintf(`Hello %s,
+
+You have received an invoice from %s.
+
+Invoice #: %s
+Amount: %s %s
+Due Date: %s
+
+View and pay: %s
+
+Thank you for your business!`,
+		invoice.Client.Name,
+		invoice.User.CompanyName,
+		invoice.InvoiceNumber,
+		invoice.Currency,
+		fmt.Sprintf("%.2f", invoice.Total),
+		invoice.DueDate.Format("02 Jan 2006"),
+		paymentLink,
+	)
+
+	// Generate PDF
+	var pdfData []byte
+	pdfName := invoice.InvoiceNumber + ".pdf"
+	if h.pdfService != nil && h.pdfGenerator != nil {
+		htmlContent, err := h.pdfService.GenerateInvoiceHTML(invoice, &invoice.User)
+		if err == nil {
+			pdfOutput, err := h.pdfGenerator.HtmlToPDF(htmlContent, invoice.InvoiceNumber)
+			if err == nil && len(pdfOutput.Content) > 0 {
+				pdfData = pdfOutput.Content
+			}
+		}
+	}
+
+	// Send WhatsApp with PDF
+	var result *services.WhatsAppResult
+	if h.whatsappService != nil {
+		result = h.whatsappService.SendWithPDF(invoice.Client.Phone, message, pdfData, pdfName)
+	} else {
+		// WhatsApp service not initialized, create result with wa.me URL and PDF download link
+		pdfDownloadURL := fmt.Sprintf("https://invoice.simuxtech.com/api/invoices/%s/pdf", invoiceID)
+		waMeURL := fmt.Sprintf("https://wa.me/%s?text=%s", invoice.Client.Phone, url.QueryEscape(message+"\n\n📎 Download Invoice PDF: "+pdfDownloadURL))
+		result = &services.WhatsAppResult{
+			Sent:    false,
+			URL:     waMeURL,
+			Message: message,
+			Phone:   invoice.Client.Phone,
+			PDFData: pdfData,
+			PDFName: pdfName,
+			HasPDF:  len(pdfData) > 0,
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"sent":     result.Sent,
+		"url":      result.URL,
+		"message":  result.Message,
+		"phone":    result.Phone,
+		"has_pdf":  result.HasPDF,
+		"pdf_name": result.PDFName,
+	})
 }

@@ -240,6 +240,35 @@ func (h *DashboardHandler) GetRecentInvoices(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"invoices": invoices, "total": total})
 }
 
+// GetHTMXInvoices returns invoices for HTMX partial rendering
+func (h *DashboardHandler) GetHTMXInvoices(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	status := c.Query("status", "")
+
+	filter := services.InvoiceFilter{
+		Offset: 0,
+		Limit:  10,
+	}
+
+	if status != "" {
+		filter.Status = status
+	}
+
+	invoices, _, err := h.invoiceService.GetUserInvoices(tenantID, filter)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Render the partial HTML
+	return c.Render("partials/invoice_list", fiber.Map{
+		"invoices": invoices,
+	})
+}
+
 // GetRecentClients returns recent clients
 func (h *DashboardHandler) GetRecentClients(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)

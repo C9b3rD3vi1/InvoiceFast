@@ -392,6 +392,65 @@ func (s *ReportService) GetTaxSummary(tenantID string, period string) (*TaxSumma
 	return summary, nil
 }
 
+type VATReport struct {
+	Period           string       `json:"period"`
+	OutputTax        float64      `json:"output_tax"`
+	InputTax         float64      `json:"input_tax"`
+	NetVAT           float64      `json:"net_vat"`
+	TaxableSales     float64      `json:"taxable_sales"`
+	ExemptSales      float64      `json:"exempt_sales"`
+	ZeroRatedSales   float64      `json:"zero_rated_sales"`
+	TotalSales       float64      `json:"total_sales"`
+	InvoiceCount     int          `json:"invoice_count"`
+	MonthlyBreakdown []MonthlyVAT `json:"monthly_breakdown"`
+}
+
+type MonthlyVAT struct {
+	Month        string  `json:"month"`
+	Sales        float64 `json:"sales"`
+	Tax          float64 `json:"tax"`
+	InvoiceCount int     `json:"invoice_count"`
+}
+
+func (s *ReportService) GetVATReport(tenantID, period string) (*VATReport, error) {
+	start, end := s.getDateRange(period)
+
+	report := &VATReport{Period: period}
+
+	var result struct {
+		Sales float64
+		Tax   float64
+		Count int64
+	}
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND created_at BETWEEN ? AND ? AND tax_rate > 0", tenantID, start, end).
+		Select("COALESCE(SUM(total), 0) as sales, COALESCE(SUM(tax_amount), 0) as tax, COUNT(*) as count").
+		Scan(&result)
+
+	report.OutputTax = result.Tax
+	report.TaxableSales = result.Sales
+	report.InvoiceCount = int(result.Count)
+
+	var zeroRated float64
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND created_at BETWEEN ? AND ? AND tax_rate = 0", tenantID, start, end).
+		Select("COALESCE(SUM(total), 0)").
+		Scan(&zeroRated)
+	report.ZeroRatedSales = zeroRated
+
+	var totalAll float64
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Select("COALESCE(SUM(total), 0)").
+		Scan(&totalAll)
+	report.TotalSales = totalAll
+
+	report.NetVAT = report.OutputTax
+	report.ExemptSales = report.TotalSales - report.TaxableSales - report.ZeroRatedSales
+
+	return report, nil
+}
+
 func (s *ReportService) ExportReport(tenantID, format, period string) ([]byte, error) {
 	overview, err := s.GetOverview(tenantID, period)
 	if err != nil {
@@ -408,4 +467,203 @@ func (s *ReportService) ExportReport(tenantID, format, period string) ([]byte, e
 	csv += fmt.Sprintf("Tax Collected,%.2f\n", overview.GSTCollected)
 
 	return []byte(csv), nil
+}
+
+type AgingReport struct {
+	Current      float64 `json:"current"`    // 0-30 days
+	Overdue30    float64 `json:"overdue_30"` // 31-60 days
+	Overdue60    float64 `json:"overdue_60"` // 61-90 days
+	Overdue90    float64 `json:"overdue_90"` // 91+ days
+	Total        float64 `json:"total"`
+	InvoiceCount int64   `json:"invoice_count"`
+}
+
+func (s *ReportService) GetAgingReport(tenantID string) (*AgingReport, error) {
+	report := &AgingReport{}
+	now := time.Now()
+
+	// Current (0-30 days overdue)
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status = 'overdue'", tenantID).
+		Where("due_date >= ?", now.AddDate(0, 0, -30)).
+		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Scan(&report.Current)
+
+	// Overdue 31-60 days
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status = 'overdue'", tenantID).
+		Where("due_date < ? AND due_date >= ?", now.AddDate(0, 0, -60), now.AddDate(0, 0, -90)).
+		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Scan(&report.Overdue30)
+
+	// Overdue 61-90 days
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status = 'overdue'", tenantID).
+		Where("due_date < ? AND due_date >= ?", now.AddDate(0, 0, -90), now.AddDate(0, 0, -120)).
+		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Scan(&report.Overdue60)
+
+	// Overdue 90+ days
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status = 'overdue'", tenantID).
+		Where("due_date < ?", now.AddDate(0, 0, -90)).
+		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Scan(&report.Overdue90)
+
+	report.Total = report.Current + report.Overdue30 + report.Overdue60 + report.Overdue90
+
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status = 'overdue'", tenantID).
+		Count(&report.InvoiceCount)
+
+	return report, nil
+}
+
+type IncomeStatement struct {
+	Revenue      float64 `json:"revenue"`
+	CostOfSales  float64 `json:"cost_of_sales"`
+	GrossProfit  float64 `json:"gross_profit"`
+	OperatingExp float64 `json:"operating_expenses"`
+	NetProfit    float64 `json:"net_profit"`
+	Period       string  `json:"period"`
+}
+
+func (s *ReportService) GetIncomeStatement(tenantID string, period string) (*IncomeStatement, error) {
+	start, end := s.getDateRange(period)
+	stmt := &IncomeStatement{Period: period}
+
+	// Revenue from completed payments
+	s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&stmt.Revenue)
+
+	// Cost of sales from expenses (cost of goods sold)
+	var costOfSales float64
+	s.db.Model(&models.Expense{}).
+		Where("tenant_id = ? AND status IN ('approved', 'paid') AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Joins("JOIN expense_categories ec ON expenses.category_id = ec.id").
+		Where("ec.name ILIKE ? OR ec.name ILIKE ? OR ec.name ILIKE ?", "%cost%", "%goods%", "%inventory%").
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&costOfSales)
+	stmt.CostOfSales = costOfSales
+
+	stmt.GrossProfit = stmt.Revenue - stmt.CostOfSales
+
+	// Operating expenses (all other expenses)
+	var operatingExp float64
+	s.db.Model(&models.Expense{}).
+		Where("tenant_id = ? AND status IN ('approved', 'paid') AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Joins("JOIN expense_categories ec ON expenses.category_id = ec.id").
+		Where("(ec.name NOT ILIKE ? AND ec.name NOT ILIKE ? AND ec.name NOT ILIKE ?) OR ec.id IS NULL", "%cost%", "%goods%", "%inventory%").
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&operatingExp)
+	stmt.OperatingExp = operatingExp
+
+	stmt.NetProfit = stmt.GrossProfit - stmt.OperatingExp
+
+	return stmt, nil
+}
+
+type ClientStatement struct {
+	ClientID     string              `json:"client_id"`
+	ClientName   string              `json:"client_name"`
+	StartDate    time.Time           `json:"start_date"`
+	EndDate      time.Time           `json:"end_date"`
+	OpeningBal   float64             `json:"opening_balance"`
+	ClosingBal   float64             `json:"closing_balance"`
+	Transactions []ClientTransaction `json:"transactions"`
+}
+
+type ClientTransaction struct {
+	Date        time.Time `json:"date"`
+	Type        string    `json:"type"` // invoice, payment, credit_note
+	Reference   string    `json:"reference"`
+	Description string    `json:"description"`
+	Debit       float64   `json:"debit"`
+	Credit      float64   `json:"credit"`
+	Balance     float64   `json:"balance"`
+}
+
+func (s *ReportService) GetClientStatement(tenantID, clientID string, startDate, endDate time.Time) (*ClientStatement, error) {
+	var client models.Client
+	if err := s.db.First(&client, "id = ? AND tenant_id = ?", clientID, tenantID).Error; err != nil {
+		return nil, fmt.Errorf("client not found: %w", err)
+	}
+
+	stmt := &ClientStatement{
+		ClientID:   clientID,
+		ClientName: client.Name,
+		StartDate:  startDate,
+		EndDate:    endDate,
+	}
+
+	// Get opening balance (before start date)
+	var openingInvoices, openingPayments float64
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND client_id = ? AND created_at < ?", tenantID, clientID, startDate).
+		Select("COALESCE(SUM(total), 0)").
+		Scan(&openingInvoices)
+	s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND invoice_id IN (SELECT id FROM invoices WHERE client_id = ?) AND created_at < ?", tenantID, clientID, startDate).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&openingPayments)
+	stmt.OpeningBal = openingInvoices - openingPayments
+
+	// Get invoices in period
+	var invoices []models.Invoice
+	s.db.Where("tenant_id = ? AND client_id = ? AND created_at BETWEEN ? AND ?", tenantID, clientID, startDate, endDate).
+		Order("created_at ASC").
+		Find(&invoices)
+
+	// Get payments in period
+	var payments []models.Payment
+	s.db.Joins("JOIN invoices ON invoices.id = payments.invoice_id").
+		Where("invoices.tenant_id = ? AND invoices.client_id = ? AND payments.created_at BETWEEN ? AND ?", tenantID, clientID, startDate, endDate).
+		Order("payments.created_at ASC").
+		Find(&payments)
+
+	// Merge and sort transactions
+	balance := stmt.OpeningBal
+	var transactions []ClientTransaction
+
+	for _, inv := range invoices {
+		balance += inv.Total
+		transactions = append(transactions, ClientTransaction{
+			Date:        inv.CreatedAt,
+			Type:        "invoice",
+			Reference:   inv.InvoiceNumber,
+			Description: fmt.Sprintf("Invoice %s", inv.InvoiceNumber),
+			Debit:       inv.Total,
+			Credit:      0,
+			Balance:     balance,
+		})
+	}
+
+	for _, pay := range payments {
+		balance -= pay.Amount
+		transactions = append(transactions, ClientTransaction{
+			Date:        pay.CreatedAt,
+			Type:        "payment",
+			Reference:   pay.Reference,
+			Description: fmt.Sprintf("Payment received"),
+			Debit:       0,
+			Credit:      pay.Amount,
+			Balance:     balance,
+		})
+	}
+
+	// Sort by date
+	for i := 0; i < len(transactions)-1; i++ {
+		for j := i + 1; j < len(transactions); j++ {
+			if transactions[j].Date.Before(transactions[i].Date) {
+				transactions[i], transactions[j] = transactions[j], transactions[i]
+			}
+		}
+	}
+
+	stmt.Transactions = transactions
+	stmt.ClosingBal = balance
+
+	return stmt, nil
 }

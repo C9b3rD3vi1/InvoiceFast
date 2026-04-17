@@ -7,14 +7,13 @@ import (
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
-	"invoicefast/internal/whatsapp"
 )
 
 // ReminderService handles automated payment reminders
 type ReminderService struct {
 	db           *database.DB
 	emailService *EmailService
-	waService    *whatsapp.WhatsAppService
+	waService    *WhatsAppService
 }
 
 // ReminderConfig for configuring reminder schedules
@@ -42,7 +41,7 @@ var defaultReminderConfig = ReminderConfig{
 }
 
 // NewReminderService creates a new reminder service
-func NewReminderService(db *database.DB, email *EmailService, wa *whatsapp.WhatsAppService) *ReminderService {
+func NewReminderService(db *database.DB, email *EmailService, wa *WhatsAppService) *ReminderService {
 	return &ReminderService{
 		db:           db,
 		emailService: email,
@@ -318,4 +317,32 @@ func (s *ReminderService) ResumeReminders(clientID string) error {
 	// In production, update client record
 	log.Printf("▶️ Resumed reminders for client %s", clientID)
 	return nil
+}
+
+// BulkSendOverdueReminders sends reminders to all clients with overdue invoices
+func (s *ReminderService) BulkSendOverdueReminders(tenantID string) (int, error) {
+	var invoices []models.Invoice
+
+	s.db.Where("tenant_id = ? AND status = 'overdue'", tenantID).Find(&invoices)
+
+	if len(invoices) == 0 {
+		return 0, nil
+	}
+
+	sent := 0
+	for _, inv := range invoices {
+		daysOverdue := int(time.Since(inv.DueDate).Hours() / 24)
+		if daysOverdue < 1 {
+			daysOverdue = 1
+		}
+
+		if err := s.sendOverdueReminder(&inv, daysOverdue); err != nil {
+			log.Printf("Error sending bulk reminder for %s: %v", inv.InvoiceNumber, err)
+			continue
+		}
+		sent++
+	}
+
+	log.Printf("Bulk sent %d reminders for tenant %s", sent, tenantID)
+	return sent, nil
 }

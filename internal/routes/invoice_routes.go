@@ -9,25 +9,40 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// InvoiceRoutes configures /api/v1/tenant/invoices
-func InvoiceRoutes(app *fiber.App, h *handlers.InvoiceHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/invoices")
 	group.Use(middleware.TenantMiddleware(authService, db))
 
 	group.Post("/", h.CreateInvoice)
 	group.Get("/", h.GetInvoices)
+
+	// STATIC ROUTES FIRST
+	group.Get("/stats", h.GetDashboardStats)
+	group.Get("/by-token/:token", h.GetInvoiceByToken)
+
+	// DYNAMIC ROUTES AFTER
 	group.Get("/:id", h.GetInvoice)
 	group.Put("/:id", h.UpdateInvoice)
+	group.Delete("/:id", h.DeleteInvoice)
+
 	group.Post("/:id/send", h.SendInvoice)
-	group.Post("/:id/cancel", h.CancelInvoice)
-	group.Get("/by-token/:token", h.GetInvoiceByToken)
-	group.Get("/:token/pdf", h.GetInvoicePDF)
+	group.Post("/:id/whatsapp", h.SendWhatsApp)
+	group.Post("/:id/reminder", h.SendReminder)
+
+	group.Post("/:id/attachments", h.CreateInvoiceAttachment)
+	group.Get("/:id/attachments", h.GetInvoiceAttachments)
+	group.Delete("/:id/attachments/:attachmentId", h.DeleteInvoiceAttachment)
+
+	group.Get("/:id/pdf", h.GetInvoicePDF)
+
+	group.Post("/:id/kra/submit", h.SubmitToKRA)
+	group.Post("/:id/payments", h.RecordPayment)
 
 	return group
 }
 
-// ClientRoutes configures /api/v1/tenant/clients
-func ClientRoutes(app *fiber.App, h *handlers.ClientHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+// ClientRoutes configures /api/v1/tenant/clients endpoints
+func ClientRoutes(app fiber.Router, h *handlers.ClientHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/clients")
 	group.Use(middleware.TenantMiddleware(authService, db))
 
@@ -36,7 +51,7 @@ func ClientRoutes(app *fiber.App, h *handlers.ClientHandler, authService *servic
 	group.Get("/:id", h.GetClient)
 	group.Put("/:id", h.UpdateClient)
 	group.Delete("/:id", h.DeleteClient)
-	group.Get("/:id/stats", h.GetClientStats)
+	group.Post("/:id/stats", h.GetClientStats)
 
 	return group
 }
