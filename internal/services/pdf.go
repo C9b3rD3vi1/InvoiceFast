@@ -53,11 +53,13 @@ type InvoicePDFData struct {
 }
 
 type InvoicePDFItem struct {
-	Description string
-	Quantity    float64
-	Unit        string
-	UnitPrice   float64
-	Total       float64
+	Description  string
+	Quantity     float64
+	Unit         string
+	UnitPrice    float64
+	TaxRate      float64
+	DiscountRate float64
+	Total        float64
 }
 
 // GenerateInvoicePDF generates a PDF-ready HTML for an invoice
@@ -66,11 +68,13 @@ func (s *PDFService) GenerateInvoiceHTML(invoice *models.Invoice, user *models.U
 	items := make([]InvoicePDFItem, len(invoice.Items))
 	for i, item := range invoice.Items {
 		items[i] = InvoicePDFItem{
-			Description: item.Description,
-			Quantity:    item.Quantity,
-			Unit:        item.Unit,
-			UnitPrice:   item.UnitPrice,
-			Total:       item.Total,
+			Description:  item.Description,
+			Quantity:     item.Quantity,
+			Unit:         item.Unit,
+			UnitPrice:    item.UnitPrice,
+			TaxRate:      item.TaxRate,
+			DiscountRate: item.DiscountRate,
+			Total:        item.Total,
 		}
 	}
 

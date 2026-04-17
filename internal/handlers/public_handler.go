@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"invoicefast/internal/models"
@@ -12,11 +13,12 @@ import (
 
 // PublicHandler handles public API endpoints
 type PublicHandler struct {
-	invoiceService  *services.InvoiceService
-	authService     *services.AuthService
-	paymentService  *services.PaymentService
-	mpesaService    *services.MPesaService
-	intasendService *services.IntasendService
+	invoiceService       *services.InvoiceService
+	authService          *services.AuthService
+	paymentService       *services.PaymentService
+	mpesaService         *services.MPesaService
+	intasendService      *services.IntasendService
+	emailTrackingService *services.EmailTrackingService
 }
 
 // NewPublicHandler creates a new PublicHandler
@@ -33,6 +35,24 @@ func NewPublicHandler(
 		paymentService:  payment,
 		mpesaService:    mpesa,
 		intasendService: intasend,
+	}
+}
+
+func NewPublicHandlerWithTracking(
+	invoice *services.InvoiceService,
+	auth *services.AuthService,
+	payment *services.PaymentService,
+	mpesa *services.MPesaService,
+	intasend *services.IntasendService,
+	emailTracking *services.EmailTrackingService,
+) *PublicHandler {
+	return &PublicHandler{
+		invoiceService:       invoice,
+		authService:          auth,
+		paymentService:       payment,
+		mpesaService:         mpesa,
+		intasendService:      intasend,
+		emailTrackingService: emailTracking,
 	}
 }
 
@@ -163,4 +183,50 @@ func (h *PublicHandler) GetPricing(c *fiber.Ctx) error {
 			{"name": "Pro", "price": 2900, "features": []string{"Unlimited invoices", "Priority support", "KRA integration"}},
 		},
 	})
+}
+
+// TrackOpen - tracking pixel for email open
+func (h *PublicHandler) TrackOpen(c *fiber.Ctx) error {
+	if h.emailTrackingService == nil {
+		return c.Status(fiber.StatusNotImplemented).SendString("")
+	}
+
+	trackingID := c.Params("trackingId")
+	if trackingID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("")
+	}
+
+	userAgent := c.Get("User-Agent")
+	ipAddress := c.IP()
+
+	if err := h.emailTrackingService.TrackOpen(trackingID, userAgent, ipAddress); err != nil {
+		log.Printf("Email open tracking error: %v", err)
+	}
+
+	// Return 1x1 transparent GIF
+	c.Set("Content-Type", "image/gif")
+	c.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	return c.SendString("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+}
+
+// TrackClick - redirect to original URL after tracking click
+func (h *PublicHandler) TrackClick(c *fiber.Ctx) error {
+	if h.emailTrackingService == nil {
+		return c.Status(fiber.StatusNotImplemented).Redirect("/")
+	}
+
+	linkID := c.Params("linkId")
+	trackingID := c.Params("trackingId")
+
+	if linkID == "" || trackingID == "" {
+		return c.Status(fiber.StatusBadRequest).Redirect("/")
+	}
+
+	originalURL, err := h.emailTrackingService.TrackClick(linkID, trackingID)
+	if err != nil {
+		log.Printf("Email click tracking error: %v", err)
+		return c.Status(fiber.StatusNotFound).Redirect("/")
+	}
+
+	return c.Redirect(originalURL, fiber.StatusFound)
 }

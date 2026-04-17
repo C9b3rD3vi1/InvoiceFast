@@ -20,6 +20,10 @@ func ReportRoutes(app *fiber.App, h *handlers.ReportHandler, authService *servic
 	group.Get("/payments", h.GetPayments)
 	group.Get("/clients", h.GetClients)
 	group.Get("/tax", h.GetTax)
+	group.Get("/vat", h.GetVATReport)
+	group.Get("/aging", h.GetAging)
+	group.Get("/income-statement", h.GetIncomeStatement)
+	group.Get("/client/:clientID/statement", h.GetClientStatement)
 	group.Get("/export", h.Export)
 
 	return group

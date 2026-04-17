@@ -27,6 +27,10 @@ func PublicRoutes(app *fiber.App, h *handlers.PublicHandler) fiber.Router {
 	public.Get("/invoice/:token", h.ServePortal)
 	public.Get("/invoice/:token/success", h.ServeSuccess)
 
+	// Email tracking endpoints (public - no auth required)
+	public.Get("/api/track/open/:trackingId", h.TrackOpen)
+	public.Get("/api/track/click/:linkId/:trackingId", h.TrackClick)
+
 	return public
 }
 

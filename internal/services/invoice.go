@@ -14,7 +14,6 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
-	"invoicefast/internal/whatsapp"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -41,7 +40,7 @@ var validCurrencies = map[string]bool{
 type InvoiceService struct {
 	db              *database.DB
 	emailService    *EmailService
-	whatsappService *whatsapp.WhatsAppService
+	whatsappService *WhatsAppService
 	exchangeService *ExchangeRateService
 	kraService      *KRAService
 	cfg             *config.Config
@@ -55,7 +54,7 @@ func (s *InvoiceService) GetDB() *gorm.DB {
 	return s.db.DB
 }
 
-func NewInvoiceServiceWithNotifications(db *database.DB, email *EmailService, whatsapp *whatsapp.WhatsAppService, cfg *config.Config) *InvoiceService {
+func NewInvoiceServiceWithNotifications(db *database.DB, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
 	return &InvoiceService{
 		db:              db,
 		emailService:    email,
@@ -71,7 +70,7 @@ func NewInvoiceServiceWithExchange(db *database.DB, exchange *ExchangeRateServic
 	}
 }
 
-func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *whatsapp.WhatsAppService, cfg *config.Config) *InvoiceService {
+func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
 	return &InvoiceService{
 		db:              db,
 		exchangeService: exchange,
@@ -82,7 +81,7 @@ func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, em
 }
 
 // NewInvoiceServiceWithKRAService creates invoice service with KRA integration
-func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *whatsapp.WhatsAppService, kra *KRAService, cfg *config.Config) *InvoiceService {
+func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, kra *KRAService, cfg *config.Config) *InvoiceService {
 	return &InvoiceService{
 		db:              db,
 		exchangeService: exchange,
@@ -134,17 +133,42 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 			item.Description = "Item" // Default empty description
 		}
 
-		lineTotal := item.Quantity * item.UnitPrice
+		// Get item-level tax and discount rates (default to invoice level if not specified)
+		itemTaxRate := item.TaxRate
+		if itemTaxRate < 0 {
+			itemTaxRate = 0
+		}
+		if itemTaxRate > 100 {
+			itemTaxRate = 100
+		}
+		itemDiscountRate := item.DiscountRate
+		if itemDiscountRate < 0 {
+			itemDiscountRate = 0
+		}
+		if itemDiscountRate > 100 {
+			itemDiscountRate = 100
+		}
+
+		// Calculate line totals
+		lineSubtotal := item.Quantity * item.UnitPrice
+		itemDiscountAmt := lineSubtotal * (itemDiscountRate / 100)
+		lineSubtotalAfterDiscount := lineSubtotal - itemDiscountAmt
+		itemTaxAmt := lineSubtotalAfterDiscount * (itemTaxRate / 100)
+		lineTotal := lineSubtotalAfterDiscount + itemTaxAmt
 
 		subtotal += lineTotal
 		items = append(items, models.InvoiceItem{
-			ID:          uuid.New().String(),
-			Description: strings.TrimSpace(item.Description),
-			Quantity:    item.Quantity,
-			UnitPrice:   item.UnitPrice,
-			Unit:        item.Unit,
-			Total:       lineTotal,
-			SortOrder:   i,
+			ID:           uuid.New().String(),
+			Description:  strings.TrimSpace(item.Description),
+			Quantity:     item.Quantity,
+			UnitPrice:    item.UnitPrice,
+			Unit:         item.Unit,
+			TaxRate:      itemTaxRate,
+			TaxAmount:    math.Round(itemTaxAmt*100) / 100,
+			DiscountRate: itemDiscountRate,
+			DiscountAmt:  math.Round(itemDiscountAmt*100) / 100,
+			Total:        math.Round(lineTotal*100) / 100,
+			SortOrder:    i,
 		})
 	}
 
@@ -210,9 +234,9 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		MagicTokenExpiresAt: sql.NullTime{Time: time.Now().AddDate(0, 3, 0), Valid: true}, // 3 months expiry
 	}
 
-	// Add title to notes if provided
+	// Set title if provided
 	if req.Title != "" {
-		invoice.Notes = req.Title + "\n\n" + invoice.Notes
+		invoice.Title = req.Title
 	}
 
 	// Use transaction for data integrity
@@ -267,7 +291,7 @@ func (s *InvoiceService) GetInvoiceByID(tenantID, invoiceID string) (*models.Inv
 
 	var invoice models.Invoice
 	err := s.db.Scopes(database.TenantFilter(tenantID)).
-		Preload("Client").Preload("Items").Preload("Payments").
+		Preload("User").Preload("Client").Preload("Items").Preload("Payments").
 		First(&invoice, "id = ?", invoiceID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -276,6 +300,18 @@ func (s *InvoiceService) GetInvoiceByID(tenantID, invoiceID string) (*models.Inv
 		return nil, fmt.Errorf("failed to fetch invoice: %w", err)
 	}
 	return &invoice, nil
+}
+
+// validateID prevents using tenant ID as invoice ID
+func (s *InvoiceService) validateID(invoiceID, tenantID string) error {
+	if invoiceID == "" {
+		return ErrInvoiceNotFound
+	}
+	// If the invoice ID matches the tenant ID, this is a mismatch
+	if invoiceID == tenantID {
+		return ErrInvoiceNotFound
+	}
+	return nil
 }
 
 // GetInvoiceByMagicToken retrieves an invoice by magic token (tenant-bound)
@@ -425,9 +461,22 @@ func (s *InvoiceService) UpdateInvoice(tenantID, invoiceID string, req *UpdateIn
 		return nil, err
 	}
 
-	// Edge case: Can only edit draft invoices
-	if invoice.Status != models.InvoiceStatusDraft {
+	// Edge case: Can only edit draft invoices unless updating status
+	if invoice.Status != models.InvoiceStatusDraft && req.Status == nil {
 		return nil, ErrCannotEditPaid
+	}
+
+	// Update status if provided
+	if req.Status != nil {
+		newStatus := models.InvoiceStatus(*req.Status)
+		// Validate status transition
+		if invoice.Status == models.InvoiceStatusDraft && (newStatus == models.InvoiceStatusSent || newStatus == models.InvoiceStatusCancelled) {
+			invoice.Status = newStatus
+		} else if newStatus == models.InvoiceStatusCancelled && invoice.Status != models.InvoiceStatusPaid {
+			invoice.Status = newStatus
+		} else if newStatus == models.InvoiceStatusPaid {
+			invoice.Status = newStatus
+		}
 	}
 
 	// Update fields safely
@@ -445,6 +494,9 @@ func (s *InvoiceService) UpdateInvoice(tenantID, invoiceID string, req *UpdateIn
 		if validCurrencies[currency] {
 			invoice.Currency = currency
 		}
+	}
+	if req.Title != nil {
+		invoice.Title = *req.Title
 	}
 	if req.TaxRate != nil {
 		invoice.TaxRate = math.Max(0, math.Min(100, *req.TaxRate))
@@ -507,17 +559,43 @@ func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, items []
 			if item.Quantity < 0 {
 				return ErrInvalidQuantity
 			}
-			lineTotal := item.Quantity * item.UnitPrice
+			// Get item-level tax and discount rates
+			itemTaxRate := item.TaxRate
+			if itemTaxRate < 0 {
+				itemTaxRate = 0
+			}
+			if itemTaxRate > 100 {
+				itemTaxRate = 100
+			}
+			itemDiscountRate := item.DiscountRate
+			if itemDiscountRate < 0 {
+				itemDiscountRate = 0
+			}
+			if itemDiscountRate > 100 {
+				itemDiscountRate = 100
+			}
+
+			// Calculate line totals
+			lineSubtotal := item.Quantity * item.UnitPrice
+			itemDiscountAmt := lineSubtotal * (itemDiscountRate / 100)
+			lineSubtotalAfterDiscount := lineSubtotal - itemDiscountAmt
+			itemTaxAmt := lineSubtotalAfterDiscount * (itemTaxRate / 100)
+			lineTotal := lineSubtotalAfterDiscount + itemTaxAmt
+
 			subtotal += lineTotal
 			newItems = append(newItems, models.InvoiceItem{
-				ID:          uuid.New().String(),
-				InvoiceID:   invoiceID,
-				Description: strings.TrimSpace(item.Description),
-				Quantity:    item.Quantity,
-				UnitPrice:   item.UnitPrice,
-				Unit:        item.Unit,
-				Total:       lineTotal,
-				SortOrder:   i,
+				ID:           uuid.New().String(),
+				InvoiceID:    invoiceID,
+				Description:  strings.TrimSpace(item.Description),
+				Quantity:     item.Quantity,
+				UnitPrice:    item.UnitPrice,
+				Unit:         item.Unit,
+				TaxRate:      itemTaxRate,
+				TaxAmount:    math.Round(itemTaxAmt*100) / 100,
+				DiscountRate: itemDiscountRate,
+				DiscountAmt:  math.Round(itemDiscountAmt*100) / 100,
+				Total:        math.Round(lineTotal*100) / 100,
+				SortOrder:    i,
 			})
 		}
 
@@ -745,8 +823,24 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 
 	// Save payment
 	payment.InvoiceID = invoiceID
+	// Ensure status is completed for manually recorded payments
+	payment.Status = models.PaymentStatusCompleted
+
+	// Generate new UUID to avoid any constraint conflicts
+	if payment.ID == "" {
+		payment.ID = uuid.New().String()
+	}
+
 	if err := s.db.Create(payment).Error; err != nil {
-		return fmt.Errorf("failed to record payment: %w", err)
+		// If unique constraint error, try with a new ID
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			payment.ID = uuid.New().String()
+			if err := s.db.Create(payment).Error; err != nil {
+				return fmt.Errorf("failed to record payment: %w", err)
+			}
+		} else {
+			return fmt.Errorf("failed to record payment: %w", err)
+		}
 	}
 
 	// Update invoice
@@ -805,6 +899,29 @@ func (s *InvoiceService) CancelInvoice(tenantID, invoiceID, userID string) error
 	invoice.Status = models.InvoiceStatusCancelled
 	if err := s.db.Save(invoice).Error; err != nil {
 		return fmt.Errorf("failed to cancel invoice: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteInvoice permanently deletes an invoice (tenant-scoped)
+func (s *InvoiceService) DeleteInvoice(tenantID, invoiceID string) error {
+	if tenantID == "" {
+		return ErrTenantRequired
+	}
+
+	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return err
+	}
+
+	// Delete related records first
+	s.db.Where("invoice_id = ?", invoiceID).Delete(&models.Payment{})
+	s.db.Where("invoice_id = ?", invoiceID).Delete(&models.InvoiceItem{})
+
+	// Delete invoice
+	if err := s.db.Delete(invoice).Error; err != nil {
+		return fmt.Errorf("failed to delete invoice: %w", err)
 	}
 
 	return nil
@@ -882,6 +999,7 @@ func (s *InvoiceService) GetDashboardStats(tenantID, period string) (*DashboardS
 	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusPaid).Count(&stats.PaidCount)
 	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusOverdue).Count(&stats.OverdueCount)
 	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusPartiallyPaid).Count(&stats.PartialCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusCancelled).Count(&stats.CancelledCount)
 
 	// Total clients
 	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Client{}).Count(&stats.TotalClients)
@@ -937,6 +1055,55 @@ func (s *InvoiceService) GetDashboardStats(tenantID, period string) (*DashboardS
 		Order("created_at DESC").
 		Limit(5).
 		Find(&stats.RecentInvoices)
+
+	return &stats, nil
+}
+
+// GetInvoiceStats returns invoice-specific statistics for the invoices list page
+func (s *InvoiceService) GetInvoiceStats(tenantID string) (*InvoiceStats, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+
+	var stats InvoiceStats
+
+	// Total invoices count
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Count(&stats.TotalInvoices)
+
+	// Count by status
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusDraft).Count(&stats.DraftCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusSent).Count(&stats.SentCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusViewed).Count(&stats.ViewedCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusPaid).Count(&stats.PaidCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusPartiallyPaid).Count(&stats.PartiallyPaidCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusOverdue).Count(&stats.OverdueCount)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusCancelled).Count(&stats.CancelledCount)
+
+	// Total value by status
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusPaid).Select("COALESCE(SUM(total), 0)").Scan(&stats.TotalPaid)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status IN ?", []string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed), string(models.InvoiceStatusPartiallyPaid), string(models.InvoiceStatusOverdue)}).Select("COALESCE(SUM(total - paid_amount), 0)").Scan(&stats.TotalOutstanding)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusOverdue).Select("COALESCE(SUM(total - paid_amount), 0)").Scan(&stats.TotalOverdue)
+
+	// Calculate totals
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Select("COALESCE(SUM(total), 0)").Scan(&stats.TotalValue)
+
+	// Overdue invoices count
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("status = ?", models.InvoiceStatusOverdue).Count(&stats.OverdueInvoicesCount)
+
+	// Recently created invoices (last 7 days)
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("created_at >= ?", sevenDaysAgo).Count(&stats.Last7DaysInvoices)
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("created_at >= ?", sevenDaysAgo).Select("COALESCE(SUM(total), 0)").Scan(&stats.Last7DaysValue)
+
+	// Average invoice value
+	if stats.TotalInvoices > 0 {
+		stats.AverageInvoiceValue = stats.TotalValue / float64(stats.TotalInvoices)
+	}
+
+	// Collection rate
+	if stats.TotalValue > 0 {
+		stats.CollectionRate = (stats.TotalPaid / stats.TotalValue) * 100
+	}
 
 	return &stats, nil
 }
@@ -1093,6 +1260,7 @@ func (s *InvoiceService) renderInvoiceHTML(invoice *models.Invoice) (string, err
 	// Replace placeholders with actual data
 	html := template.HTML
 	html = strings.ReplaceAll(html, "{{.InvoiceNumber}}", invoice.InvoiceNumber)
+	html = strings.ReplaceAll(html, "{{.Title}}", invoice.Title)
 	html = strings.ReplaceAll(html, "{{.CompanyName}}", invoice.User.CompanyName)
 	html = strings.ReplaceAll(html, "{{.ClientName}}", invoice.Client.Name)
 	html = strings.ReplaceAll(html, "{{.Total}}", fmt.Sprintf("%.2f", invoice.Total))
@@ -1239,9 +1407,11 @@ type InvoiceItemRequest struct {
 }
 
 type UpdateInvoiceRequest struct {
+	Status     *string    `json:"status"`
 	DueDate    *time.Time `json:"due_date"`
 	Reference  *string    `json:"reference"`
 	Currency   *string    `json:"currency"`
+	Title      *string    `json:"title"`
 	TaxRate    *float64   `json:"tax_rate"`
 	Discount   *float64   `json:"discount"`
 	Notes      *string    `json:"notes"`
@@ -1259,6 +1429,28 @@ type InvoiceFilter struct {
 	Limit    int
 }
 
+type InvoiceStats struct {
+	TotalValue           float64          `json:"total_value"`
+	DraftCount           int64            `json:"draft_count"`
+	SentCount            int64            `json:"sent_count"`
+	PaidCount            int64            `json:"paid_count"`
+	TotalPaid            float64          `json:"total_paid"`
+	ViewedCount          int64            `json:"viewed_count"`
+	CancelledCount       int64            `json:"cancelled_count"`
+	Last7DaysInvoices    int64            `json:"last_seven_days_invoices"`
+	OverdueCount         int64            `json:"overdue_count"`
+	PartiallyPaidCount   int64            `json:"partially_paid_count"`
+	OverdueInvoicesCount int64            `json:"overdue_invoice_count"`
+	AverageInvoiceValue  float64          `json:"average_invoice_value"`
+	CollectionRate       float64          `json:"collection_rate"`
+	TotalOutstanding     float64          `json:"total_outstanding"`
+	TotalOverdue         float64          `json:"total_overdue"`
+	Last7DaysValue       float64          `json:"last_seven_days_value"`
+	TotalClients         int64            `json:"total_clients"`
+	TotalInvoices        int64            `json:"total_invoices"`
+	RecentInvoices       []models.Invoice `json:"recent_invoices"`
+}
+
 type DashboardStats struct {
 	TotalRevenue          float64          `json:"total_revenue"`
 	RevenueThisPeriod     float64          `json:"revenue_this_period"`
@@ -1269,6 +1461,7 @@ type DashboardStats struct {
 	PaidCount             int64            `json:"paid_count"`
 	OverdueCount          int64            `json:"overdue_count"`
 	PartialCount          int64            `json:"partial_count"`
+	CancelledCount        int64            `json:"cancelled_count"`
 	TotalClients          int64            `json:"total_clients"`
 	TotalInvoices         int64            `json:"total_invoices"`
 	RecentInvoices        []models.Invoice `json:"recent_invoices"`

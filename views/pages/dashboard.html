@@ -1,33 +1,237 @@
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
     <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-slate-500 text-sm font-medium">Total Invoices</h3>
-        <p class="text-3xl font-bold text-slate-900 mt-1">{{.Stats.TotalInvoices}}</p>
+        <h3 class="text-slate-500 text-sm font-medium">Total Revenue</h3>
+        <p class="text-3xl font-bold text-slate-900 mt-1">{{formatCurrency .Stats.TotalRevenue}}</p>
     </div>
     <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-slate-500 text-sm font-medium">Paid</h3>
-        <p class="text-3xl font-bold text-green-600 mt-1">{{.Stats.PaidInvoices}}</p>
+        <h3 class="text-slate-500 text-sm font-medium">This Period</h3>
+        <p class="text-3xl font-bold text-blue-600 mt-1">{{formatCurrency .Stats.RevenueThisPeriod}}</p>
     </div>
     <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-slate-500 text-sm font-medium">Pending</h3>
-        <p class="text-3xl font-bold text-yellow-600 mt-1">{{.Stats.PendingInvoices}}</p>
+        <h3 class="text-slate-500 text-sm font-medium">Outstanding</h3>
+        <p class="text-3xl font-bold text-orange-600 mt-1">{{formatCurrency .Stats.Outstanding}}</p>
     </div>
     <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-slate-500 text-sm font-medium">Overdue</h3>
-        <p class="text-3xl font-bold text-red-600 mt-1">{{.Stats.OverdueInvoices}}</p>
+        <h3 class="text-slate-500 text-sm font-medium">Total Clients</h3>
+        <p class="text-3xl font-bold text-slate-900 mt-1">{{.Stats.TotalClients}}</p>
     </div>
 </div>
 
-<div class="bg-white p-6 rounded-lg shadow">
-    <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-bold text-slate-900">Recent Invoices</h2>
-        <a href="/dashboard/invoices" class="text-trust hover:underline text-sm font-medium">View all</a>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Draft Invoices</h3>
+        <p class="text-3xl font-bold text-slate-400 mt-1">{{.Stats.DraftCount}}</p>
     </div>
-    <div id="invoice-list" hx-get="/htmx/invoices?status={{.Status}}" hx-trigger="load" hx-swap="innerHTML">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Sent Invoices</h3>
+        <p class="text-3xl font-bold text-blue-600 mt-1">{{.Stats.SentCount}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Paid Invoices</h3>
+        <p class="text-3xl font-bold text-green-600 mt-1">{{.Stats.PaidCount}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Overdue Invoices</h3>
+        <p class="text-3xl font-bold text-red-600 mt-1">{{.Stats.OverdueCount}}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Avg Invoice Value</h3>
+        <p class="text-3xl font-bold text-slate-900 mt-1">{{formatCurrency .Stats.AvgInvoiceValue}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Collection Rate</h3>
+        <p class="text-3xl font-bold text-green-600 mt-1">{{formatPercent .Stats.CollectionRate}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Avg Payment Days</h3>
+        <p class="text-3xl font-bold text-slate-900 mt-1">{{.Stats.AvgPaymentDays}}</p>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium">Total Invoices</h3>
+        <p class="text-3xl font-bold text-slate-900 mt-1">{{.Stats.TotalInvoices}}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium mb-4">Revenue Growth</h3>
+        <div class="flex items-center justify-between">
+            <p class="text-2xl font-bold text-slate-900">{{formatPercent .Stats.RevenueGrowth}}</p>
+            <div class="text-right">
+                <div class="text-sm text-slate-500">vs previous period</div>
+                {{if gt .Stats.RevenueGrowth 0}}
+                <span class="text-green-600 text-sm">↑</span>
+                {{else if lt .Stats.RevenueGrowth 0}}
+                <span class="text-red-600 text-sm">↓</span>
+                {{else}}
+                <span class="text-slate-500 text-sm">→</span>
+                {{end}}
+            </div>
+        </div>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium mb-4">Invoice Growth</h3>
+        <div class="flex items-center justify-between">
+            <p class="text-2xl font-bold text-slate-900">{{formatPercent .Stats.InvoiceGrowth}}</p>
+            <div class="text-right">
+                <div class="text-sm text-slate-500">vs previous period</div>
+                {{if gt .Stats.InvoiceGrowth 0}}
+                <span class="text-green-600 text-sm">↑</span>
+                {{else if lt .Stats.InvoiceGrowth 0}}
+                <span class="text-red-600 text-sm">↓</span>
+                {{else}}
+                <span class="text-slate-500 text-sm">→</span>
+                {{end}}
+            </div>
+        </div>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium mb-4">Client Growth</h3>
+        <div class="flex items-center justify-between">
+            <p class="text-2xl font-bold text-slate-900">{{formatPercent .Stats.ClientGrowth}}</p>
+            <div class="text-right">
+                <div class="text-sm text-slate-500">vs previous period</div>
+                {{if gt .Stats.ClientGrowth 0}}
+                <span class="text-green-600 text-sm">↑</span>
+                {{else if lt .Stats.ClientGrowth 0}}
+                <span class="text-red-600 text-sm">↓</span>
+                {{else}}
+                <span class="text-slate-500 text-sm">→</span>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium mb-4">Monthly Revenue</h3>
+        <canvas id="revenueChart" width="400" height="200"></canvas>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-slate-500 text-sm font-medium mb-4">Daily Revenue</h3>
+        <canvas id="dailyRevenueChart" width="400" height="200"></canvas>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-slate-900">Recent Invoices</h2>
+            <a href="/dashboard/invoices" class="text-trust hover:underline text-sm font-medium">View all</a>
+        </div>
+<div id="invoice-list" hx-get="/htmx/invoices?status={{.Status}}" hx-trigger="load" hx-swap="innerHTML">
         <div class="flex items-center justify-center py-8">
             <svg class="animate-spin h-8 w-8 text-trust" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Charts
+    const monthlyRevenueCtx = document.getElementById('revenueChart').getContext('2d');
+    const monthlyRevenueChart = new Chart(monthlyRevenueCtx, {
+        type: 'line',
+        data: {
+            labels: {{.Stats.MonthlyRevenue}},
+            datasets: [{
+                label: 'Revenue',
+                data: {{.Stats.MonthlyRevenue}},
+                borderColor: '#0277BD',
+                backgroundColor: 'rgba(2, 119, 189, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'KES ' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    const dailyRevenueCtx = document.getElementById('dailyRevenueChart').getContext('2d');
+    const dailyRevenueChart = new Chart(dailyRevenueCtx, {
+        type: 'bar',
+        data: {
+            labels: {{.Stats.DailyRevenue}},
+            datasets: [{
+                label: 'Daily Revenue',
+                data: {{.Stats.DailyRevenue}},
+                backgroundColor: '#0277BD',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'KES ' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-slate-900">Top Paying Clients</h2>
+            <a href="/clients" class="text-trust hover:underline text-sm font-medium">View all</a>
+        </div>
+        <div id="top-clients" class="space-y-3">
+            {{range .Stats.TopPayingClients}}
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-trust rounded-full flex items-center justify-center">
+                        <span class="text-white text-sm font-medium">{{substr .ClientName 0 1 | upper}}</span>
+                    </div>
+                    <div>
+                        <p class="font-medium text-slate-900">{{.ClientName}}</p>
+                        <p class="text-sm text-slate-500">{{.InvoiceCount}} invoices</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="font-bold text-slate-900">{{formatCurrency .TotalPaid}}</p>
+                </div>
+            </div>
+            {{else}}
+            <div class="text-center py-8">
+                <p class="text-slate-500">No client data available</p>
+            </div>
+            {{end}}
         </div>
     </div>
 </div>

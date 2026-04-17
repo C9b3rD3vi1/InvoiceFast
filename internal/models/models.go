@@ -39,21 +39,24 @@ type User struct {
 
 // Client represents a customer/client of the user
 type Client struct {
-	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID     string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	UserID       string    `json:"user_id" gorm:"type:uuid;index;not null"` // Legacy - for backward compat
-	Name         string    `json:"name" gorm:"not null"`
-	Email        string    `json:"email"`
-	Phone        string    `json:"phone"`
-	Address      string    `json:"address"`
-	KRAPIN       string    `json:"kra_pin"` // Encrypted - stored as ciphertext
-	Currency     string    `json:"currency" gorm:"default:'KES'"`
-	PaymentTerms int       `json:"payment_terms" gorm:"default:30"` // days
-	Notes        string    `json:"notes"`
-	TotalBilled  float64   `json:"total_billed" gorm:"default:0"`
-	TotalPaid    float64   `json:"total_paid" gorm:"default:0"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                   string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID             string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID               string     `json:"user_id" gorm:"type:uuid;index;not null"` // Legacy - for backward compat
+	Name                 string     `json:"name" gorm:"not null"`
+	Email                string     `json:"email"`
+	Phone                string     `json:"phone"`
+	Address              string     `json:"address"`
+	KRAPIN               string     `json:"kra_pin"` // Encrypted - stored as ciphertext
+	Currency             string     `json:"currency" gorm:"default:'KES'"`
+	PaymentTerms         int        `json:"payment_terms" gorm:"default:30"`               // days (Net 15, Net 30, Net 60, etc.)
+	DefaultPaymentMethod string     `json:"default_payment_method" gorm:"default:'mpesa'"` // mpesa, bank, card, cash
+	InternalNotes        string     `json:"internal_notes"`                                // Private notes visible only to team
+	Notes                string     `json:"notes"`                                         // Client-facing notes
+	TotalBilled          float64    `json:"total_billed" gorm:"default:0"`
+	TotalPaid            float64    `json:"total_paid" gorm:"default:0"`
+	LastPaymentDate      *time.Time `json:"last_payment_date"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 
 	Invoices []Invoice `json:"-" gorm:"foreignKey:ClientID"`
 }
@@ -69,19 +72,31 @@ const (
 	InvoiceStatusPaid          InvoiceStatus = "paid"
 	InvoiceStatusOverdue       InvoiceStatus = "overdue"
 	InvoiceStatusCancelled     InvoiceStatus = "cancelled"
+	InvoiceStatusVoid          InvoiceStatus = "void"
+	InvoiceStatusCreditNote    InvoiceStatus = "credit_note"
+	InvoiceStatusDebitNote     InvoiceStatus = "debit_note"
 )
 
 // Invoice represents an invoice
 type Invoice struct {
-	ID                  string        `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID            string        `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	UserID              string        `json:"user_id" gorm:"type:uuid;index;not null"`
-	ClientID            string        `json:"client_id" gorm:"type:uuid;index;not null"`
-	InvoiceNumber       string        `json:"invoice_number" gorm:"uniqueIndex"`
-	Reference           string        `json:"reference"`
-	Currency            string        `json:"currency" gorm:"default:'KES'"`
-	KESEquivalent       float64       `json:"kes_equivalent" gorm:"default:0"` // Dual display: KES value
-	ExchangeRate        float64       `json:"exchange_rate" gorm:"default:1"`  // Rate used for conversion
+	ID                string  `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID          string  `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID            string  `json:"user_id" gorm:"type:uuid;index;not null"`
+	ClientID          string  `json:"client_id" gorm:"type:uuid;index;not null"`
+	InvoiceNumber     string  `json:"invoice_number" gorm:"uniqueIndex"`
+	Reference         string  `json:"reference"`
+	Title             string  `json:"title"` // Invoice title/subject
+	Currency          string  `json:"currency" gorm:"default:'KES'"`
+	KESEquivalent     float64 `json:"kes_equivalent" gorm:"default:0"`
+	ExchangeRate      float64 `json:"exchange_rate" gorm:"default:1"`
+	InvoiceType       string  `json:"invoice_type" gorm:"default:'invoice'"`      // invoice, credit_note, debit_note
+	OriginalInvoiceID string  `json:"original_invoice_id" gorm:"type:uuid;index"` // For credit/debit notes
+
+	// Recurring Invoice
+	IsRecurring         bool          `json:"is_recurring" gorm:"default:false"`
+	RecurringFrequency  string        `json:"recurring_frequency"` // daily, weekly, monthly, quarterly, yearly
+	RecurringNextDate   time.Time     `json:"recurring_next_date"`
+	RecurringParentID   string        `json:"recurring_parent_id" gorm:"type:uuid;index"` // Child invoice from recurring
 	Subtotal            float64       `json:"subtotal" gorm:"not null"`
 	TaxRate             float64       `json:"tax_rate" gorm:"default:0"`
 	TaxAmount           float64       `json:"tax_amount" gorm:"default:0"`
@@ -114,15 +129,19 @@ type Invoice struct {
 
 // InvoiceItem represents a line item in an invoice
 type InvoiceItem struct {
-	ID          string    `json:"id" gorm:"type:uuid;primaryKey"`
-	InvoiceID   string    `json:"invoice_id" gorm:"type:uuid;index;not null"`
-	Description string    `json:"description" gorm:"not null"`
-	Quantity    float64   `json:"quantity" gorm:"default:1"`
-	UnitPrice   float64   `json:"unit_price" gorm:"not null"`
-	Unit        string    `json:"unit"` // e.g., "hours", "items", "pieces"
-	Total       float64   `json:"total" gorm:"not null"`
-	SortOrder   int       `json:"sort_order" gorm:"default:0"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
+	InvoiceID    string    `json:"invoice_id" gorm:"type:uuid;index;not null"`
+	Description  string    `json:"description" gorm:"not null"`
+	Quantity     float64   `json:"quantity" gorm:"default:1"`
+	UnitPrice    float64   `json:"unit_price" gorm:"not null"`
+	Unit         string    `json:"unit"` // e.g., "hours", "items", "pieces"
+	TaxRate      float64   `json:"tax_rate" gorm:"default:0"`
+	TaxAmount    float64   `json:"tax_amount" gorm:"default:0"`
+	DiscountRate float64   `json:"discount_rate" gorm:"default:0"`
+	DiscountAmt  float64   `json:"discount_amount" gorm:"default:0"`
+	Total        float64   `json:"total" gorm:"not null"`
+	SortOrder    int       `json:"sort_order" gorm:"default:0"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // PaymentMethod represents the payment method
@@ -149,7 +168,7 @@ const (
 // Payment represents a payment for an invoice
 type Payment struct {
 	ID            string        `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID      string        `json:"tenant_id" gorm:"type:uuid;index;not null;uniqueIndex:idx_payment_tenant_ref"`
+	TenantID      string        `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID        string        `json:"user_id" gorm:"type:uuid;index"`
 	InvoiceID     string        `json:"invoice_id" gorm:"type:uuid;index;not null"`
 	Amount        float64       `json:"amount" gorm:"not null"`
@@ -180,6 +199,21 @@ type Reminder struct {
 	SentAt      sql.NullTime `json:"sent_at"`
 	Error       string       `json:"error"`
 	CreatedAt   time.Time    `json:"created_at"`
+}
+
+// UnallocatedPayment represents a payment that couldn't be matched to an invoice
+type UnallocatedPayment struct {
+	ID          string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID    string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	Amount      float64    `json:"amount" gorm:"not null"`
+	Currency    string     `json:"currency" gorm:"default:'KES'"`
+	Reference   string     `json:"reference" gorm:"index"` // Payment reference (e.g., M-Pesa receipt)
+	PhoneNumber string     `json:"phone_number"`
+	Notes       string     `json:"notes"` // Admin notes
+	IsMatched   bool       `json:"is_matched" gorm:"default:false"`
+	MatchedAt   *time.Time `json:"matched_at"`
+	MatchedBy   string     `json:"matched_by"` // User ID who matched
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // Template represents an invoice template
@@ -347,18 +381,19 @@ type AutomationLog struct {
 
 // SubscriptionPlan represents a subscription plan
 type SubscriptionPlan struct {
-	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
-	Name         string    `json:"name"`
-	Slug         string    `json:"slug" gorm:"uniqueIndex"`
-	Description  string    `json:"description"`
-	MonthlyPrice int64     `json:"monthly_price"` // in cents
-	YearlyPrice  int64     `json:"yearly_price"`  // in cents
-	FeaturesJSON string    `json:"features_json"` // JSON array of features
-	LimitsJSON   string    `json:"limits_json"`   // JSON object with limits
-	IsActive     bool      `json:"is_active" gorm:"default:true"`
-	SortOrder    int       `json:"sort_order" gorm:"default:0"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              string    `json:"id" gorm:"type:uuid;primaryKey"`
+	Name            string    `json:"name"`
+	Slug            string    `json:"slug" gorm:"uniqueIndex"`
+	Description     string    `json:"description"`
+	MonthlyPriceUSD int64     `json:"monthly_price_usd"` // base price in USD cents
+	YearlyPriceUSD  int64     `json:"yearly_price_usd"`  // base price in USD cents
+	FeaturesJSON    string    `json:"features_json"`     // JSON array of features
+	LimitsJSON      string    `json:"limits_json"`       // JSON object with limits
+	IsActive        bool      `json:"is_active" gorm:"default:true"`
+	SortOrder       int       `json:"sort_order" gorm:"default:0"`
+	TrialDays       int       `json:"trial_days" gorm:"default:14"` // default 14-day trial
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // Subscription represents a tenant's subscription

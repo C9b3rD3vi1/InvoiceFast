@@ -73,22 +73,12 @@ func (s *ETIMSService) RegisterInvoice(invoice *models.KRAInvoice) (*ETIMSRespon
 		len(invoice.Items),
 		controlNumber,
 	)
-	qrCode, err := GenerateQRCode(qrData)
-	if err != nil {
+	if _, err := GenerateQRCode(qrData); err != nil {
 		return nil, fmt.Errorf("failed to generate QR code: %w", err)
 	}
 
-	response := &ETIMSResponse{
-		Status:        "success",
-		ControlNumber: controlNumber,
-		QRCode:        qrCode,
-		Timestamp:     time.Now(),
-	}
-
 	// In production, make actual API call
-	// return s.sendToKRA(payload)
-
-	return response, nil
+	return s.sendToKRA(payload)
 }
 
 // CancelInvoice cancels a registered invoice
@@ -100,19 +90,23 @@ func (s *ETIMSService) CancelInvoice(invoiceNumber, reason string) (*ETIMSCancel
 	payload := map[string]interface{}{
 		"invoice_number":      invoiceNumber,
 		"cancellation_reason": reason,
-		"cancelled_at":       time.Now().Format(time.RFC3339),
+		"cancelled_at":        time.Now().Format(time.RFC3339),
 	}
 
 	signature, _ := s.signPayload(payload)
 	payload["signature"] = signature
 
 	// In production, make actual API call
+	kraResp, err := s.sendToKRA(payload)
+	if err != nil {
+		return nil, err
+	}
 
 	return &ETIMSCancelResponse{
-		Status:            "success",
-		InvoiceNumber:     invoiceNumber,
+		Status:             kraResp.Status,
+		InvoiceNumber:      kraResp.ControlNumber, // Using control number as invoice number for cancellation
 		CancellationReason: reason,
-		CancelledAt:       time.Now(),
+		CancelledAt:        kraResp.Timestamp,
 	}, nil
 }
 
@@ -145,7 +139,7 @@ func (s *ETIMSService) buildPayload(invoice *models.KRAInvoice) map[string]inter
 			"tin":  invoice.Buyer.TIN,
 			"name": invoice.Buyer.Name,
 		},
-		"items":       items,
+		"items":        items,
 		"total_amount": invoice.TotalAmount,
 		"tax_amount":   invoice.TaxAmount,
 		"discount":     invoice.Discount,

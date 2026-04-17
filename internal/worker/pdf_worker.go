@@ -165,6 +165,13 @@ func (w *PDFWorker) executeTask(ctx context.Context, task *PDFTask) {
 		BrandColor:    invoice.BrandColor,
 	}
 
+	// Add KRA compliance data
+	if invoice.KRAICN != "" {
+		pdfData.KRACompliant = true
+		pdfData.ControlNumber = invoice.KRAICN
+		pdfData.QRCodeData = invoice.KRAQRCode
+	}
+
 	if invoice.Client.ID != "" {
 		pdfData.ClientName = invoice.Client.Name
 		pdfData.ClientEmail = invoice.Client.Email

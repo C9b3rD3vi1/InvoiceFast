@@ -37,10 +37,47 @@ func (s *SubscriptionService) GetActiveSubscription(tenantID string) (*models.Su
 	return &sub, nil
 }
 
-func (s *SubscriptionService) CreateSubscription(tenantID, planID string, opts ...func(*models.Subscription)) (*models.Subscription, error) {
+func (s *SubscriptionService) CreateSubscriptionWithTrial(tenantID string) (*models.Subscription, error) {
+	starterPlan, err := s.planService.GetPlan("starter")
+	if err != nil {
+		return nil, err
+	}
+
+	trialEnd := time.Now().AddDate(0, 0, 14)
+
+	sub := &models.Subscription{
+		ID:           uuid.New().String(),
+		TenantID:     tenantID,
+		PlanID:       starterPlan.ID,
+		Status:       "trialing",
+		BillingCycle: "monthly",
+		Amount:       starterPlan.MonthlyPriceUSD,
+		Currency:     "USD",
+		TrialEndsAt:  &trialEnd,
+		StartsAt:     time.Now(),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := s.db.Create(sub).Error; err != nil {
+		return nil, err
+	}
+
+	s.InitUsageTracking(tenantID)
+	return sub, nil
+}
+
+func (s *SubscriptionService) CreateSubscription(tenantID, planID string, billingCycle string, opts ...func(*models.Subscription)) (*models.Subscription, error) {
 	plan, err := s.planService.GetPlan(planID)
 	if err != nil {
 		return nil, err
+	}
+
+	var amount int64
+	if billingCycle == "yearly" {
+		amount = plan.YearlyPriceUSD
+	} else {
+		amount = plan.MonthlyPriceUSD
 	}
 
 	sub := &models.Subscription{
@@ -48,9 +85,9 @@ func (s *SubscriptionService) CreateSubscription(tenantID, planID string, opts .
 		TenantID:     tenantID,
 		PlanID:       planID,
 		Status:       "active",
-		BillingCycle: "monthly",
-		Amount:       plan.MonthlyPrice,
-		Currency:     "KES",
+		BillingCycle: billingCycle,
+		Amount:       amount,
+		Currency:     "USD",
 		StartsAt:     time.Now(),
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -127,9 +164,9 @@ func (s *SubscriptionService) UpgradePlan(tenantID, newPlanID string, billingCyc
 	sub.BillingCycle = billingCycle
 
 	if billingCycle == "yearly" {
-		sub.Amount = newPlan.YearlyPrice
+		sub.Amount = newPlan.YearlyPriceUSD
 	} else {
-		sub.Amount = newPlan.MonthlyPrice
+		sub.Amount = newPlan.MonthlyPriceUSD
 	}
 
 	sub.UpdatedAt = time.Now()
@@ -150,7 +187,7 @@ func (s *SubscriptionService) DowngradePlan(tenantID, newPlanID string) (*models
 	}
 
 	sub.PlanID = newPlanID
-	sub.Amount = newPlan.MonthlyPrice
+	sub.Amount = newPlan.MonthlyPriceUSD
 	sub.UpdatedAt = time.Now()
 
 	s.db.Save(sub)

@@ -1,0 +1,71 @@
+=== SPECIFIC MISSING IMPLEMENTATIONS ===
+
+MISSING ITEM LIBRARY FEATURE:
+- No model, service, handler, or routes for saving frequently used products/services
+
+MISSING ATTACHMENT UPLOAD FOR INVOICES:
+- No file upload endpoints for invoice attachments
+- No attachment storage mechanism
+- No attachment model/entity
+
+MISSING RECURRING INVOICE LOGIC:
+- No scheduler/service to create recurring invoices
+- No endpoint to set up recurring invoices
+- No logic to generate child invoices from recurring parent
+
+MISSING LATE FEE CALCULATION:
+- No configuration for late fees (percentage/flat fee, grace period)
+- No automatic application of late fees to overdue invoices
+- No cap on late fee amounts
+- No waiver functionality with reason logging
+
+MISSING EMAIL TRACKING:
+- No open rates tracking
+- No click tracking on payment links
+
+MISSING FINANCIAL REPORTS:
+- No Income Statement report
+- No Aging Report (overdue invoices categorized by days)
+- No Client Statement (transaction history per client)
+- No Tax Report (VAT/output tax summary)
+
+MISSING EXPORT OPTIONS:
+- No PDF export for reports
+- No Excel export for reports
+- No QuickBooks direct import format
+
+MISSING USER ROLE ENFORCEMENT:
+- No middleware to enforce Admin/Manager/Sales/Accountant role restrictions
+
+MISSING ACTIVITY LOG FOR USER ACTIONS:
+- AuditLog exists but not populated for all user actions
+- No mention/tagging (@username) functionality in notes
+
+MISSING ACCOUNTING INTEGRATIONS:
+- No QuickBooks Online OAuth2 sync
+- No Wave accounting export
+- No Sage CSV export with mapping
+
+MISSING WHITE-LABEL SOLUTION:
+- No custom domain (CNAME) support configuration
+- No branding removal options
+- No ability to send email from custom domain (SPF/DKIM)
+
+MISSING ADVANCED API:
+- No GraphQL endpoint
+- No webhooks for custom HTTP callbacks
+- No bulk operations (create 1000+ invoices via API)
+- No sandbox mode with fake payments
+
+MISSING ENTERPRISE SECURITY:
+- No SSO/SAML corporate authentication
+- No audit trail of all actions (immutable logs)
+- No data residency controls
+- No HIPAA/GDPR compliance modes
+
+MISSING MOBILE APPLICATIONS:
+- No iOS/Android apps
+- No photo receipt capture with OCR
+- No push notifications for payment alerts
+- No offline mode for invoice creation
+- No biometric auth (Face ID/fingerprint)

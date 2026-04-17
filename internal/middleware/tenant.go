@@ -36,6 +36,21 @@ func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.
 			}
 		}
 
+		// Extract from query token parameter (for PDF downloads, etc.)
+		if tenantID == "" {
+			queryToken := c.Query("token")
+			if queryToken != "" {
+				claims, err := authService.ValidateToken(queryToken)
+				if err == nil && claims != nil {
+					userID = claims.UserID
+					tenantID = claims.TenantID
+					if tenantID == "" {
+						tenantID = userID
+					}
+				}
+			}
+		}
+
 		// Subdomain detection for client portal (e.g., client-slug.invoicefast.com)
 		if tenantID == "" && db != nil {
 			tenantID = resolveTenantFromSubdomain(c, db)

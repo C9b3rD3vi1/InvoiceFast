@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/services"
 
@@ -105,6 +107,21 @@ func (h *ReportHandler) GetTax(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
+func (h *ReportHandler) GetVATReport(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	period := c.Query("period", "30")
+	result, err := h.reportService.GetVATReport(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}
+
 func (h *ReportHandler) Export(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
@@ -123,4 +140,69 @@ func (h *ReportHandler) Export(c *fiber.Ctx) error {
 	c.Set("Content-Disposition", "attachment; filename=report.csv")
 
 	return c.Send(data)
+}
+
+func (h *ReportHandler) GetAging(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	result, err := h.reportService.GetAgingReport(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}
+
+func (h *ReportHandler) GetIncomeStatement(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	period := c.Query("period", "30")
+	result, err := h.reportService.GetIncomeStatement(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}
+
+func (h *ReportHandler) GetClientStatement(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	clientID := c.Params("clientID")
+	if clientID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "client ID required"})
+	}
+
+	startStr := c.Query("start_date")
+	endStr := c.Query("end_date")
+
+	startDate := time.Now().AddDate(0, -1, 0)
+	endDate := time.Now()
+
+	if startStr != "" {
+		if parsed, err := time.Parse("2006-01-02", startStr); err == nil {
+			startDate = parsed
+		}
+	}
+	if endStr != "" {
+		if parsed, err := time.Parse("2006-01-02", endStr); err == nil {
+			endDate = parsed
+		}
+	}
+
+	result, err := h.reportService.GetClientStatement(tenantID, clientID, startDate, endDate)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
 }

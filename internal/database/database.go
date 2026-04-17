@@ -201,6 +201,8 @@ func (db *DB) Migrate() error {
 		&models.Client{},
 		&models.Invoice{},
 		&models.InvoiceItem{},
+		&models.ItemLibrary{},
+		&models.Attachment{},
 		&models.Payment{},
 		&models.Reminder{},
 		&models.Template{},
@@ -212,6 +214,10 @@ func (db *DB) Migrate() error {
 		&models.Tenant{},
 		&models.PasswordResetToken{},
 		&models.Notification{},
+		&models.NotificationLog{},
+		&models.EmailTracking{},
+		&models.EmailTrackingLink{},
+		&models.TeamInvite{},
 		&models.Automation{},
 		&models.AutomationLog{},
 		&models.SubscriptionPlan{},
@@ -220,13 +226,39 @@ func (db *DB) Migrate() error {
 		&models.UsageTracking{},
 		&models.SavedPaymentMethod{},
 		&models.BillingInvoice{},
-		&models.TeamInvite{},
+		&models.LateFeeConfig{},
+		&models.LateFeeInvoice{},
+		&models.UnallocatedPayment{},
+		&models.ReminderSequence{},
+		&models.ReminderSequenceLog{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
 	}
 
+	// Fix any incorrect unique constraints
+	if err := db.fixPaymentConstraints(); err != nil {
+		log.Printf("Warning: failed to fix payment constraints: %v", err)
+	}
+
 	log.Println("Migrations completed successfully")
+	return nil
+}
+
+// fixPaymentConstraints removes incorrect unique constraints on payments table
+func (db *DB) fixPaymentConstraints() error {
+	// Drop unique index on tenant_id if it exists (tenant should have multiple payments)
+	if db.isPostgres {
+		// PostgreSQL
+		db.Exec("DROP INDEX IF EXISTS idx_payments_tenant_id")
+		// Create proper non-unique index
+		db.Exec("CREATE INDEX IF NOT EXISTS idx_payments_tenant_id ON payments(tenant_id)")
+	} else {
+		// SQLite
+		db.Exec("DROP INDEX IF EXISTS idx_payments_tenant_id")
+		// Create proper non-unique index
+		db.Exec("CREATE INDEX IF NOT EXISTS idx_payments_tenant_id ON payments(tenant_id)")
+	}
 	return nil
 }
 

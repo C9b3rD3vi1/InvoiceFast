@@ -375,6 +375,30 @@
             <main id="dashboard-content" class="flex-1 overflow-y-auto p-4 lg:p-8 bg-slate-50">
                 {{embed}}
             </main>
+
+            <!-- Helper Functions -->
+            <script>
+                function formatCurrency(amount) {
+                    if (!amount && amount !== 0) return 'KES 0';
+                    return 'KES ' + parseFloat(amount).toLocaleString('en-KE');
+                }
+                
+                function formatPercent(value) {
+                    if (!value && value !== 0) return '0%';
+                    const percent = parseFloat(value);
+                    return percent >= 0 ? '+' + percent.toFixed(1) + '%' : percent.toFixed(1) + '%';
+                }
+                
+                function substr(str, start, end) {
+                    if (!str) return '';
+                    return str.substring(start, end);
+                }
+                
+                function upper(str) {
+                    if (!str) return '';
+                    return str.toUpperCase();
+                }
+            </script>
         </div>
     </div>
 
