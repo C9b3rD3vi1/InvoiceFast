@@ -79,6 +79,21 @@ func (h *InvoiceHandler) CreateInvoice(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(invoice)
 }
 
+// GetKRADashboardStats returns KRA compliance stats
+func (h *InvoiceHandler) GetKRADashboardStats(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	stats, err := h.invoiceService.GetKRADashboardStats(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(stats)
+}
+
 // GetInvoices - list invoices with pagination and filtering
 func (h *InvoiceHandler) GetInvoices(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
@@ -102,11 +117,12 @@ func (h *InvoiceHandler) GetInvoices(c *fiber.Ctx) error {
 	offset = (offset - 1) * lim
 
 	filter := services.InvoiceFilter{
-		Status:   c.Query("status"),
-		ClientID: c.Query("client_id"),
-		Search:   c.Query("search"),
-		Offset:   offset,
-		Limit:    lim,
+		Status:    c.Query("status"),
+		ClientID:  c.Query("client_id"),
+		Search:    c.Query("search"),
+		KRAStatus: c.Query("kra_status"),
+		Offset:    offset,
+		Limit:     lim,
 	}
 
 	invoices, total, err := h.invoiceService.GetUserInvoices(tenantID, filter)
@@ -428,12 +444,16 @@ func (h *InvoiceHandler) SubmitToKRA(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
 	}
 
-	if invoice.KRAICN != "" {
+	if invoice.KRAICN != "" && invoice.KRAStatus == "submitted" {
 		return c.JSON(fiber.Map{
 			"message": "already_submitted",
 			"icn":     invoice.KRAICN,
 			"qr_code": invoice.KRAQRCode,
 		})
+	}
+
+	if invoice.KRAStatus == "failed" {
+		h.invoiceService.ClearKRAData(tenantID, invoiceID)
 	}
 
 	kraResp, err := h.invoiceService.SubmitInvoiceToKRA(tenantID, invoiceID)
@@ -446,6 +466,105 @@ func (h *InvoiceHandler) SubmitToKRA(c *fiber.Ctx) error {
 		"qr_code":   kraResp.QRCode,
 		"signature": kraResp.Signature,
 		"timestamp": kraResp.Timestamp,
+	})
+}
+
+// GetKRAStatus gets KRA submission status for an invoice
+func (h *InvoiceHandler) GetKRAStatus(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	return c.JSON(fiber.Map{
+		"submitted":    invoice.KRAICN != "",
+		"icn":          invoice.KRAICN,
+		"qr_code":      invoice.KRAQRCode,
+		"status":       invoice.KRAStatus,
+		"submitted_at": invoice.KRASubmittedAt,
+		"error":        invoice.KRAError,
+	})
+}
+
+// RetryKRA retries KRA submission for an invoice
+func (h *InvoiceHandler) RetryKRA(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	_, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	h.invoiceService.ClearKRAData(tenantID, invoiceID)
+
+	kraResp, err := h.invoiceService.SubmitInvoiceToKRA(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"icn":       kraResp.ICN,
+		"qr_code":   kraResp.QRCode,
+		"signature": kraResp.Signature,
+		"timestamp": kraResp.Timestamp,
+		"message":   "retry_successful",
+	})
+}
+
+// GetKRAActivityFeed returns recent KRA activity
+func (h *InvoiceHandler) GetKRAActivityFeed(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	limit := 50
+	if l := c.QueryInt("limit", 50); l > 0 && l <= 100 {
+		limit = l
+	}
+
+	events, err := h.invoiceService.GetKRAActivityFeed(tenantID, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"events": events})
+}
+
+// SubmitAllPendingToKRA submits all pending invoices to KRA
+func (h *InvoiceHandler) SubmitAllPendingToKRA(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	submitted, failed, err := h.invoiceService.SubmitAllPendingToKRA(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"submitted": submitted,
+		"failed":    failed,
+		"message":   fmt.Sprintf("Submitted %d, failed %d", submitted, failed),
 	})
 }
 

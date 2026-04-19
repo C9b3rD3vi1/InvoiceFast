@@ -141,3 +141,81 @@ func (h *ClientHandler) GetClientStats(c *fiber.Ctx) error {
 
 	return c.JSON(stats)
 }
+
+// GetClientInvoices - get client invoices
+func (h *ClientHandler) GetClientInvoices(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	clientID := c.Params("id")
+	limit := 20
+	if l := c.QueryInt("limit", 20); l > 0 && l <= 50 {
+		limit = l
+	}
+
+	invoices, total, err := h.clientService.GetClientInvoices(tenantID, clientID, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"invoices": invoices, "total": total})
+}
+
+// GetClientPayments - get client payments
+func (h *ClientHandler) GetClientPayments(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	clientID := c.Params("id")
+	limit := 20
+	if l := c.QueryInt("limit", 20); l > 0 && l <= 50 {
+		limit = l
+	}
+
+	payments, total, err := h.clientService.GetClientPayments(tenantID, clientID, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"payments": payments, "total": total})
+}
+
+// GetClientActivity - get client activity timeline
+func (h *ClientHandler) GetClientActivity(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	clientID := c.Params("id")
+	limit := 20
+	if l := c.QueryInt("limit", 20); l > 0 && l <= 50 {
+		limit = l
+	}
+
+	activities, err := h.clientService.GetClientActivity(tenantID, clientID, limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"activities": activities})
+}
+
+// GetDashboardStats - get clients dashboard stats
+func (h *ClientHandler) GetDashboardStats(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	stats, err := h.clientService.GetClientDashboardStats(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(stats)
+}

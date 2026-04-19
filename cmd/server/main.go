@@ -365,7 +365,7 @@ func main() {
 
 	// Payment matching routes
 	paymentMatchingService := services.NewPaymentMatchingService(db)
-	paymentMatchingHandler := handlers.NewPaymentMatchingHandler(paymentMatchingService)
+	paymentMatchingHandler := handlers.NewPaymentMatchingHandler(paymentMatchingService, invoiceService)
 	routes.PaymentMatchingRoutes(app, paymentMatchingHandler, authService, db)
 
 	// Settlement report routes

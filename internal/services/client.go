@@ -1,9 +1,11 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
@@ -47,8 +49,21 @@ func (s *ClientService) CreateClient(tenantID, userID string, req *CreateClientR
 		Notes:        strings.TrimSpace(req.Notes),
 	}
 
+	// Handle tags - serialize to JSON string
+	if len(req.Tags) > 0 {
+		tagsJSON, err := json.Marshal(req.Tags)
+		if err == nil {
+			client.Tags = string(tagsJSON)
+		}
+	}
+
 	if err := s.db.Create(client).Error; err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	// Parse tags for response
+	if client.Tags != "" {
+		json.Unmarshal([]byte(client.Tags), &client.TagsList)
 	}
 
 	return client, nil
@@ -145,7 +160,14 @@ func (s *ClientService) GetUserClients(tenantID string, filter ClientFilter) ([]
 	// Apply filters safely
 	if filter.Search != "" {
 		search := "%" + strings.TrimSpace(filter.Search) + "%"
-		query = query.Where("name ILIKE ? OR email ILIKE ? OR phone ILIKE ?", search, search, search)
+		if s.db.IsPostgres() {
+			query = query.Where("name ILIKE ? OR email ILIKE ? OR phone ILIKE ?", search, search, search)
+		} else {
+			query = query.Where("LOWER(name) LIKE LOWER(?) OR LOWER(email) LIKE LOWER(?) OR LOWER(phone) LIKE LOWER(?)", search, search, search)
+		}
+	}
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
 	}
 
 	// Count total
@@ -194,6 +216,11 @@ func (s *ClientService) GetUserClients(tenantID string, filter ClientFilter) ([]
 		}
 		clients[i].TotalBilled = totalBilled
 		clients[i].TotalPaid = totalPaid
+		clients[i].InvoiceCount = int64(len(clientInvoices))
+		// Parse tags for response
+		if clients[i].Tags != "" {
+			json.Unmarshal([]byte(clients[i].Tags), &clients[i].TagsList)
+		}
 	}
 
 	return clients, total, nil
@@ -240,9 +267,23 @@ func (s *ClientService) UpdateClient(tenantID, clientID string, req *UpdateClien
 	if req.InternalNotes != nil {
 		client.InternalNotes = strings.TrimSpace(*req.InternalNotes)
 	}
+	if req.Status != nil {
+		client.Status = models.ClientStatus(*req.Status)
+	}
+	if req.Tags != nil {
+		tagsJSON, err := json.Marshal(req.Tags)
+		if err == nil {
+			client.Tags = string(tagsJSON)
+		}
+	}
 
 	if err := s.db.Save(client).Error; err != nil {
 		return nil, fmt.Errorf("failed to update client: %w", err)
+	}
+
+	// Parse tags for response
+	if client.Tags != "" {
+		json.Unmarshal([]byte(client.Tags), &client.TagsList)
 	}
 
 	return client, nil
@@ -325,31 +366,35 @@ func (s *ClientService) GetClientStats(tenantID, clientID string) (*ClientStats,
 
 // Request types
 type CreateClientRequest struct {
-	Name         string `json:"name" binding:"required"`
-	Email        string `json:"email"`
-	Phone        string `json:"phone"`
-	Address      string `json:"address"`
-	KRAPIN       string `json:"kra_pin"`
-	Currency     string `json:"currency"`
-	PaymentTerms int    `json:"payment_terms"`
-	Notes        string `json:"notes"`
+	Name         string   `json:"name" binding:"required"`
+	Email        string   `json:"email"`
+	Phone        string   `json:"phone"`
+	Address      string   `json:"address"`
+	KRAPIN       string   `json:"kra_pin"`
+	Currency     string   `json:"currency"`
+	PaymentTerms int      `json:"payment_terms"`
+	Notes        string   `json:"notes"`
+	Tags         []string `json:"tags"`
 }
 
 type UpdateClientRequest struct {
-	Name                 *string `json:"name"`
-	Email                *string `json:"email"`
-	Phone                *string `json:"phone"`
-	Address              *string `json:"address"`
-	KRAPIN               *string `json:"kra_pin"`
-	Currency             *string `json:"currency"`
-	PaymentTerms         *int    `json:"payment_terms"`
-	Notes                *string `json:"notes"`
-	DefaultPaymentMethod *string `json:"default_payment_method"`
-	InternalNotes        *string `json:"internal_notes"`
+	Name                 *string  `json:"name"`
+	Email                *string  `json:"email"`
+	Phone                *string  `json:"phone"`
+	Address              *string  `json:"address"`
+	KRAPIN               *string  `json:"kra_pin"`
+	Currency             *string  `json:"currency"`
+	PaymentTerms         *int     `json:"payment_terms"`
+	Notes                *string  `json:"notes"`
+	DefaultPaymentMethod *string  `json:"default_payment_method"`
+	InternalNotes        *string  `json:"internal_notes"`
+	Status               *string  `json:"status"`
+	Tags                 []string `json:"tags"`
 }
 
 type ClientFilter struct {
 	Search string
+	Status string
 	Offset int
 	Limit  int
 }
@@ -360,4 +405,195 @@ type ClientStats struct {
 	PaidInvoices       int64 `json:"paid_invoices"`
 	OverdueInvoices    int64 `json:"overdue_invoices"`
 	AveragePaymentDays int   `json:"average_payment_days"`
+}
+
+// ClientDashboardStats holds aggregate stats for all clients
+type ClientDashboardStats struct {
+	TotalClients     int64   `json:"total_clients"`
+	ActiveClients    int64   `json:"active_clients"`
+	InactiveClients  int64   `json:"inactive_clients"`
+	ArchivedClients  int64   `json:"archived_clients"`
+	TotalRevenue     float64 `json:"total_revenue"`
+	TotalOutstanding float64 `json:"total_outstanding"`
+}
+
+// GetClientDashboardStats returns aggregate statistics for all clients (tenant-scoped)
+func (s *ClientService) GetClientDashboardStats(tenantID string) (*ClientDashboardStats, error) {
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, fmt.Errorf("tenant ID is required")
+	}
+
+	var stats ClientDashboardStats
+
+	// Total clients
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Client{}).Count(&stats.TotalClients)
+
+	// Count by status
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Client{}).
+		Where("status = ?", models.ClientStatusActive).
+		Count(&stats.ActiveClients)
+
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Client{}).
+		Where("status = ?", models.ClientStatusInactive).
+		Count(&stats.InactiveClients)
+
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Client{}).
+		Where("status = ?", models.ClientStatusArchived).
+		Count(&stats.ArchivedClients)
+
+	// Total revenue (all paid invoices)
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Invoice{}).
+		Where("status = ?", models.InvoiceStatusPaid).
+		Select("COALESCE(SUM(total), 0)").
+		Scan(&stats.TotalRevenue)
+
+	// Total outstanding (unpaid invoices)
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Invoice{}).
+		Where("status NOT IN ?", []string{string(models.InvoiceStatusPaid), string(models.InvoiceStatusCancelled), string(models.InvoiceStatusVoid), string(models.InvoiceStatusDraft)}).
+		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Scan(&stats.TotalOutstanding)
+
+	return &stats, nil
+}
+
+// GetClientInvoices retrieves all invoices for a client (tenant-scoped)
+func (s *ClientService) GetClientInvoices(tenantID, clientID string, limit int) ([]models.Invoice, int64, error) {
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, 0, fmt.Errorf("tenant ID is required")
+	}
+	if strings.TrimSpace(clientID) == "" {
+		return nil, 0, fmt.Errorf("client ID is required")
+	}
+
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	var invoices []models.Invoice
+	var total int64
+
+	query := s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("client_id = ?", clientID)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count invoices: %w", err)
+	}
+
+	if err := query.Preload("Items").Preload("Payments").Order("created_at DESC").Limit(limit).Find(&invoices).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch invoices: %w", err)
+	}
+
+	return invoices, total, nil
+}
+
+// GetClientPayments retrieves all payments for a client (tenant-scoped)
+func (s *ClientService) GetClientPayments(tenantID, clientID string, limit int) ([]models.Payment, int64, error) {
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, 0, fmt.Errorf("tenant ID is required")
+	}
+	if strings.TrimSpace(clientID) == "" {
+		return nil, 0, fmt.Errorf("client ID is required")
+	}
+
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	var payments []models.Payment
+	var total int64
+
+	query := s.db.Scopes(database.TenantFilter(tenantID)).
+		Model(&models.Payment{}).
+		Joins("JOIN invoices ON invoices.id = payments.invoice_id AND invoices.client_id = ?", clientID)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count payments: %w", err)
+	}
+
+	if err := query.Preload("Invoice").Order("created_at DESC").Limit(limit).Find(&payments).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch payments: %w", err)
+	}
+
+	return payments, total, nil
+}
+
+// GetClientActivity retrieves activity timeline for a client (tenant-scoped)
+func (s *ClientService) GetClientActivity(tenantID, clientID string, limit int) ([]map[string]interface{}, error) {
+	if strings.TrimSpace(tenantID) == "" {
+		return nil, fmt.Errorf("tenant ID is required")
+	}
+	if strings.TrimSpace(clientID) == "" {
+		return nil, fmt.Errorf("client ID is required")
+	}
+
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+
+	activities := []map[string]interface{}{}
+
+	// Get recent invoices
+	var invoices []models.Invoice
+	s.db.Scopes(database.TenantFilter(tenantID)).Where("client_id = ?", clientID).
+		Order("created_at DESC").Limit(limit).Find(&invoices)
+
+	for _, inv := range invoices {
+		activities = append(activities, map[string]interface{}{
+			"type":        "invoice_created",
+			"description": "Invoice " + inv.InvoiceNumber + " created",
+			"timestamp":   inv.CreatedAt,
+			"data": map[string]interface{}{
+				"invoice_id":     inv.ID,
+				"invoice_number": inv.InvoiceNumber,
+				"amount":         inv.Total,
+				"status":         inv.Status,
+			},
+		})
+
+		if inv.SentAt.Valid {
+			activities = append(activities, map[string]interface{}{
+				"type":        "invoice_sent",
+				"description": "Invoice " + inv.InvoiceNumber + " sent",
+				"timestamp":   inv.SentAt.Time,
+				"data": map[string]interface{}{
+					"invoice_id":     inv.ID,
+					"invoice_number": inv.InvoiceNumber,
+				},
+			})
+		}
+
+		if inv.PaidAt.Valid {
+			activities = append(activities, map[string]interface{}{
+				"type":        "payment_received",
+				"description": "Payment received for " + inv.InvoiceNumber,
+				"timestamp":   inv.PaidAt.Time,
+				"data": map[string]interface{}{
+					"invoice_id":     inv.ID,
+					"invoice_number": inv.InvoiceNumber,
+					"amount":         inv.PaidAmount,
+				},
+			})
+		}
+	}
+
+	// Sort by timestamp descending
+	for i := 0; i < len(activities)-1; i++ {
+		for j := i + 1; j < len(activities); j++ {
+			iTime := activities[i]["timestamp"].(time.Time)
+			jTime := activities[j]["timestamp"].(time.Time)
+			if jTime.After(iTime) {
+				activities[i], activities[j] = activities[j], activities[i]
+			}
+		}
+	}
+
+	if len(activities) > limit {
+		activities = activities[:limit]
+	}
+
+	return activities, nil
 }

@@ -37,26 +37,39 @@ type User struct {
 	Tenant Tenant `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
 }
 
+// ClientStatus represents the status of a client
+type ClientStatus string
+
+const (
+	ClientStatusActive   ClientStatus = "active"
+	ClientStatusInactive ClientStatus = "inactive"
+	ClientStatusArchived ClientStatus = "archived"
+)
+
 // Client represents a customer/client of the user
 type Client struct {
-	ID                   string     `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID             string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	UserID               string     `json:"user_id" gorm:"type:uuid;index;not null"` // Legacy - for backward compat
-	Name                 string     `json:"name" gorm:"not null"`
-	Email                string     `json:"email"`
-	Phone                string     `json:"phone"`
-	Address              string     `json:"address"`
-	KRAPIN               string     `json:"kra_pin"` // Encrypted - stored as ciphertext
-	Currency             string     `json:"currency" gorm:"default:'KES'"`
-	PaymentTerms         int        `json:"payment_terms" gorm:"default:30"`               // days (Net 15, Net 30, Net 60, etc.)
-	DefaultPaymentMethod string     `json:"default_payment_method" gorm:"default:'mpesa'"` // mpesa, bank, card, cash
-	InternalNotes        string     `json:"internal_notes"`                                // Private notes visible only to team
-	Notes                string     `json:"notes"`                                         // Client-facing notes
-	TotalBilled          float64    `json:"total_billed" gorm:"default:0"`
-	TotalPaid            float64    `json:"total_paid" gorm:"default:0"`
-	LastPaymentDate      *time.Time `json:"last_payment_date"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	ID                   string       `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID             string       `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID               string       `json:"user_id" gorm:"type:uuid;index;not null"` // Legacy - for backward compat
+	Name                 string       `json:"name" gorm:"not null"`
+	Email                string       `json:"email"`
+	Phone                string       `json:"phone"`
+	Address              string       `json:"address"`
+	KRAPIN               string       `json:"kra_pin"` // Encrypted - stored as ciphertext
+	Currency             string       `json:"currency" gorm:"default:'KES'"`
+	PaymentTerms         int          `json:"payment_terms" gorm:"default:30"`               // days (Net 15, Net 30, Net 60, etc.)
+	DefaultPaymentMethod string       `json:"default_payment_method" gorm:"default:'mpesa'"` // mpesa, bank, card, cash
+	Status               ClientStatus `json:"status" gorm:"default:'active'"`
+	Tags                 string       `json:"-" gorm:"tags"`  // Stored as JSON string in DB
+	InternalNotes        string       `json:"internal_notes"` // Private notes visible only to team
+	Notes                string       `json:"notes"`          // Client-facing notes
+	TotalBilled          float64      `json:"total_billed" gorm:"default:0"`
+	TotalPaid            float64      `json:"total_paid" gorm:"default:0"`
+	InvoiceCount         int64        `json:"invoice_count" gorm:"-"`
+	TagsList             []string     `json:"tags" gorm:"-"` // For API response only
+	LastPaymentDate      *time.Time   `json:"last_payment_date"`
+	CreatedAt            time.Time    `json:"created_at"`
+	UpdatedAt            time.Time    `json:"updated_at"`
 
 	Invoices []Invoice `json:"-" gorm:"foreignKey:ClientID"`
 }
@@ -117,6 +130,9 @@ type Invoice struct {
 	MagicTokenExpiresAt sql.NullTime  `json:"magic_token_expires_at"`         // Token expiration
 	KRAICN              string        `json:"kra_icn"`                        // KRA Invoice Confirmation Number
 	KRAQRCode           string        `json:"kra_qr_code"`                    // KRA QR Code
+	KRAStatus           string        `json:"kra_status"`                     // submitted, failed, pending
+	KRASubmittedAt      sql.NullTime  `json:"kra_submitted_at"`               // Submission timestamp
+	KRAError            string        `json:"kra_error"`                      // Error message if failed
 	CreatedAt           time.Time     `json:"created_at"`
 	UpdatedAt           time.Time     `json:"updated_at"`
 

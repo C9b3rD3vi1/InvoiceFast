@@ -206,3 +206,82 @@ func (h *ReportHandler) GetClientStatement(c *fiber.Ctx) error {
 
 	return c.JSON(result)
 }
+
+func (h *ReportHandler) GetDashboard(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	period := c.Query("period", "30")
+	result, err := h.reportService.GetAdvancedDashboard(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}
+
+func (h *ReportHandler) GetProfit(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	period := c.Query("period", "30")
+	result, err := h.reportService.GetProfitabilityReport(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}
+
+func (h *ReportHandler) GetCashFlow(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	period := c.Query("period", "30")
+	result, err := h.reportService.GetCashFlowReport(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}
+
+func (h *ReportHandler) GetExpensesReport(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	period := c.Query("period", "30")
+	result, err := h.reportService.GetAdvancedDashboard(tenantID, period)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"total": result.TotalExpenses,
+		"growth": result.ExpenseGrowth,
+		"breakdown": result.ExpenseBreakdown,
+		"monthly": result.MonthlyTrend,
+	})
+}
+
+func (h *ReportHandler) GetAgingDetailed(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	result, err := h.reportService.GetDetailedAging(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
+}

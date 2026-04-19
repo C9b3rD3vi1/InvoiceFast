@@ -108,6 +108,11 @@ func StaticRoutes(app *fiber.App) fiber.Router {
 		return layoutService.RenderWithShell(c, "./views/content/reports.html", getLayoutData(c))
 	})
 
+	// KRA Compliance - shell
+	app.Get("/kra-compliance", func(c *fiber.Ctx) error {
+		return layoutService.RenderWithShell(c, "./views/content/kra.html", getLayoutData(c))
+	})
+
 	// Automations - shell with new/edit using shell
 	automationRouter := app.Group("/automations")
 	automationRouter.Get("/", func(c *fiber.Ctx) error {
