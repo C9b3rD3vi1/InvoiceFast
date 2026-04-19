@@ -59,6 +59,24 @@
                 </template>
             </div>
 
+            <!-- AI Insights Panel -->
+            <div x-show="insights.length > 0" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6 mb-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="p-2 bg-blue-100 rounded-xl">
+                        <i data-lucide="brain" class="w-5 h-5 text-blue-600"></i>
+                    </div>
+                    <h3 class="font-semibold text-slate-900">Business Insights</h3>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <template x-for="insight in insights" :key="insight">
+                        <div class="flex items-start gap-3 p-3 bg-white rounded-xl border border-blue-100">
+                            <i data-lucide="lightbulb" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0"></i>
+                            <p class="text-sm text-slate-700" x-text="insight"></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
             <!-- Main Revenue Chart -->
             <div class="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
                 <div class="flex items-center justify-between mb-4">
@@ -420,14 +438,21 @@ function reportsManager() {
             { label: 'Net Revenue', value: 'KES 0', icon: 'wallet', color: 'text-green-600', bg: 'bg-green-100', trend: 8 },
             { label: 'Outstanding', value: 'KES 0', icon: 'clock', color: 'text-amber-600', bg: 'bg-amber-100', trend: -5 },
             { label: 'Avg Invoice', value: 'KES 0', icon: 'file-text', color: 'text-blue-600', bg: 'bg-blue-100', trend: 3 },
+            { label: 'Net Profit', value: 'KES 0', icon: 'trending-up', color: 'text-purple-600', bg: 'bg-purple-100', trend: 0 },
+            { label: 'Profit Margin', value: '0%', icon: 'percent', color: 'text-indigo-600', bg: 'bg-indigo-100', trend: 0 },
         ],
+        insights: [],
         invoiceStats: { total: '0', paid: '0', pending: '0', overdue: '0' },
-        paymentStats: { collected: 'KES 0', successRate: '0%', avgTime: '0 days', refunds: 'KES 0' },
+        paymentStats: { collected: 'KES 0', successRate: '0%', avgTime: '0 days', refunds: 'KES 0', methods: [] },
         taxSummary: { sales: 'KES 0', vat: 'KES 0', withholding: 'KES 0', owed: 'KES 0' },
         agingBuckets: [],
         revenueBreakdown: [],
         topClients: [],
         taxBreakdown: [],
+        monthlyTrend: [],
+        expenseBreakdown: [],
+        revenueBreakdown: { labels: [], values: [] },
+        allInvoiceStatuses: [],
         agingReport: [],
         incomeStatement: { revenue: 0, prevRevenue: 0, cogs: 0, prevCogs: 0, expenses: 0, prevExpenses: 0, grossProfit: 0, prevGrossProfit: 0, netProfit: 0, prevNetProfit: 0, revenueChange: 0, grossProfitChange: 0, netProfitChange: 0 },
         toast: { show: false, message: '', type: 'success' },
@@ -441,11 +466,129 @@ function reportsManager() {
         async loadData() {
             this.loading = true;
             try {
-                const data = await InvoiceFastAPI.reports.getOverview(this.period);
-                this.updateKPIs(data);
-                this.calculateInvoiceStats(data);
-                this.calculatePaymentStats(data);
-                this.calculateTaxSummary(data);
+                const [dashboardData, agingData, revenueData, invoiceData, paymentData] = await Promise.all([
+                    InvoiceFastAPI.reports.getDashboard(this.period).catch(() => ({})),
+                    InvoiceFastAPI.reports.getAgingDetailed().catch(() => ({})),
+                    InvoiceFastAPI.reports.getRevenue(this.period).catch(() => []),
+                    InvoiceFastAPI.reports.getInvoices(this.period).catch(() => ({})),
+                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => [])
+                ]);
+                
+                // Dashboard provides core KPIs
+                if (dashboardData) {
+                    this.kpis[0].value = this.formatCurrency(dashboardData.total_revenue || 0);
+                    this.kpis[0].trend = dashboardData.revenue_growth || 0;
+                    this.kpis[1].value = this.formatCurrency(dashboardData.net_profit || dashboardData.total_revenue || 0);
+                    this.kpis[2].value = this.formatCurrency(dashboardData.total_expenses || 0);
+                    
+                    if (this.kpis[4]) {
+                        this.kpis[4].value = this.formatCurrency(dashboardData.net_profit || 0);
+                        this.kpis[4].trend = dashboardData.revenue_growth || 0;
+                    }
+                    if (this.kpis[5]) {
+                        this.kpis[5].value = (dashboardData.profit_margin || 0) + '%';
+                    }
+                    
+                    if (dashboardData.insights) this.insights = dashboardData.insights;
+                    if (dashboardData.monthly_trend) this.monthlyTrend = dashboardData.monthly_trend;
+                    if (dashboardData.top_clients) this.topClients = dashboardData.top_clients;
+                    if (dashboardData.expense_breakdown) this.expenseBreakdown = dashboardData.expense_breakdown;
+                }
+                
+                // Invoice stats from dashboard (all time, no period filter)
+                if (dashboardData) {
+                    const totalInv = dashboardData.total_invoices || 0;
+                    const paid = dashboardData.paid_count || 0;
+                    const pending = dashboardData.pending_invoices || 0;
+                    const overdue = dashboardData.overdue_count || 0;
+                    
+                    this.invoiceStats = {
+                        total: totalInv.toString(),
+                        paid: paid.toString(),
+                        pending: pending.toString(),
+                        overdue: overdue.toString()
+                    };
+                    
+                    // Calculate not paid
+                    const notPaid = totalInv - paid - pending - overdue;
+                    
+                    // Store all statuses for chart
+                    this.allInvoiceStatuses = [
+                        { label: 'Paid', value: paid, color: '#22c55e' },
+                        { label: 'Pending', value: pending, color: '#f59e0b' },
+                        { label: 'Overdue', value: overdue, color: '#ef4444' },
+                        { label: 'Draft', value: notPaid > 0 ? notPaid : 0, color: '#94a3b8' }
+                    ];
+                } else if (invoiceData) {
+                    // Fallback to API response
+                    const totalInv = invoiceData.total || invoiceData.Total || 0;
+                    const byStatus = invoiceData.by_status || invoiceData.By_status || {};
+                    const paid = byStatus.paid || 0;
+                    const sent = byStatus.sent || 0;
+                    const viewed = byStatus.viewed || 0;
+                    const draft = byStatus.draft || 0;
+                    const cancelled = byStatus.cancelled || 0;
+                    const overdue = byStatus.overdue || 0;
+                    
+                    this.invoiceStats = {
+                        total: totalInv.toString(),
+                        paid: paid.toString(),
+                        pending: (sent + viewed).toString(),
+                        overdue: overdue.toString()
+                    };
+                    
+                    this.allInvoiceStatuses = [
+                        { label: 'Paid', value: paid, color: '#22c55e' },
+                        { label: 'Sent', value: sent, color: '#f59e0b' },
+                        { label: 'Draft', value: draft, color: '#94a3b8' },
+                        { label: 'Overdue', value: overdue, color: '#ef4444' },
+                        { label: 'Cancelled', value: cancelled, color: '#6b7280' }
+                    ];
+                }
+                
+                // Payment data for chart - use revenue data or payment data or by_method
+                const allRevenue = revenueData || paymentData || [];
+                if (paymentData && paymentData.by_method) {
+                    // Format: {by_method: {cash: 2, mpesa: 1}, total: 3}
+                    const methods = Object.entries(paymentData.by_method || {});
+                    this.paymentStats.methods = methods.map(([method, count]) => ({ 
+                        method: method, 
+                        amount: count 
+                    }));
+                    this.paymentStats.collected = this.formatCurrency(paymentData.total || dashboardData?.total_revenue || 0);
+                } else if (allRevenue.length > 0) {
+                    const totalCollected = allRevenue.reduce((sum, p) => sum + (p.Value || p.value || 0), 0);
+                    this.paymentStats.collected = this.formatCurrency(totalCollected);
+                    this.paymentStats.methods = allRevenue.slice(0, 5).map(p => ({ 
+                        method: p.Date || p.date || 'Other', 
+                        amount: p.Value || p.value || 0 
+                    }));
+                } else {
+                    this.paymentStats.collected = this.formatCurrency(dashboardData?.total_revenue || 0);
+                }
+                
+                // Revenue chart from daily revenue data
+                if (allRevenue.length > 0) {
+                    const labels = allRevenue.map(r => r.Date || r.date || '');
+                    const values = allRevenue.map(r => r.Value || r.value || 0);
+                    this.revenueBreakdown = { labels, values };
+                }
+                
+                // Top clients from dashboard or use default
+                if (this.topClients.length === 0) {
+                    this.topClients = [];
+                }
+                
+                // Aging buckets
+                if (agingData) {
+                    this.agingBuckets = [
+                        { label: 'Current', value: agingData.current || 0, color: '#22c55e' },
+                        { label: '1-30 Days', value: agingData.days_30 || 0, color: '#3b82f6' },
+                        { label: '31-60 Days', value: agingData.days_60 || 0, color: '#f59e0b' },
+                        { label: '61-90 Days', value: agingData.days_90 || 0, color: '#f97316' },
+                        { label: 'Over 90', value: agingData.over_90 || 0, color: '#ef4444' }
+                    ];
+                }
             } catch(err) {
                 console.error('Failed to load reports:', err);
                 this.setEmptyState();
@@ -485,6 +628,7 @@ function reportsManager() {
             this.paymentStats.successRate = (data.paymentSuccessRate || 0) + '%';
             this.paymentStats.avgTime = data.avgCollectionDays ? data.avgCollectionDays + ' days' : '0 days';
             this.paymentStats.refunds = this.formatCurrency(data.totalRefunds || 0);
+            this.paymentStats.methods = data.paymentMethods || [];
         },
 
         calculateTaxSummary(data) {
@@ -494,69 +638,202 @@ function reportsManager() {
             this.taxSummary.owed = this.formatCurrency(data.taxOwed || 0);
         },
 
-        renderCharts() {
-            this.renderRevenueChart();
-            this.renderInvoiceStatusChart();
-            this.renderPaymentMethodsChart();
-            this.renderClientRevenueChart();
-            this.renderAgingChart();
+renderCharts() {
+            const _this = this;
+            this.$nextTick(() => {
+                setTimeout(() => {
+                    _this.renderRevenueChart();
+                    _this.renderInvoiceStatusChart();
+                    _this.renderPaymentMethodsChart();
+                    _this.renderClientRevenueChart();
+                    _this.renderAgingChart();
+                }, 50);
+            });
+        },
+
+        // Safe chart renderer - ensures canvas is ready before rendering
+        safeRenderChart(chartKey, canvasId, createChart) {
+            // Check if canvas exists
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) {
+                console.warn('Canvas not found:', canvasId);
+                return false;
+            }
+            
+            // Get 2D context to verify canvas is ready
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.warn('Canvas context not available:', canvasId);
+                return false;
+            }
+            
+            // Check if canvas has dimensions
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) {
+                // Canvas not visible - defer rendering
+                const _this = this;
+                setTimeout(() => _this.safeRenderChart(chartKey, canvasId, createChart), 100);
+                return false;
+            }
+            
+            // Destroy existing chart
+            if (this.charts[chartKey]) {
+                try {
+                    this.charts[chartKey].destroy();
+                } catch(e) {
+                    console.warn('Error destroying chart:', chartKey, e);
+                }
+                this.charts[chartKey] = null;
+            }
+            
+            // Create new chart
+            try {
+                this.charts[chartKey] = createChart(ctx);
+                return true;
+            } catch(e) {
+                console.error('Error creating chart:', chartKey, e);
+                return false;
+            }
         },
 
         renderRevenueChart() {
-            const ctx = document.getElementById('revenueChart');
-            if (!ctx) return;
-            if (this.charts.revenue) this.charts.revenue.destroy();
-            this.charts.revenue = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                    datasets: [{ label: 'Revenue', data: [1200000, 1800000, 1500000, 2100000, 1900000, 2400000, 2200000, 2800000, 2500000, 3100000, 2900000, 3500000], borderColor: '#0277BD', backgroundColor: 'rgba(2, 119, 189, 0.1)', fill: true, tension: 0.4 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            const _this = this;
+            this.safeRenderChart('revenue', 'revenueChart', function(ctx) {
+                let labels, revenue, expenses, profit;
+                
+                if (_this.monthlyTrend && _this.monthlyTrend.length > 0) {
+                    labels = _this.monthlyTrend.map(m => String(m.month || ''));
+                    revenue = _this.monthlyTrend.map(m => Number(m.revenue || 0));
+                    expenses = _this.monthlyTrend.map(m => Number(m.expenses || 0));
+                    profit = _this.monthlyTrend.map(m => Number(m.profit || 0));
+                } else if (_this.revenueBreakdown.labels.length > 0) {
+                    labels = _this.revenueBreakdown.labels;
+                    revenue = _this.revenueBreakdown.values;
+                    expenses = [];
+                    profit = [];
+                } else {
+                    console.warn('No revenue data to render');
+                    return null;
+                }
+                
+                if (labels.length === 0 || revenue.every(v => v === 0)) {
+                    console.warn('Revenue chart has no valid data');
+                    return null;
+                }
+                
+                return new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Revenue', data: revenue, borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', fill: true, tension: 0.4 },
+                            { label: 'Expenses', data: expenses, borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.4 },
+                            { label: 'Profit', data: profit, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4 }
+                        ]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        plugins: { legend: { display: true, position: 'top' } }, 
+                        scales: { y: { beginAtZero: true } },
+                        animation: { duration: 800 }
+                    }
+                });
             });
         },
 
         renderInvoiceStatusChart() {
-            const ctx = document.getElementById('invoiceStatusChart');
-            if (!ctx) return;
-            if (this.charts.status) this.charts.status.destroy();
-            this.charts.status = new Chart(ctx, {
-                type: 'doughnut',
-                data: { labels: ['Paid', 'Pending', 'Overdue', 'Draft'], datasets: [{ data: [65, 20, 10, 5], backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#94a3b8'] }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            const _this = this;
+            this.safeRenderChart('status', 'invoiceStatusChart', function(ctx) {
+                const statuses = _this.allInvoiceStatuses || [];
+                const labels = statuses.map(s => s.label);
+                const data = statuses.map(s => Number(s.value));
+                
+                if (labels.length === 0 || data.every(v => v === 0)) {
+                    console.warn('Invoice status chart has no valid data');
+                    return null;
+                }
+                
+                return new Chart(ctx, {
+                    type: 'doughnut',
+                    data: { 
+                        labels: labels, 
+                        datasets: [{ data: data, backgroundColor: statuses.map(s => s.color) }] 
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        plugins: { legend: { position: 'right' } },
+                        animation: { duration: 800 }
+                    }
+                });
             });
         },
 
         renderPaymentMethodsChart() {
-            const ctx = document.getElementById('paymentMethodsChart');
-            if (!ctx) return;
-            if (this.charts.methods) this.charts.methods.destroy();
-            this.charts.methods = new Chart(ctx, {
-                type: 'bar',
-                data: { labels: ['M-Pesa', 'Card', 'Bank', 'Cash'], datasets: [{ label: 'Payments', data: [4500000, 2500000, 1500000, 500000], backgroundColor: '#0277BD' }] },
-                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } }
+            const _this = this;
+            this.safeRenderChart('methods', 'paymentMethodsChart', function(ctx) {
+                const methods = _this.paymentStats.methods || [];
+                let labels, data;
+                
+                if (methods.length > 0) {
+                    labels = methods.map(m => String(m.method));
+                    data = methods.map(m => Number(m.amount));
+                } else if (_this.revenueBreakdown.labels.length > 0) {
+                    labels = _this.revenueBreakdown.labels;
+                    data = _this.revenueBreakdown.values;
+                } else {
+                    console.warn('Payment methods chart has no data');
+                    return null;
+                }
+                
+                if (labels.length === 0 || data.every(v => v === 0)) {
+                    return null;
+                }
+                
+                return new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: labels, datasets: [{ label: 'Payments', data: data, backgroundColor: '#3b82f6' }] },
+                    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, animation: { duration: 800 } }
+                });
             });
         },
 
         renderClientRevenueChart() {
-            const ctx = document.getElementById('clientRevenueChart');
-            if (!ctx) return;
-            if (this.charts.client) this.charts.client.destroy();
-            this.charts.client = new Chart(ctx, {
-                type: 'bar',
-                data: { labels: ['Acme', 'Tech Solutions', 'Global', 'Startup', 'Enterprise'], datasets: [{ label: 'Revenue', data: [1200000, 850000, 650000, 450000, 350000], backgroundColor: '#0277BD' }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            const _this = this;
+            this.safeRenderChart('client', 'clientRevenueChart', function(ctx) {
+                const labels = _this.topClients.map(c => c.client_name || 'Unknown');
+                const data = _this.topClients.map(c => Number(c.revenue || 0));
+                
+                if (labels.length === 0 || data.every(v => v === 0)) {
+                    console.warn('Client revenue chart has no data');
+                    return null;
+                }
+                
+                return new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: labels, datasets: [{ label: 'Revenue', data: data, backgroundColor: '#3b82f6' }] },
+                    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, animation: { duration: 800 } }
+                });
             });
         },
 
         renderAgingChart() {
-            const ctx = document.getElementById('agingChart');
-            if (!ctx) return;
-            if (this.charts.aging) this.charts.aging.destroy();
-            this.charts.aging = new Chart(ctx, {
-                type: 'bar',
-                data: { labels: ['0-30', '31-60', '61-90', '90+'], datasets: [{ label: 'Amount', data: [150000, 120000, 100000, 80000], backgroundColor: ['#22c55e', '#f59e0b', '#ef4444', '#dc2626'] }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            const _this = this;
+            this.safeRenderChart('aging', 'agingChart', function(ctx) {
+                const labels = _this.agingBuckets.map(b => b.label || '');
+                const data = _this.agingBuckets.map(b => Number(b.value || 0));
+                
+                if (labels.length === 0 || data.every(v => v === 0)) {
+                    console.warn('Aging chart has no data');
+                    return null;
+                }
+                
+                return new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: labels, datasets: [{ label: 'Amount', data: data, backgroundColor: _this.agingBuckets.map(b => b.color || '#3b82f6') }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, animation: { duration: 800 } }
+                });
             });
         },
 

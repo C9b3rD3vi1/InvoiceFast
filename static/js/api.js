@@ -322,6 +322,19 @@ const InvoiceFastAPI = {
             }
             return InvoiceFastAPI.request('/tenant/expenses/summary' + params);
         },
+        
+        async uploadAttachment(expenseId, file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const token = InvoiceFastAPI.getToken();
+            const response = await fetch('/api/v1/tenant/expenses/' + expenseId + '/attachments', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData,
+            });
+            if (!response.ok) throw new Error('Failed to upload attachment');
+            return response.json();
+        },
     },
     
     // Reminder Sequences
@@ -399,12 +412,28 @@ const InvoiceFastAPI = {
     
     // Reports - Extended
     reports: {
+        async getDashboard(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/dashboard?period=' + period);
+        },
+        
         async getOverview(period = '30') {
             return InvoiceFastAPI.request('/tenant/reports/overview?period=' + period);
         },
         
         async getRevenue(period = '30') {
             return InvoiceFastAPI.request('/tenant/reports/revenue?period=' + period);
+        },
+        
+        async getProfit(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/profit?period=' + period);
+        },
+        
+        async getCashFlow(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/cashflow?period=' + period);
+        },
+        
+        async getExpenses(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/expenses?period=' + period);
         },
         
         async getInvoices(period = '30') {
@@ -429,6 +458,10 @@ const InvoiceFastAPI = {
         
         async getAging() {
             return InvoiceFastAPI.request('/tenant/reports/aging');
+        },
+        
+        async getAgingDetailed() {
+            return InvoiceFastAPI.request('/tenant/reports/aging-detailed');
         },
         
         async getIncomeStatement(period = '30') {
@@ -506,9 +539,21 @@ const InvoiceFastAPI = {
         },
         
         async submitToKRA(id) {
-            return InvoiceFastAPI.request('/tenant/invoices/' + id + '/kra', {
+            return InvoiceFastAPI.request('/tenant/invoices/' + id + '/kra/submit', {
                 method: 'POST',
             });
+        },
+        
+        async getKRAStats() {
+            return InvoiceFastAPI.request('/tenant/invoices/kra-stats');
+        },
+        
+        async getKRAActivity(limit = 50) {
+            return InvoiceFastAPI.request('/tenant/invoices/kra/activity?limit=' + limit);
+        },
+        
+        async submitAllPendingToKRA() {
+            return InvoiceFastAPI.request('/tenant/invoices/kra/submit-all', { method: 'POST' });
         },
         
         async requestPayment(id) {
@@ -623,6 +668,22 @@ const InvoiceFastAPI = {
             if (endDate) params += '&end_date=' + endDate;
             return InvoiceFastAPI.request('/tenant/reports/client/' + clientID + '/statement' + params);
         },
+        
+        async getInvoices(clientID, limit = 20) {
+            return InvoiceFastAPI.request('/tenant/clients/' + clientID + '/invoices?limit=' + limit);
+        },
+        
+        async getPayments(clientID, limit = 20) {
+            return InvoiceFastAPI.request('/tenant/clients/' + clientID + '/payments?limit=' + limit);
+        },
+        
+        async getActivity(clientID, limit = 20) {
+            return InvoiceFastAPI.request('/tenant/clients/' + clientID + '/activity?limit=' + limit);
+        },
+        
+        async getStats(clientID) {
+            return InvoiceFastAPI.request('/tenant/clients/' + clientID + '/stats', { method: 'POST' });
+        },
     },
     
     // Payments
@@ -636,7 +697,7 @@ const InvoiceFastAPI = {
             return InvoiceFastAPI.request('/tenant/payments/' + id);
         },
         
-        async requestPayment(data) {
+        async request(data) {
             return InvoiceFastAPI.request('/tenant/payments/request', {
                 method: 'POST',
                 body: JSON.stringify(data),
@@ -708,6 +769,34 @@ const InvoiceFastAPI = {
             return InvoiceFastAPI.request('/tenant/settings/', {
                 method: 'PUT',
                 body: JSON.stringify(data),
+            });
+        },
+        
+        async updateBusiness(data) {
+            return InvoiceFastAPI.request('/tenant/settings/', {
+                method: 'PUT',
+                body: JSON.stringify({ branding: data }),
+            });
+        },
+        
+        async updateProfile(data) {
+            return InvoiceFastAPI.request('/tenant/settings/', {
+                method: 'PUT',
+                body: JSON.stringify({ profile: data }),
+            });
+        },
+        
+        async updateInvoice(data) {
+            return InvoiceFastAPI.request('/tenant/settings/', {
+                method: 'PUT',
+                body: JSON.stringify({ invoice: data }),
+            });
+        },
+        
+        async updatePayments(data) {
+            return InvoiceFastAPI.request('/tenant/settings/', {
+                method: 'PUT',
+                body: JSON.stringify({ payments: data }),
             });
         },
         

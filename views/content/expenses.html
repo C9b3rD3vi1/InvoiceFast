@@ -1,13 +1,14 @@
-<!-- Expenses Content -->
-<div class="p-6" x-data="expensesContent()" x-init="init()">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+<!-- Enhanced Expenses Module -->
+<div class="p-6 space-y-6" x-data="expensesModule()" x-init="init()">
+
+    <!-- Header Section -->
+    <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Expenses</h1>
-            <p class="text-slate-500 text-sm mt-1">Track and manage business expenses</p>
+            <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Expenses</h1>
+            <p class="text-slate-500 mt-1">Track, manage, and analyze business expenses</p>
         </div>
         <div class="flex items-center gap-3">
-            <button @click="exportExpenses()" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
+            <button @click="exportExpenses()" class="px-5 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
                 <i data-lucide="download" class="w-4 h-4"></i>
                 Export
             </button>
@@ -18,302 +19,830 @@
         </div>
     </div>
 
-    <!-- Stats -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-slate-500">Total Expenses</p>
-                    <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(stats.total)">KES 0</p>
+    <!-- KPI Dashboard -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+        <template x-for="(stat, idx) in stats" :key="stat.label">
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300" :class="{'animate-pulse': stat.loading}">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="p-2.5 rounded-xl" :class="stat.bg">
+                        <i :data-lucide="stat.icon" class="w-5 h-5" :class="stat.color"></i>
+                    </div>
+                    <template x-if="stat.trend">
+                        <span class="text-xs font-medium px-2 py-1 rounded-full" :class="stat.trend > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
+                            <span x-text="stat.trend > 0 ? '↑' : '↓'"></span> <span x-text="Math.abs(stat.trend)"></span>%
+                        </span>
+                    </template>
                 </div>
-                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                    <i data-lucide="trending-down" class="w-5 h-5 text-red-600"></i>
+                <p class="text-xs text-slate-500 font-medium" x-text="stat.label"></p>
+                <p class="text-2xl font-bold text-slate-900 mt-1" x-text="stat.value"></p>
+            </div>
+        </template>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Spending by Category Chart -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+            <h3 class="text-lg font-semibold text-slate-900 mb-4">Spending by Category</h3>
+            <div class="relative h-40 flex items-center justify-center">
+                <canvas id="expenseCategoryChart" class="w-52 h-52"></canvas>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-slate-900" x-text="stats[0].value"></p>
+                        <p class="text-xs text-slate-500">Total</p>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-slate-500">This Month</p>
-                    <p class="text-xl font-bold text-blue-600" x-text="formatCurrency(stats.thisMonth)">KES 0</p>
-                </div>
-                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <i data-lucide="calendar" class="w-5 h-5 text-blue-600"></i>
-                </div>
+            <div class="mt-4 space-y-2">
+                <template x-for="(cat, idx) in categoryData" :key="cat.name">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full" :class="cat.color"></span>
+                            <span x-text="cat.name"></span>
+                        </span>
+                        <span class="font-semibold text-slate-900" x-text="cat.percentage + '%'"></span>
+                    </div>
+                </template>
             </div>
         </div>
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-slate-500">Pending</p>
-                    <p class="text-xl font-bold text-amber-600" x-text="stats.pending">0</p>
-                </div>
-                <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <i data-lucide="clock" class="w-5 h-5 text-amber-600"></i>
-                </div>
+
+        <!-- Live Activity Feed -->
+        <div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-slate-900">Recent Activity</h3>
+                <button @click="refreshActivity()" class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 text-slate-400" :class="{'animate-spin': activityLoading}"></i>
+                </button>
             </div>
-        </div>
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="text-xs text-slate-500">Categories</p>
-                    <p class="text-xl font-bold text-purple-600" x-text="categories.length">0</p>
-                </div>
-                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <i data-lucide="folder" class="w-5 h-5 text-purple-600"></i>
-                </div>
+            <div class="space-y-3 max-h-64 overflow-y-auto" x-show="!activityLoading">
+                <template x-if="activities.length === 0">
+                    <div class="text-center py-8 text-slate-400">
+                        <i data-lucide="activity" class="w-12 h-12 mx-auto mb-3 opacity-50"></i>
+                        <p>No recent activity</p>
+                    </div>
+                </template>
+                <template x-for="activity in activities" :key="activity.id">
+                    <div class="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-all">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center" 
+                            :class="activity.status === 'approved' ? 'bg-green-100' : (activity.status === 'rejected' ? 'bg-red-100' : 'bg-amber-100')">
+                            <i :data-lucide="activity.status === 'approved' ? 'check-circle' : (activity.status === 'rejected' ? 'x-circle' : 'clock')" 
+                                class="w-5 h-5" :class="activity.status === 'approved' ? 'text-green-600' : (activity.status === 'rejected' ? 'text-red-600' : 'text-amber-600')"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-slate-900 truncate">
+                                <span x-text="activity.title"></span>
+                                <span class="text-slate-500" x-text="activity.status"></span>
+                            </p>
+                            <p class="text-xs text-slate-500" x-text="formatTimeAgo(activity.updated_at)"></p>
+                        </div>
+                        <span class="font-semibold text-slate-900" x-text="formatCurrency(activity.amount)"></span>
+                    </div>
+                </template>
+            </div>
+            <div x-show="activityLoading" class="space-y-3">
+                <template x-for="i in 5">
+                    <div class="flex items-center gap-4 p-3">
+                        <div class="w-10 h-10 rounded-full bg-slate-100 animate-pulse"></div>
+                        <div class="flex-1 space-y-2">
+                            <div class="h-4 bg-slate-100 rounded w-3/4 animate-pulse"></div>
+                            <div class="h-3 bg-slate-100 rounded w-1/4 animate-pulse"></div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
 
-    <!-- Filters -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-6">
+    <!-- Filters Bar -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-4">
         <div class="flex items-center gap-4 flex-wrap">
-            <div class="relative flex-1 min-w-[200px]">
-                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input type="text" x-model="search" @input.debounce.300ms="loadExpenses()" 
-                    placeholder="Search expenses..."
-                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200">
+            <!-- Quick Filters -->
+            <div class="flex items-center gap-1">
+                <button @click="setQuickFilter('today')" :class="quickFilter === 'today' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" 
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">Today</button>
+                <button @click="setQuickFilter('week')" :class="quickFilter === 'week' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">This Week</button>
+                <button @click="setQuickFilter('month')" :class="quickFilter === 'month' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">This Month</button>
+                <button @click="setQuickFilter('')" :class="quickFilter === '' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                    class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">All</button>
             </div>
-            <select x-model="filterStatus" @change="loadExpenses()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+            
+            <div class="relative flex-1 min-w-[280px]">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" x-model="search" @input.debounce.400ms="loadExpenses()" 
+                    placeholder="Search expenses, vendors..."
+                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust focus:border-transparent bg-slate-50 focus:bg-white transition-all">
+            </div>
+            
+            <select x-model="filterStatus" @change="loadExpenses()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white transition-all">
                 <option value="">All Status</option>
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
                 <option value="paid">Paid</option>
                 <option value="rejected">Rejected</option>
             </select>
-            <select x-model="filterCategory" @change="loadExpenses()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm">
+            
+            <select x-model="filterCategory" @change="loadExpenses()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white transition-all">
                 <option value="">All Categories</option>
-                <template x-for="cat in categories" :key="cat.id">
+                <template x-for="cat in categories">
                     <option :value="cat.id" x-text="cat.name"></option>
                 </template>
             </select>
-            <input type="date" x-model="filterStartDate" @change="loadExpenses()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm">
-            <span class="text-slate-400">to</span>
-            <input type="date" x-model="filterEndDate" @change="loadExpenses()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm">
-            <button @click="clearFilters()" class="px-4 py-2.5 text-slate-600 hover:text-slate-900 text-sm">Clear</button>
+            
+            <div class="flex items-center gap-2">
+                <input type="number" x-model="filterAmountMin" @change="loadExpenses()" placeholder="Min"
+                    class="w-24 px-3 py-2 rounded-xl border border-slate-200 text-sm">
+                <span class="text-slate-400">-</span>
+                <input type="number" x-model="filterAmountMax" @change="loadExpenses()" placeholder="Max"
+                    class="w-24 px-3 py-2 rounded-xl border border-slate-200 text-sm">
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <input type="date" x-model="filterStartDate" @change="loadExpenses()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-slate-50">
+                <span class="text-slate-400">→</span>
+                <input type="date" x-model="filterEndDate" @change="loadExpenses()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-slate-50">
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button @click="clearFilters()" class="px-4 py-2.5 text-slate-600 hover:text-slate-900 text-sm font-medium">Clear</button>
+                <button @click="loadExpenses()" class="px-4 py-2.5 bg-trust text-white rounded-xl text-sm font-medium hover:bg-trust-dark transition-all">
+                    <i data-lucide="filter" class="w-4 h-4 inline mr-1"></i> Apply
+                </button>
+            </div>
+
+            <div class="ml-auto flex items-center gap-2 text-sm text-slate-500">
+                <span x-text="total"></span> results
+            </div>
         </div>
     </div>
 
-    <!-- Expenses Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <template x-if="loading">
-            <div class="p-12 text-center">
-                <div class="w-8 h-8 border-2 border-trust border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p class="text-slate-500">Loading expenses...</p>
+    <!-- Smart Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-4 py-3 text-left">
+                            <input type="checkbox" @change="toggleAll($el.checked)" :checked="allSelected" class="rounded border-slate-300 text-trust focus:ring-trust">
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Title</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Category</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Vendor</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Amount</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Recurring</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-if="loading">
+                        <template x-for="i in 5">
+                            <tr class="animate-pulse">
+                                <td class="px-4 py-4"><div class="h-4 w-4 bg-slate-200 rounded"></div></td>
+                                <td class="px-4 py-4"><div class="h-4 bg-slate-200 rounded w-20"></div></td>
+                                <td class="px-4 py-4"><div class="h-4 bg-slate-200 rounded w-32"></div></td>
+                                <td class="px-4 py-4"><div class="h-6 bg-slate-200 rounded-full w-20"></div></td>
+                                <td class="px-4 py-4"><div class="h-4 bg-slate-200 rounded w-24"></div></td>
+                                <td class="px-4 py-4"><div class="h-4 bg-slate-200 rounded w-20 ml-auto"></div></td>
+                                <td class="px-4 py-4"><div class="h-6 bg-slate-200 rounded-full w-16 mx-auto"></div></td>
+                                <td class="px-4 py-4"><div class="h-4 bg-slate-200 rounded w-16"></div></td>
+                                <td class="px-4 py-4"><div class="h-8 bg-slate-200 rounded w-8 ml-auto"></div></td>
+                            </tr>
+                        </template>
+                    </template>
+                    <template x-if="!loading && expenses.length === 0">
+                        <tr>
+                            <td colspan="9" class="px-4 py-16">
+                                <div class="text-center">
+                                    <div class="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                                        <i data-lucide="receipt" class="w-10 h-10 text-slate-400"></i>
+                                    </div>
+                                    <h3 class="text-lg font-semibold text-slate-900 mb-2">No expenses found</h3>
+                                    <p class="text-slate-500 mb-4">Try adjusting your filters or add a new expense</p>
+                                    <button @click="openAddModal()" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                        <i data-lucide="plus" class="w-4 h-4"></i> Add Expense
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-for="expense in expenses" :key="expense.id">
+                        <tr class="hover:bg-slate-50/80 transition-all cursor-pointer group" :class="selectedExpenses.includes(expense.id) ? 'bg-trust/5' : ''">
+                            <td class="px-4 py-4">
+                                <input type="checkbox" :checked="selectedExpenses.includes(expense.id)" 
+                                    @change="toggleSelect(expense.id)" class="rounded border-slate-300 text-trust focus:ring-trust">
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600" x-text="formatDate(expense.date)">-</td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+                                        <i data-lucide="receipt" class="w-4 h-4 text-red-600"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-900" x-text="expense.title"></p>
+                                        <p class="text-xs text-slate-500" x-text="expense.description || '-'"></p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700" x-text="expense.category_name || '-'">-</span>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600" x-text="expense.vendor || '-'">-</td>
+                            <td class="px-4 py-4 text-right">
+                                <p class="font-semibold text-slate-900" x-text="formatCurrency(expense.amount)">KES 0</p>
+                                <template x-if="expense.tax_amount > 0">
+                                    <p class="text-xs text-slate-500" x-text="'+' + formatCurrency(expense.tax_amount) + ' tax'"></p>
+                                </template>
+                            </td>
+                            <td class="px-4 py-4 text-center">
+                                <span class="px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer hover:opacity-80" 
+                                    :class="getStatusClass(expense.status)" 
+                                    @click="quickStatusChange(expense)"
+                                    x-text="expense.status">-</span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <template x-if="expense.is_recurring">
+                                    <span class="flex items-center gap-1 text-xs text-slate-500">
+                                        <i data-lucide="repeat" class="w-3 h-3"></i>
+                                        <span x-text="expense.recurring_period"></span>
+                                    </span>
+                                </template>
+                                <template x-if="!expense.is_recurring">
+                                    <span class="text-slate-400 text-sm">-</span>
+                                </template>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <div class="relative" x-data="{ open: false }" @click.stop>
+                                    <button @click="open = !open" @click.outside="open = false" class="p-2 hover:bg-slate-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                        <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+                                    </button>
+                                    <div x-show="open" x-cloak class="dropdown-menu absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50">
+                                        <button @click="viewExpense(expense); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3">
+                                            <i data-lucide="eye" class="w-4 h-4 text-slate-400"></i> View Details
+                                        </button>
+                                        <button @click="editExpense(expense); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3">
+                                            <i data-lucide="edit-2" class="w-4 h-4 text-slate-400"></i> Edit
+                                        </button>
+                                        <button @click="uploadAttachment(expense); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3">
+                                            <i data-lucide="paperclip" class="w-4 h-4 text-slate-400"></i> Attachments <span x-text="expense.attachments" class="ml-auto text-xs text-slate-400"></span>
+                                        </button>
+                                        <div class="border-t border-slate-100 my-1"></div>
+                                        <button @click="deleteExpense(expense); open = false" class="w-full px-4 py-2.5 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-3">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50">
+            <p class="text-sm text-slate-500">Showing <span x-text="expenses.length"></span> of <span x-text="total"></span> expenses</p>
+            <div class="flex items-center gap-2">
+                <button @click="goToPage(page - 1)" :disabled="page <= 1" 
+                    class="px-3 py-1.5 rounded-lg border border-slate-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors">
+                    ← Previous
+                </button>
+                <div class="flex items-center gap-1">
+                    <template x-for="p in visiblePages" :key="p">
+                        <button @click="goToPage(p)" 
+                            class="w-8 h-8 rounded-lg text-sm font-medium transition-colors"
+                            :class="p === page ? 'bg-trust text-white' : 'hover:bg-slate-100 text-slate-600'" 
+                            x-text="p"></button>
+                    </template>
+                </div>
+                <button @click="goToPage(page + 1)" :disabled="page >= totalPages" 
+                    class="px-3 py-1.5 rounded-lg border border-slate-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors">
+                    Next →
+                </button>
             </div>
-        </template>
-        
-        <table x-show="!loading" class="w-full">
-            <thead class="bg-slate-50 border-b border-slate-200">
-                <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Date</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Title</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Category</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Vendor</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Amount</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Status</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                <template x-for="expense in expenses" :key="expense.id">
-                    <tr class="hover:bg-slate-50/50">
-                        <td class="px-4 py-4 text-sm text-slate-600" x-text="formatDate(expense.date)">-</td>
-                        <td class="px-4 py-4">
-                            <p class="font-medium text-slate-900" x-text="expense.title"></p>
-                            <p class="text-xs text-slate-500" x-text="expense.description || '-'"></p>
-                        </td>
-                        <td class="px-4 py-4">
-                            <span class="px-2.5 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700" x-text="expense.category_name || '-'">-</span>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-slate-600" x-text="expense.vendor || '-'">-</td>
-                        <td class="px-4 py-4 text-right font-semibold text-slate-900" x-text="formatCurrency(expense.amount)">KES 0</td>
-                        <td class="px-4 py-4 text-center">
-                            <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
-                                :class="getStatusClass(expense.status)"
-                                x-text="expense.status">-</span>
-                        </td>
-                        <td class="px-4 py-4 text-right">
-                            <div class="flex items-center justify-end gap-1">
-                                <button @click="editExpense(expense)" class="p-2 hover:bg-slate-100 rounded-lg" title="Edit">
-                                    <i data-lucide="edit-2" class="w-4 h-4 text-slate-500"></i>
-                                </button>
-                                <button @click="deleteExpense(expense)" class="p-2 hover:bg-red-50 rounded-lg text-red-500" title="Delete">
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div x-show="modalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-10">
+                <h2 class="text-xl font-bold text-slate-900" x-text="editingExpense ? 'Edit Expense' : 'Add Expense'"></h2>
+                <button @click="modalOpen = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form @submit.prevent="saveExpense()" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Title *</label>
+                    <input type="text" x-model="form.title" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                    <textarea x-model="form.description" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200"></textarea>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Amount *</label>
+                        <input type="number" step="0.01" x-model="form.amount" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Currency</label>
+                        <select x-model="form.currency" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            <option value="KES">KES</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Date *</label>
+                        <input type="date" x-model="form.date" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                        <div class="flex gap-2">
+                            <select x-model="form.category_id" class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200">
+                                <option value="">Select category</option>
+                                <template x-for="cat in categories">
+                                    <option :value="cat.id" x-text="cat.name"></option>
+                                </template>
+                            </select>
+                            <button type="button" @click="showNewCategory = true" x-show="!showNewCategory" class="px-3 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <template x-if="showNewCategory">
+                            <div class="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                                <div class="flex gap-2">
+                                    <input type="text" x-model="newCategoryName" placeholder="New category name" class="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                                    <button type="button" @click="createCategory()" :disabled="!newCategoryName.trim()" class="px-3 py-2 bg-trust text-white rounded-lg text-sm hover:bg-trust-dark disabled:opacity-50">Add</button>
+                                    <button type="button" @click="showNewCategory = false; newCategoryName = ''" class="px-3 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-100">Cancel</button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Vendor</label>
+                        <input type="text" x-model="form.vendor" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                        <select x-model="form.payment_method" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            <option value="">Select method</option>
+                            <option value="cash">Cash</option>
+                            <option value="bank">Bank Transfer</option>
+                            <option value="mpesa">M-Pesa</option>
+                            <option value="card">Card</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                        <select x-model="form.status" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="paid">Paid</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reference</label>
+                        <input type="text" x-model="form.reference" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tax Rate (%)</label>
+                        <input type="number" step="0.01" x-model="form.tax_rate" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Tax Amount</label>
+                        <input type="number" step="0.01" x-model="form.tax_amount" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" x-model="form.is_recurring" id="is-recurring" class="rounded border-slate-300 text-trust focus:ring-trust">
+                    <label for="is-recurring" class="text-sm font-medium text-slate-700">Recurring expense</label>
+                </div>
+                
+                <template x-if="form.is_recurring">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Recurring Period</label>
+                        <select x-model="form.recurring_period" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+                </template>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                    <textarea x-model="form.notes" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200"></textarea>
+                </div>
+
+                <!-- Attachments Display -->
+                <div x-show="attachments.length > 0">
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Attachments</label>
+                    <div class="space-y-2">
+                        <template x-for="att in attachments" :key="att.id">
+                            <div @click="viewAttachment(att)" class="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer">
+                                <div class="flex items-center gap-3">
+                                    <i data-lucide="file" class="w-5 h-5 text-slate-500"></i>
+                                    <div>
+                                        <p class="text-sm font-medium text-slate-900" x-text="att.file_name"></p>
+                                        <p class="text-xs text-slate-500" x-text="(att.file_size / 1024).toFixed(1) + ' KB'"></p>
+                                    </div>
+                                </div>
+                                <button @click.stop="deleteAttachment(att.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
                                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                                 </button>
                             </div>
-                        </td>
-                    </tr>
-                </template>
-                <template x-if="!loading && expenses.length === 0">
-                    <tr><td colspan="7" class="px-4 py-16">
-                        <div class="text-center">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <i data-lucide="receipt" class="w-8 h-8 text-slate-400"></i>
-                            </div>
-                            <h3 class="text-lg font-semibold text-slate-900 mb-2">No expenses yet</h3>
-                            <p class="text-slate-500 mb-4">Track your first business expense</p>
-                            <button @click="openAddModal()" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
-                                <i data-lucide="plus" class="w-4 h-4"></i> Add Expense
-                            </button>
-                        </div>
-                    </td></tr>
-                </template>
-            </tbody>
-        </table>
+                        </template>
+                    </div>
+                </div>
 
-        <!-- Pagination -->
-        <div class="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-            <p class="text-sm text-slate-500">Showing <span x-text="expenses.length">0</span> expenses</p>
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                    <button type="button" @click="modalOpen = false" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Expense</button>
+                </div>
+            </form>
         </div>
     </div>
-</div>
 
-<!-- Add/Edit Modal -->
-<div x-show="modalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="modalOpen = false">
-    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div class="border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 bg-white">
-            <h2 class="text-xl font-bold text-slate-900" x-text="editingExpense ? 'Edit Expense' : 'Add Expense'"></h2>
-            <button @click="modalOpen = false" class="p-2 hover:bg-slate-100 rounded-lg">
-                <i data-lucide="x" class="w-5 h-5"></i>
+    <!-- Delete Expense Confirmation Modal -->
+    <div x-show="deleteModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="deleteModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="p-3 rounded-xl bg-red-100">
+                    <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-900">Delete Expense?</h3>
+                    <p class="text-sm text-slate-500">This action cannot be undone</p>
+                </div>
+            </div>
+            <p class="text-slate-600 mb-6">Are you sure you want to delete <span x-text="deletingExpense?.title" class="font-medium"></span>?</p>
+            <div class="flex gap-3">
+                <button @click="deleteModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button @click="confirmDelete()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Attachment Confirmation Modal -->
+    <div x-show="deleteAttachmentModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="deleteAttachmentModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="p-3 rounded-xl bg-red-100">
+                    <i data-lucide="file-x" class="w-6 h-6 text-red-600"></i>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-900">Delete Attachment?</h3>
+                    <p class="text-sm text-slate-500">This action cannot be undone</p>
+                </div>
+            </div>
+            <p class="text-slate-600 mb-6">Are you sure you want to delete <span x-text="deletingAttachmentName" class="font-medium"></span>?</p>
+            <div class="flex gap-3">
+                <button @click="deleteAttachmentModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button @click="confirmDeleteAttachment()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attachment Upload Modal -->
+    <div x-show="attachmentModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="attachmentModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-slate-900">Upload Attachment</h3>
+                <button @click="attachmentModalOpen = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-trust transition-colors"
+                @dragover.prevent="dragOver = true" 
+                @dragleave="dragOver = false"
+                @drop.prevent="handleDrop($event)"
+                :class="dragOver ? 'border-trust bg-trust/5' : ''">
+                <template x-if="selectedFile">
+                    <div class="mb-4 p-4 bg-trust/10 rounded-lg">
+                        <i data-lucide="file" class="w-8 h-8 mx-auto mb-2 text-trust"></i>
+                        <p class="text-sm font-medium text-slate-900" x-text="selectedFile?.name"></p>
+                        <p class="text-xs text-slate-500" x-text="(selectedFile?.size / 1024).toFixed(1) + ' KB'"></p>
+                    </div>
+                </template>
+                <template x-if="!selectedFile">
+                    <div>
+                        <i data-lucide="upload-cloud" class="w-12 h-12 mx-auto mb-3 text-slate-400"></i>
+                        <p class="text-slate-600 mb-2">Drag and drop files here</p>
+                        <p class="text-sm text-slate-500 mb-4">or</p>
+                    </div>
+                </template>
+                <input type="file" id="file-input" @change="handleFileSelect($event)" class="hidden" accept="image/*,.pdf,.doc,.docx">
+                <label for="file-input" class="px-4 py-2 bg-trust text-white rounded-lg cursor-pointer hover:bg-trust-dark inline-block">
+                    Browse Files
+                </label>
+                <p class="text-xs text-slate-400 mt-4">Max file size: 10MB</p>
+            </div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button type="button" @click="attachmentModalOpen = false" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                <button type="button" @click="uploadFile()" :disabled="uploading || !selectedFile"
+                        class="px-4 py-2.5 rounded-xl flex items-center gap-2"
+                        :class="(selectedFile && !uploading) ? 'bg-trust text-white hover:bg-trust-dark' : 'bg-slate-200 text-slate-400 cursor-not-allowed'">
+                    Upload
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attachment Preview Modal -->
+    <div x-show="previewModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="previewModalOpen = false">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <div class="border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900" x-text="previewAttachment?.file_name"></h3>
+                <button @click="previewModalOpen = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 flex items-center justify-center bg-slate-100">
+                <template x-if="previewAttachment?.file_type?.startsWith('image/')">
+                    <img :src="'/api/v1/tenant/expenses/attachment-file/' + previewAttachment?.id + '?token=' + token" class="max-h-[60vh] rounded-lg shadow-lg">
+                </template>
+                <template x-if="previewAttachment?.file_type === 'application/pdf'">
+                    <iframe :src="'/api/v1/tenant/expenses/attachment-file/' + previewAttachment?.id + '?token=' + token" class="w-full h-[60vh] rounded-lg"></iframe>
+                </template>
+                <template x-if="!previewAttachment?.file_type?.startsWith('image/') && previewAttachment?.file_type !== 'application/pdf'">
+                    <div class="text-center py-12">
+                        <i data-lucide="file" class="w-16 h-16 mx-auto mb-4 text-slate-400"></i>
+                        <p class="text-slate-600 mb-4">Preview not available</p>
+                        <a :href="'/api/v1/tenant/expenses/attachment-file/' + previewAttachment?.id + '?token=' + token" download class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark">Download File</a>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-6 right-6 z-50 animate-slide-up">
+        <div class="px-5 py-4 rounded-xl shadow-2xl flex items-center gap-4" 
+            :class="toast.type === 'success' ? 'bg-green-600 text-white' : (toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white')">
+            <i :data-lucide="toast.type === 'success' ? 'check-circle' : (toast.type === 'error' ? 'alert-circle' : 'alert-triangle')" class="w-5 h-5"></i>
+            <span class="font-medium" x-text="toast.message"></span>
+            <button @click="toast.show = false" class="ml-2 opacity-70 hover:opacity-100 transition-opacity">
+                <i data-lucide="x" class="w-4 h-4"></i>
             </button>
         </div>
-        <form @submit.prevent="saveExpense()" class="p-6 space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Title *</label>
-                <input type="text" x-model="form.title" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                <textarea x-model="form.description" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200"></textarea>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Amount *</label>
-                    <input type="number" step="0.01" x-model="form.amount" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Date *</label>
-                    <input type="date" x-model="form.date" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                    <select x-model="form.category_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                        <option value="">Select category</option>
-                        <template x-for="cat in categories" :key="cat.id">
-                            <option :value="cat.id" x-text="cat.name"></option>
-                        </template>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Vendor</label>
-                    <input type="text" x-model="form.vendor" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
-                    <select x-model="form.payment_method" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                        <option value="">Select method</option>
-                        <option value="cash">Cash</option>
-                        <option value="bank">Bank Transfer</option>
-                        <option value="mpesa">M-Pesa</option>
-                        <option value="card">Card</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                    <select x-model="form.status" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                        <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
-                        <option value="paid">Paid</option>
-                    </select>
-                </div>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Reference</label>
-                <input type="text" x-model="form.reference" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-            </div>
-            <div class="flex justify-end gap-3 pt-4">
-                <button type="button" @click="modalOpen = false" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
-                <button type="submit" class="px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Expense</button>
-            </div>
-        </form>
     </div>
-</div>
 
-<!-- Delete Modal -->
-<div x-show="deleteModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="deleteModalOpen = false">
-    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-        <div class="flex items-center gap-4 mb-4">
-            <div class="p-3 rounded-xl bg-red-100">
-                <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+    <!-- Bulk Actions Bar -->
+    <div x-show="selectedExpenses.length > 0" x-cloak class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+        <div class="bg-slate-900 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-4">
+            <span class="text-sm font-medium"><span x-text="selectedExpenses.length"></span> selected</span>
+            <div class="flex items-center gap-2">
+                <button @click="bulkApprove()" class="px-3 py-1.5 bg-green-600 rounded-lg text-sm hover:bg-green-700 transition-colors">
+                    <i data-lucide="check-circle" class="w-4 h-4 inline mr-1"></i> Approve
+                </button>
+                <button @click="bulkExport()" class="px-3 py-1.5 bg-blue-600 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                    <i data-lucide="download" class="w-4 h-4 inline mr-1"></i> Export
+                </button>
+                <button @click="bulkDelete()" class="px-3 py-1.5 bg-red-600 rounded-lg text-sm hover:bg-red-700 transition-colors">
+                    <i data-lucide="trash-2" class="w-4 h-4 inline mr-1"></i> Delete
+                </button>
             </div>
-            <div>
-                <h3 class="font-semibold text-slate-900">Delete Expense?</h3>
-                <p class="text-sm text-slate-500">This action cannot be undone</p>
-            </div>
-        </div>
-        <p class="text-slate-600 mb-6">Are you sure you want to delete <span x-text="deletingExpense?.title" class="font-medium"></span>?</p>
-        <div class="flex gap-3">
-            <button @click="deleteModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
-            <button @click="confirmDelete()" class="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700">Delete</button>
+            <button @click="selectedExpenses = []" class="p-1 hover:bg-slate-700 rounded-lg">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
         </div>
     </div>
-</div>
-
-<!-- Toast -->
-<div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
-    <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
-    <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
 </div>
 
 <script>
-function expensesContent() {
+function expensesModule() {
     return {
+        token: localStorage.getItem('accessToken') || localStorage.getItem('token') || '',
         loading: true,
+        activityLoading: false,
         expenses: [],
         categories: [],
+        activities: [],
+        attachments: [],
+        selectedExpenses: [],
+        allSelected: false,
+        total: 0,
+        page: 1,
+        perPage: 15,
+        totalPages: 1,
         search: '',
         filterStatus: '',
         filterCategory: '',
         filterStartDate: '',
         filterEndDate: '',
-        stats: { total: 0, thisMonth: 0, pending: 0, categories: 0 },
-        
+        filterAmountMin: '',
+        filterAmountMax: '',
+        quickFilter: '',
+        vendorList: [],
+        stats: [
+            { label: 'Total', value: 'KES 0', icon: 'wallet', color: 'text-red-600', bg: 'bg-red-100', trend: null },
+            { label: 'This Month', value: 'KES 0', icon: 'calendar', color: 'text-blue-600', bg: 'bg-blue-100', trend: null },
+            { label: 'Pending', value: '0', icon: 'clock', color: 'text-amber-600', bg: 'bg-amber-100', trend: null },
+            { label: 'Approved', value: '0', icon: 'check-circle', color: 'text-green-600', bg: 'bg-green-100', trend: null },
+            { label: 'Paid', value: '0', icon: 'dollar-sign', color: 'text-purple-600', bg: 'bg-purple-100', trend: null },
+            { label: 'Rejected', value: '0', icon: 'x-circle', color: 'text-rose-600', bg: 'bg-rose-100', trend: null },
+            { label: 'Categories', value: '0', icon: 'folder', color: 'text-indigo-600', bg: 'bg-indigo-100', trend: null },
+        ],
+        categoryData: [],
         modalOpen: false,
-        editingExpense: null,
         deleteModalOpen: false,
+        attachmentModalOpen: false,
+        previewModalOpen: false,
+        previewAttachment: null,
+        editingExpense: null,
         deletingExpense: null,
-        form: {
-            title: '', description: '', amount: 0, date: '', category_id: '', vendor: '', payment_method: '', status: 'pending', reference: ''
-        },
+        deletingAttachmentId: null,
+        deletingAttachmentName: null,
+        deleteAttachmentModalOpen: false,
+        activeTab: 'basic',
+        uploading: false,
+        selectedFile: null,
+        dragOver: false,
         toast: { show: false, message: '', type: 'success' },
+        showNewCategory: false,
+        newCategoryName: '',
+        form: {
+            title: '', description: '', amount: 0, currency: 'KES', date: '', category_id: '',
+            vendor: '', payment_method: '', status: 'pending', reference: '',
+            tax_amount: 0, tax_rate: 0, is_recurring: false, recurring_period: 'monthly', notes: ''
+        },
+
+        get visiblePages() {
+            const pages = [];
+            const maxVisible = 5;
+            let start = Math.max(1, this.page - Math.floor(maxVisible / 2));
+            let end = Math.min(this.totalPages, start + maxVisible - 1);
+            if (end - start + 1 < maxVisible) {
+                start = Math.max(1, end - maxVisible + 1);
+            }
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+            return pages;
+        },
 
         async init() {
+            lucide.createIcons();
             await this.loadCategories();
             await this.loadExpenses();
             await this.loadStats();
-            lucide.createIcons();
+            await this.loadActivity();
+            await this.loadVendorList();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                this.loadStats();
+                this.loadActivity();
+            }, 30000);
+
+            // Keyboard shortcut
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'n' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                    this.openAddModal();
+                }
+            });
+        },
+
+        async loadStats() {
+            try {
+                const params = new URLSearchParams();
+                if (this.quickFilter) params.append('period', this.quickFilter);
+                
+                const data = await InvoiceFastAPI.request('/tenant/expenses/summary?' + params.toString());
+                
+                const total = Number(data.total) || 0;
+                const thisMonth = Number(data.this_month) || 0;
+                
+                this.stats[0].value = this.formatCurrency(total);
+                this.stats[1].value = this.formatCurrency(thisMonth);
+                this.stats[2].value = data.pending || 0;
+                this.stats[3].value = data.approved || 0;
+                this.stats[4].value = data.paid || 0;
+                this.stats[5].value = data.rejected || 0;
+                this.stats[6].value = this.categories.length;
+
+                // Update category chart data
+                this.updateCategoryChart(data.by_category, data.by_category_raw);
+            } catch(e) {
+                console.error('Failed to load stats:', e);
+            }
+        },
+
+        updateCategoryChart(byCategory, byCategoryRaw) {
+            if (!byCategory) return;
+            
+            const colors = ['bg-red-400', 'bg-blue-400', 'bg-green-400', 'bg-amber-400', 'bg-purple-400', 'bg-indigo-400'];
+            
+            // Use category names from API if available
+            let categoryMap = {};
+            if (byCategoryRaw) {
+                categoryMap = byCategoryRaw;
+            } else {
+                this.categories.forEach(cat => {
+                    categoryMap[cat.id] = cat.name;
+                });
+            }
+            
+            // Build category data
+            let total = 0;
+            Object.values(byCategory).forEach(amount => {
+                total += amount;
+            });
+            
+            this.categoryData = Object.entries(byCategory).map(([catKey, amount], idx) => ({
+                name: categoryMap[catKey] || catKey || 'Uncategorized',
+                amount: amount,
+                percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
+                color: colors[idx % colors.length]
+            })).slice(0, 5);
+            
+            // Draw donut chart
+            this.drawDonutChart();
+        },
+
+        drawDonutChart() {
+            const canvas = document.getElementById('expenseCategoryChart');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = Math.min(centerX, centerY) - 10;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let startAngle = -Math.PI / 2;
+            const colors = ['#f87171', '#60a5fa', '#4ade80', '#fbbf24', '#a78bfa'];
+            
+            this.categoryData.forEach((cat, idx) => {
+                const percentage = cat.percentage / 100;
+                if (percentage > 0) {
+                    const endAngle = startAngle + percentage * 2 * Math.PI;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                    ctx.closePath();
+                    ctx.fillStyle = colors[idx % colors.length];
+                    ctx.fill();
+                    startAngle = endAngle;
+                }
+            });
+        },
+
+        async loadActivity() {
+            this.activityLoading = true;
+            try {
+                const params = new URLSearchParams({ limit: 10 });
+                const data = await InvoiceFastAPI.request('/tenant/expenses?' + params.toString());
+                this.activities = (data.expenses || []).slice(0, 10);
+            } catch(e) {
+                this.activities = [];
+            } finally {
+                this.activityLoading = false;
+                lucide.createIcons();
+            }
         },
 
         async loadExpenses() {
             this.loading = true;
             try {
-                const params = new URLSearchParams();
+                const params = new URLSearchParams({ 
+                    page: this.page, 
+                    limit: this.perPage 
+                });
                 if (this.search) params.append('search', this.search);
                 if (this.filterStatus) params.append('status', this.filterStatus);
                 if (this.filterCategory) params.append('category_id', this.filterCategory);
                 if (this.filterStartDate) params.append('start_date', this.filterStartDate);
                 if (this.filterEndDate) params.append('end_date', this.filterEndDate);
+                if (this.filterAmountMin) params.append('min_amount', this.filterAmountMin);
+                if (this.filterAmountMax) params.append('max_amount', this.filterAmountMax);
+                if (this.quickFilter) params.append('period', this.quickFilter);
                 
                 const data = await InvoiceFastAPI.request('/tenant/expenses?' + params.toString());
                 this.expenses = data.expenses || [];
+                this.total = data.total || 0;
+                this.totalPages = Math.ceil(this.total / this.perPage) || 1;
             } catch(e) {
                 console.error('Failed to load expenses:', e);
                 this.expenses = [];
@@ -326,23 +855,67 @@ function expensesContent() {
         async loadCategories() {
             try {
                 const data = await InvoiceFastAPI.request('/tenant/expenses/categories');
+                console.log('Categories:', data);
                 this.categories = data.categories || [];
             } catch(e) {
+                console.error('Load categories error:', e);
                 this.categories = [];
             }
         },
 
-        async loadStats() {
+        async createCategory() {
+            if (!this.newCategoryName.trim()) return;
             try {
-                const data = await InvoiceFastAPI.request('/tenant/expenses/summary');
-                this.stats = { 
-                    total: data.total || 0, 
-                    thisMonth: data.this_month || 0, 
-                    pending: data.pending || 0, 
-                    categories: this.categories.length 
-                };
+                await InvoiceFastAPI.request('/tenant/expenses/categories', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: this.newCategoryName.trim() })
+                });
+                this.showToast('Category created', 'success');
+                this.showNewCategory = false;
+                this.newCategoryName = '';
+                await this.loadCategories();
             } catch(e) {
-                this.stats = { total: 0, thisMonth: 0, pending: 0, categories: 0 };
+                this.showToast('Failed to create category', 'error');
+            }
+        },
+
+        async loadVendorList() {
+            // Get unique vendors from expenses
+            const vendors = new Set();
+            this.expenses.forEach(e => {
+                if (e.vendor) vendors.add(e.vendor);
+            });
+            this.vendorList = Array.from(vendors);
+        },
+
+        setQuickFilter(filter) {
+            this.quickFilter = filter;
+            const today = new Date();
+            
+            if (filter === 'today') {
+                const dateStr = today.toISOString().split('T')[0];
+                this.filterStartDate = dateStr;
+                this.filterEndDate = dateStr;
+            } else if (filter === 'week') {
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - today.getDay());
+                this.filterStartDate = startOfWeek.toISOString().split('T')[0];
+                this.filterEndDate = today.toISOString().split('T')[0];
+            } else if (filter === 'month') {
+                const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                this.filterStartDate = startOfMonth.toISOString().split('T')[0];
+                this.filterEndDate = today.toISOString().split('T')[0];
+            } else {
+                this.filterStartDate = '';
+                this.filterEndDate = '';
+            }
+            this.loadExpenses();
+        },
+
+        goToPage(p) {
+            if (p >= 1 && p <= this.totalPages) {
+                this.page = p;
+                this.loadExpenses();
             }
         },
 
@@ -352,56 +925,120 @@ function expensesContent() {
             this.filterCategory = '';
             this.filterStartDate = '';
             this.filterEndDate = '';
+            this.filterAmountMin = '';
+            this.filterAmountMax = '';
+            this.quickFilter = '';
+            this.page = 1;
             this.loadExpenses();
+        },
+
+        toggleSelect(id) {
+            const idx = this.selectedExpenses.indexOf(id);
+            if (idx > -1) {
+                this.selectedExpenses.splice(idx, 1);
+            } else {
+                this.selectedExpenses.push(id);
+            }
+            this.allSelected = this.selectedExpenses.length === this.expenses.length;
+        },
+
+        toggleAll(checked) {
+            if (checked) {
+                this.selectedExpenses = this.expenses.map(e => e.id);
+                this.allSelected = true;
+            } else {
+                this.selectedExpenses = [];
+                this.allSelected = false;
+            }
         },
 
         openAddModal() {
             this.editingExpense = null;
+            this.activeTab = 'basic';
+            this.showNewCategory = false;
+            this.newCategoryName = '';
             this.form = {
-                title: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], 
-                category_id: '', vendor: '', payment_method: '', status: 'pending', reference: ''
+                title: '', description: '', amount: 0, currency: 'KES', date: new Date().toISOString().split('T')[0], 
+                category_id: '', vendor: '', payment_method: '', status: 'pending', reference: '',
+                tax_amount: 0, tax_rate: 0, is_recurring: false, recurring_period: 'monthly', notes: ''
             };
             this.modalOpen = true;
+            this.loadCategories();
             this.$nextTick(() => lucide.createIcons());
         },
 
         editExpense(expense) {
             this.editingExpense = expense;
+            this.activeTab = 'basic';
             this.form = {
                 title: expense.title,
                 description: expense.description || '',
                 amount: expense.amount,
+                currency: expense.currency || 'KES',
                 date: expense.date,
                 category_id: expense.category_id || '',
                 vendor: expense.vendor || '',
                 payment_method: expense.payment_method || '',
                 status: expense.status,
-                reference: expense.reference || ''
+                reference: expense.reference || '',
+                tax_amount: expense.tax_amount || 0,
+                tax_rate: expense.tax_rate || 0,
+                is_recurring: expense.is_recurring || false,
+                recurring_period: expense.recurring_period || 'monthly',
+                notes: expense.notes || ''
             };
             this.modalOpen = true;
+            
+            // Always load attachments for edit
+            this.loadAttachments(expense.id);
+            
             this.$nextTick(() => lucide.createIcons());
+        },
+
+        viewExpense(expense) {
+            this.editExpense(expense);
         },
 
         async saveExpense() {
             try {
+                // Prepare form data with proper types
+                const formData = {
+                    title: this.form.title,
+                    description: this.form.description,
+                    amount: parseFloat(this.form.amount) || 0,
+                    currency: this.form.currency || 'KES',
+                    date: this.form.date,
+                    category_id: this.form.category_id || '',
+                    vendor: this.form.vendor || '',
+                    payment_method: this.form.payment_method || '',
+                    status: this.form.status || 'pending',
+                    reference: this.form.reference || '',
+                    tax_amount: parseFloat(this.form.tax_amount) || 0,
+                    tax_rate: parseFloat(this.form.tax_rate) || 0,
+                    is_recurring: this.form.is_recurring || false,
+                    recurring_period: this.form.recurring_period || 'monthly',
+                    notes: this.form.notes || ''
+                };
+                
                 if (this.editingExpense) {
                     await InvoiceFastAPI.request('/tenant/expenses/' + this.editingExpense.id, {
                         method: 'PUT',
-                        body: JSON.stringify(this.form)
+                        body: JSON.stringify(formData)
                     });
                     this.showToast('Expense updated', 'success');
                 } else {
                     await InvoiceFastAPI.request('/tenant/expenses', {
                         method: 'POST',
-                        body: JSON.stringify(this.form)
+                        body: JSON.stringify(formData)
                     });
                     this.showToast('Expense created', 'success');
                 }
                 this.modalOpen = false;
                 await this.loadExpenses();
                 await this.loadStats();
+                await this.loadActivity();
             } catch(e) {
-                this.showToast('Failed to save expense', 'error');
+                this.showToast(e.message || 'Failed to save expense', 'error');
             }
         },
 
@@ -424,17 +1061,169 @@ function expensesContent() {
             }
         },
 
+        quickStatusChange(expense) {
+            const statuses = ['pending', 'approved', 'paid', 'rejected'];
+            const currentIdx = statuses.indexOf(expense.status);
+            const nextIdx = (currentIdx + 1) % statuses.length;
+            
+            this.form.status = statuses[nextIdx];
+            this.editExpense(expense);
+        },
+
+        uploadAttachment(expense) {
+            this.editingExpense = expense;
+            this.selectedFile = null;
+            this.attachmentModalOpen = true;
+        },
+
+        handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                this.selectedFile = file;
+            }
+        },
+
+        handleDrop(event) {
+            this.dragOver = false;
+            const file = event.dataTransfer.files[0];
+            if (file) {
+                this.selectedFile = file;
+            }
+        },
+
+        async uploadFile() {
+            if (!this.selectedFile || !this.editingExpense) {
+                this.showToast('Please select a file', 'error');
+                return;
+            }
+            
+            this.uploading = true;
+            try {
+                await InvoiceFastAPI.expenses.uploadAttachment(this.editingExpense.id, this.selectedFile);
+                
+                this.showToast('File uploaded', 'success');
+                this.attachmentModalOpen = false;
+                this.selectedFile = null;
+                
+                // Reload attachments
+                await this.loadAttachments(this.editingExpense.id);
+            } catch(e) {
+                console.error('Upload error:', e);
+                this.showToast('Failed to upload file', 'error');
+            } finally {
+                this.uploading = false;
+            }
+        },
+
+        viewAttachment(attachment) {
+            this.previewAttachment = attachment;
+            this.previewModalOpen = true;
+        },
+
+        async loadAttachments(expenseId) {
+            try {
+                this.attachments = await InvoiceFastAPI.request('/tenant/expenses/' + expenseId + '/attachments');
+            } catch(e) {
+                this.attachments = [];
+            }
+        },
+
+        async deleteAttachment(attachmentId) {
+            const att = this.attachments.find(a => a.id === attachmentId);
+            if (!att) return;
+            this.deletingAttachmentId = attachmentId;
+            this.deletingAttachmentName = att.file_name;
+            this.deleteAttachmentModalOpen = true;
+        },
+
+        async confirmDeleteAttachment() {
+            if (!this.deletingAttachmentId) return;
+            try {
+                await InvoiceFastAPI.request('/tenant/expenses/' + this.editingExpense.id + '/attachments/' + this.deletingAttachmentId, {
+                    method: 'DELETE'
+                });
+                this.showToast('Attachment deleted', 'success');
+                this.deleteAttachmentModalOpen = false;
+                this.deletingAttachmentId = null;
+                this.deletingAttachmentName = null;
+                await this.loadAttachments(this.editingExpense.id);
+            } catch(e) {
+                this.showToast('Failed to delete attachment', 'error');
+            }
+        },
+
+        async bulkApprove() {
+            try {
+                await InvoiceFastAPI.request('/tenant/expenses/bulk-actions', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'approve', ids: this.selectedExpenses })
+                });
+                this.showToast('Expenses approved', 'success');
+                this.selectedExpenses = [];
+                await this.loadExpenses();
+                await this.loadStats();
+            } catch(e) {
+                this.showToast('Failed to approve expenses', 'error');
+            }
+        },
+
+        async bulkDelete() {
+            if (!confirm('Delete ' + this.selectedExpenses.length + ' expenses?')) return;
+            
+            try {
+                await InvoiceFastAPI.request('/tenant/expenses/bulk-actions', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'delete', ids: this.selectedExpenses })
+                });
+                this.showToast('Expenses deleted', 'success');
+                this.selectedExpenses = [];
+                await this.loadExpenses();
+                await this.loadStats();
+            } catch(e) {
+                this.showToast('Failed to delete expenses', 'error');
+            }
+        },
+
+        bulkExport() {
+            window.location.href = '/tenant/expenses/export?ids=' + this.selectedExpenses.join(',');
+        },
+
+        refreshActivity() {
+            this.loadActivity();
+            this.loadStats();
+        },
+
         exportExpenses() {
             window.location.href = '/tenant/expenses/export';
         },
 
-        formatCurrency(amount) {
-            return 'KES ' + (amount || 0).toLocaleString();
+        formatCurrency(amount, currency = 'KES') {
+            if (!amount && amount !== 0) return 'KES 0';
+            const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+            if (isNaN(num)) return 'KES 0';
+            const symbols = { KES: 'KES', USD: '$', EUR: '€', GBP: '£' };
+            return (symbols[currency] || 'KES') + ' ' + num.toLocaleString();
         },
 
         formatDate(date) {
             if (!date) return '-';
             return new Date(date).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' });
+        },
+
+        formatTimeAgo(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return diffMins + 'm ago';
+            if (diffHours < 24) return diffHours + 'h ago';
+            if (diffDays < 7) return diffDays + 'd ago';
+            return date.toLocaleDateString();
         },
 
         getStatusClass(status) {
@@ -449,8 +1238,18 @@ function expensesContent() {
 
         showToast(message, type = 'success') {
             this.toast = { show: true, message, type };
-            setTimeout(() => this.toast.show = false, 3000);
+            setTimeout(() => { this.toast.show = false; }, 4000);
         }
-    }
+    };
 }
 </script>
+
+<style>
+@keyframes slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+}
+</style>

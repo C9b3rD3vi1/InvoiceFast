@@ -18,6 +18,7 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 
 	// STATIC ROUTES FIRST
 	group.Get("/stats", h.GetDashboardStats)
+	group.Get("/kra-stats", h.GetKRADashboardStats)
 	group.Get("/by-token/:token", h.GetInvoiceByToken)
 
 	// DYNAMIC ROUTES AFTER
@@ -36,6 +37,13 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 	group.Get("/:id/pdf", h.GetInvoicePDF)
 
 	group.Post("/:id/kra/submit", h.SubmitToKRA)
+	group.Get("/:id/kra/status", h.GetKRAStatus)
+	group.Post("/:id/kra/retry", h.RetryKRA)
+
+	// KRA bulk operations
+	group.Get("/kra/activity", h.GetKRAActivityFeed)
+	group.Post("/kra/submit-all", h.SubmitAllPendingToKRA)
+
 	group.Post("/:id/payments", h.RecordPayment)
 
 	return group
@@ -48,10 +56,14 @@ func ClientRoutes(app fiber.Router, h *handlers.ClientHandler, authService *serv
 
 	group.Post("/", h.CreateClient)
 	group.Get("/", h.GetClients)
+	group.Get("/stats", h.GetDashboardStats)
 	group.Get("/:id", h.GetClient)
 	group.Put("/:id", h.UpdateClient)
 	group.Delete("/:id", h.DeleteClient)
 	group.Post("/:id/stats", h.GetClientStats)
+	group.Get("/:id/invoices", h.GetClientInvoices)
+	group.Get("/:id/payments", h.GetClientPayments)
+	group.Get("/:id/activity", h.GetClientActivity)
 
 	return group
 }

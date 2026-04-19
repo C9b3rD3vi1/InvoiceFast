@@ -231,6 +231,10 @@ func (db *DB) Migrate() error {
 		&models.UnallocatedPayment{},
 		&models.ReminderSequence{},
 		&models.ReminderSequenceLog{},
+		// Expense models
+		&models.Expense{},
+		&models.ExpenseCategory{},
+		&models.ExpenseAttachment{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)

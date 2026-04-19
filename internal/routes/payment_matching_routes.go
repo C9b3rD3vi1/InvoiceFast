@@ -13,9 +13,13 @@ func PaymentMatchingRoutes(app *fiber.App, h *handlers.PaymentMatchingHandler, a
 	group := app.Group("/api/v1/tenant/payments")
 	group.Use(middleware.TenantMiddleware(authService, db))
 
-	group.Get("/unallocated", h.GetUnallocated)
-	group.Post("/:id/match", h.MatchPayment)
+	group.Post("/request", h.RequestPayment)
 	group.Post("/manual-match", h.ManualMatch)
+	group.Get("/unallocated", h.GetUnallocated)
+	group.Get("/", h.GetPayments)
+	group.Get("/:id/receipt", h.GetReceipt)
+	group.Post("/:id/match", h.MatchPayment)
+	group.Post("/:id/reconcile", h.ReconcilePayment)
 
 	return group
 }

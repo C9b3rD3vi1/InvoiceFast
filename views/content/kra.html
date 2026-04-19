@@ -1,0 +1,1758 @@
+<!-- KRA Compliance Control Center -->
+<div class="p-6 space-y-6" x-data="kraCompliance()" x-init="init()" >
+	<!-- Header Section -->
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-3xl font-bold text-slate-900 tracking-tight">
+				KRA Compliance
+			</h1>
+			<p class="text-slate-500 mt-1">
+				Real-time eTIMS submission monitoring and control center
+			</p>
+		</div>
+		<div class="flex items-center gap-3">
+			<button
+				@click="submitAllPending()"
+				:disabled="pendingCount === 0 || processing"
+				class="px-5 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
+			>
+				<template x-if="!processing">
+					<i data-lucide="send" class="w-4 h-4"></i>
+				</template>
+				<template x-if="processing">
+					<div
+						class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+					></div>
+				</template>
+				Submit Pending (<span x-text="pendingCount"></span>)
+			</button>
+			<button
+				@click="exportKRA()"
+				class="px-5 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-all"
+			>
+				<i data-lucide="download" class="w-4 h-4"></i>
+				Export
+			</button>
+		</div>
+	</div>
+
+	<!-- KPI Dashboard -->
+	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+		<template x-for="(stat, idx) in stats" :key="stat.label">
+			<div
+				class="bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group"
+				:class="{'animate-pulse': stat.loading}"
+			>
+				<div class="flex items-center justify-between mb-3">
+					<div class="p-2.5 rounded-xl" :class="stat.bg">
+						<i
+							:data-lucide="stat.icon"
+							class="w-5 h-5"
+							:class="stat.color"
+						></i>
+					</div>
+					<template x-if="stat.trend">
+						<span
+							class="text-xs font-medium px-2 py-1 rounded-full"
+							:class="stat.trend > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+						>
+							<span x-text="stat.trend > 0 ? '↑' : '↓'"></span>
+							<span x-text="Math.abs(stat.trend)"></span>%
+						</span>
+					</template>
+				</div>
+				<p
+					class="text-xs text-slate-500 font-medium"
+					x-text="stat.label"
+				></p>
+				<div class="flex items-end gap-2 mt-1">
+					<p
+						class="text-3xl font-bold text-slate-900"
+						x-text="stat.value"
+					></p>
+				</div>
+				<template x-if="stat.sparkline && stat.sparkline.length">
+					<div class="mt-3 h-8 flex items-end gap-0.5">
+						<template x-for="(v, i) in stat.sparkline" :key="i">
+							<div
+								class="flex-1 rounded-sm"
+								:class="stat.sparklineColor"
+								:style="'height: ' + (v / stat.sparklineMax * 100) + '%'"
+							></div>
+						</template>
+					</div>
+				</template>
+			</div>
+		</template>
+	</div>
+
+	<!-- Main Content Grid -->
+	<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+		<!-- Compliance Health Chart -->
+		<div class="bg-white rounded-2xl border border-slate-200 p-6">
+			<h3 class="text-lg font-semibold text-slate-900 mb-4">
+				Compliance Health
+			</h3>
+			<div class="relative h-48 flex items-center justify-center">
+				<canvas id="kraDonutChart" class="w-40 h-40"></canvas>
+				<div class="absolute inset-0 flex items-center justify-center">
+					<div class="text-center">
+						<p
+							class="text-3xl font-bold text-slate-900"
+							x-text="complianceRate + '%'"
+						></p>
+						<p class="text-xs text-slate-500">Compliance</p>
+					</div>
+				</div>
+			</div>
+			<div class="mt-4 space-y-2">
+				<div class="flex items-center justify-between text-sm">
+					<span class="flex items-center gap-2"
+						><span class="w-3 h-3 rounded-full bg-green-500"></span>
+						Submitted</span
+					>
+					<span
+						class="font-semibold text-slate-900"
+						x-text="stats[1].value"
+					></span>
+				</div>
+				<div class="flex items-center justify-between text-sm">
+					<span class="flex items-center gap-2"
+						><span class="w-3 h-3 rounded-full bg-amber-500"></span>
+						Pending</span
+					>
+					<span
+						class="font-semibold text-slate-900"
+						x-text="stats[2].value"
+					></span>
+				</div>
+				<div class="flex items-center justify-between text-sm">
+					<span class="flex items-center gap-2"
+						><span class="w-3 h-3 rounded-full bg-red-500"></span>
+						Failed</span
+					>
+					<span
+						class="font-semibold text-slate-900"
+						x-text="stats[3].value"
+					></span>
+				</div>
+			</div>
+		</div>
+
+		<!-- Activity Feed -->
+		<div
+			class="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-6"
+		>
+			<div class="flex items-center justify-between mb-4">
+				<h3 class="text-lg font-semibold text-slate-900">
+					Live Activity
+				</h3>
+				<button
+					@click="refreshActivity()"
+					class="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+				>
+					<i
+						data-lucide="refresh-cw"
+						class="w-4 h-4 text-slate-400"
+						:class="{'animate-spin': $data.activityLoading}"
+					></i>
+				</button>
+			</div>
+			<div
+				class="space-y-3 max-h-80 overflow-y-auto"
+				x-show="!activityLoading"
+			>
+				<template x-if="activities.length === 0">
+					<div class="text-center py-8 text-slate-400">
+						<i
+							data-lucide="activity"
+							class="w-12 h-12 mx-auto mb-3 opacity-50"
+						></i>
+						<p>No recent activity</p>
+					</div>
+				</template>
+				<template x-for="activity in activities" :key="activity.id">
+					<div
+						@click="viewKRADetailsById(activity.invoice_id)"
+						class="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-all group"
+					>
+						<div
+							class="w-10 h-10 rounded-full flex items-center justify-center"
+							:class="activity.action === 'submitted' ? 'bg-green-100' : (activity.action === 'failed' ? 'bg-red-100' : 'bg-blue-100')"
+						>
+							<i
+								:data-lucide="activity.action === 'submitted' ? 'check-circle' : (activity.action === 'failed' ? 'x-circle' : 'refresh-cw')"
+								class="w-5 h-5"
+								:class="activity.action === 'submitted' ? 'text-green-600' : (activity.action === 'failed' ? 'text-red-600' : 'text-blue-600')"
+							></i>
+						</div>
+						<div class="flex-1 min-w-0">
+							<p
+								class="text-sm font-medium text-slate-900 truncate"
+							>
+								<span
+									x-text="activity.action === 'submitted' ? 'Invoice ' + activity.invoice_number + ' submitted to KRA' : (activity.action === 'failed' ? 'Submission failed for ' + activity.invoice_number : 'Retry successful for ' + activity.invoice_number)"
+								></span>
+							</p>
+							<p
+								class="text-xs text-slate-500"
+								x-text="formatTimeAgo(activity.timestamp)"
+							></p>
+						</div>
+						<template x-if="activity.icn">
+							<span
+								class="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded"
+								x-text="activity.icn.slice(-8)"
+							></span>
+						</template>
+					</div>
+				</template>
+			</div>
+			<div x-show="activityLoading" class="space-y-3">
+				<template x-for="i in 5">
+					<div class="flex items-center gap-4 p-3">
+						<div
+							class="w-10 h-10 rounded-full bg-slate-100 animate-pulse"
+						></div>
+						<div class="flex-1 space-y-2">
+							<div
+								class="h-4 bg-slate-100 rounded w-3/4 animate-pulse"
+							></div>
+							<div
+								class="h-3 bg-slate-100 rounded w-1/4 animate-pulse"
+							></div>
+						</div>
+					</div>
+				</template>
+			</div>
+		</div>
+	</div>
+
+	<!-- Filters Bar -->
+	<div class="bg-white rounded-2xl border border-slate-200 p-4">
+		<div class="flex items-center gap-4 flex-wrap">
+			<div class="relative flex-1 min-w-[280px]">
+				<i
+					data-lucide="search"
+					class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+				></i>
+				<input
+					type="text"
+					x-model="search"
+					@input.debounce.400ms="loadInvoices()"
+					placeholder="Search invoices, clients, ICN..."
+					class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust focus:border-transparent bg-slate-50 focus:bg-white transition-all"
+				/>
+			</div>
+
+			<select
+				x-model="filterStatus"
+				@change="loadInvoices()"
+				class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 focus:bg-white transition-all"
+			>
+				<option value="">All Status</option>
+				<option value="submitted">Submitted</option>
+				<option value="pending">Pending</option>
+				<option value="failed">Failed</option>
+				<option value="not_submitted">Not Submitted</option>
+			</select>
+
+			<div class="flex items-center gap-2">
+				<input
+					type="date"
+					x-model="filterDateFrom"
+					@change="loadInvoices()"
+					class="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-slate-50"
+				/>
+				<span class="text-slate-400">→</span>
+				<input
+					type="date"
+					x-model="filterDateTo"
+					@change="loadInvoices()"
+					class="px-3 py-2 rounded-xl border border-slate-200 text-sm bg-slate-50"
+				/>
+			</div>
+
+			<div class="flex items-center gap-2">
+				<button
+					@click="clearFilters()"
+					class="px-4 py-2.5 text-slate-600 hover:text-slate-900 text-sm font-medium"
+				>
+					Clear
+				</button>
+				<button
+					@click="loadInvoices()"
+					class="px-4 py-2.5 bg-trust text-white rounded-xl text-sm font-medium hover:bg-trust-dark transition-all"
+				>
+					<i data-lucide="filter" class="w-4 h-4 inline mr-1"></i>
+					Apply
+				</button>
+			</div>
+
+			<div class="ml-auto flex items-center gap-2 text-sm text-slate-500">
+				<span x-text="total"></span> results
+			</div>
+		</div>
+	</div>
+
+	<!-- Smart Table -->
+	<div
+		class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"
+	>
+		<div class="overflow-x-auto">
+			<table class="w-full">
+				<thead
+					class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10"
+				>
+					<tr>
+						<th
+							class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							Invoice
+						</th>
+						<th
+							class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							Client
+						</th>
+						<th
+							class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							Amount
+						</th>
+						<th
+							class="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							KRA Status
+						</th>
+						<th
+							class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							ICN
+						</th>
+						<th
+							class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							Submitted
+						</th>
+						<th
+							class="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							Last Attempt
+						</th>
+						<th
+							class="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider"
+						>
+							Actions
+						</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-slate-100">
+					<template x-if="loading">
+						<template x-for="i in 5">
+							<tr class="animate-pulse">
+								<td class="px-4 py-4">
+									<div
+										class="h-4 bg-slate-200 rounded w-24"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-4 bg-slate-200 rounded w-32"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-4 bg-slate-200 rounded w-20 ml-auto"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-6 bg-slate-200 rounded-full w-20 mx-auto"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-4 bg-slate-200 rounded w-28"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-4 bg-slate-200 rounded w-24"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-4 bg-slate-200 rounded w-24"
+									></div>
+								</td>
+								<td class="px-4 py-4">
+									<div
+										class="h-8 bg-slate-200 rounded w-8 ml-auto"
+									></div>
+								</td>
+							</tr>
+						</template>
+					</template>
+					<template x-if="!loading && invoices.length === 0">
+						<tr>
+							<td colspan="8" class="px-4 py-16 text-center">
+								<div
+									class="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4"
+								>
+									<i
+										data-lucide="file-x"
+										class="w-10 h-10 text-slate-400"
+									></i>
+								</div>
+								<p class="text-slate-500 font-medium">
+									No KRA submissions found
+								</p>
+								<p class="text-slate-400 text-sm mt-1">
+									Try adjusting your filters or create an
+									invoice
+								</p>
+							</td>
+						</tr>
+					</template>
+					<template x-for="inv in invoices" :key="inv.id">
+						<tr
+							class="hover:bg-slate-50/80 transition-all cursor-pointer group"
+							@click="viewKRADetails(inv)"
+						>
+							<td class="px-4 py-4">
+								<div class="flex items-center gap-3">
+									<div
+										class="w-8 h-8 rounded-lg bg-trust/10 flex items-center justify-center"
+									>
+										<i
+											data-lucide="file-text"
+											class="w-4 h-4 text-trust"
+										></i>
+									</div>
+									<div>
+										<a
+											:href="'/invoices/' + inv.id"
+											class="font-semibold text-slate-900 hover:text-trust transition-colors"
+											x-text="inv.invoice_number"
+											@click.stop
+										></a>
+										<p
+											class="text-xs text-slate-400"
+											x-text="inv.created_at ? new Date(inv.created_at).toLocaleDateString() : '-'"
+										></p>
+									</div>
+								</div>
+							</td>
+							<td class="px-4 py-4">
+								<p
+									class="text-sm font-medium text-slate-700"
+									x-text="inv.client?.name || '-'"
+								></p>
+								<p
+									class="text-xs text-slate-400"
+									x-text="inv.client?.email || ''"
+								></p>
+							</td>
+							<td class="px-4 py-4 text-right">
+								<p
+									class="font-semibold text-slate-900"
+									x-text="formatCurrency(inv.total)"
+								></p>
+							</td>
+							<td class="px-4 py-4 text-center">
+								<span
+									class="px-3 py-1.5 rounded-full text-xs font-semibold"
+									:class="getKRAStatusClass(inv.kra_status)"
+									x-text="getKRALabel(inv.kra_status)"
+								></span>
+							</td>
+							<td class="px-4 py-4">
+								<template x-if="inv.kra_icn">
+									<span
+										class="font-mono text-sm text-slate-600 bg-slate-100 px-2 py-1 rounded"
+										x-text="inv.kra_icn"
+									></span>
+								</template>
+								<template x-if="!inv.kra_icn">
+									<span class="text-slate-400 text-sm"
+										>-</span
+									>
+								</template>
+							</td>
+							<td class="px-4 py-4">
+								<template x-if="inv.kra_submitted_at">
+									<p
+										class="text-sm text-slate-600"
+										x-text="formatDate(inv.kra_submitted_at)"
+									></p>
+								</template>
+								<template x-if="!inv.kra_submitted_at">
+									<span class="text-slate-400 text-sm"
+										>-</span
+									>
+								</template>
+							</td>
+							<td class="px-4 py-4">
+								<p
+									class="text-sm text-slate-500"
+									x-text="inv.updated_at ? formatDate(inv.updated_at) : '-'"
+								></p>
+							</td>
+							<td class="px-4 py-4 text-right">
+								<div
+									class="relative"
+									x-data="{ open: false }"
+									@click.stop
+								>
+									<button
+										@click="open = !open"
+										@click.outside="open = false"
+										class="p-2 hover:bg-slate-100 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+									>
+										<i
+											data-lucide="more-horizontal"
+											class="w-4 h-4"
+										></i>
+									</button>
+									<div
+										x-show="open"
+										x-cloak
+										class="dropdown-menu absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50"
+									>
+										<button
+											@click="viewKRADetails(inv); open = false"
+											class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3"
+										>
+											<i
+												data-lucide="eye"
+												class="w-4 h-4 text-slate-400"
+											></i>
+											View KRA Details
+										</button>
+										<template
+											x-if="inv.kra_status !== 'submitted'"
+										>
+											<button
+												@click="submitToKRA(inv.id); open = false"
+												class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3"
+											>
+												<i
+													data-lucide="upload-cloud"
+													class="w-4 h-4 text-trust"
+												></i>
+												Submit to KRA
+											</button>
+										</template>
+										<template
+											x-if="inv.kra_status === 'failed'"
+										>
+											<button
+												@click="retryKRA(inv.id); open = false"
+												class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3"
+											>
+												<i
+													data-lucide="refresh-cw"
+													class="w-4 h-4 text-amber-500"
+												></i>
+												Retry Submission
+											</button>
+										</template>
+										<div
+											class="border-t border-slate-100 my-1"
+										></div>
+										<a
+											:href="'/invoices/' + inv.id"
+											class="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 flex items-center gap-3"
+										>
+											<i
+												data-lucide="file-text"
+												class="w-4 h-4 text-slate-400"
+											></i>
+											View Invoice
+										</a>
+									</div>
+								</div>
+							</td>
+						</tr>
+					</template>
+				</tbody>
+			</table>
+		</div>
+
+		<!-- Pagination -->
+		<div
+			class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50"
+		>
+			<p class="text-sm text-slate-500">
+				Showing <span x-text="invoices.length"></span> of
+				<span x-text="total"></span> invoices
+			</p>
+			<div class="flex items-center gap-2">
+				<button
+					@click="goToPage(page - 1)"
+					:disabled="page <= 1"
+					class="px-3 py-1.5 rounded-lg border border-slate-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors"
+				>
+					← Previous
+				</button>
+				<div class="flex items-center gap-1">
+					<template x-for="p in visiblePages" :key="p">
+						<button
+							@click="goToPage(p)"
+							class="w-8 h-8 rounded-lg text-sm font-medium transition-colors"
+							:class="p === page ? 'bg-trust text-white' : 'hover:bg-slate-100 text-slate-600'"
+							x-text="p"
+						></button>
+					</template>
+				</div>
+				<button
+					@click="goToPage(page + 1)"
+					:disabled="page >= totalPages"
+					class="px-3 py-1.5 rounded-lg border border-slate-200 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-colors"
+				>
+					Next →
+				</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- KRA Details Slide-over Panel -->
+	<div
+		x-show="detailPanelOpen"
+		x-cloak
+		class="fixed inset-0 z-50"
+		@click.self="detailPanelOpen = false"
+	>
+		<div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+		<div
+			class="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl transform transition-transform duration-300"
+			:class="detailPanelOpen ? 'translate-x-0' : 'translate-x-full'"
+		>
+			<!-- Panel Header -->
+			<div
+				class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10"
+			>
+				<div>
+					<h2 class="text-xl font-bold text-slate-900">
+						KRA Submission Details
+					</h2>
+					<p
+						class="text-sm text-slate-500"
+						x-text="selectedInvoice?.invoice_number"
+					></p>
+				</div>
+				<button
+					@click="detailPanelOpen = false"
+					class="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+				>
+					<i data-lucide="x" class="w-5 h-5"></i>
+				</button>
+			</div>
+
+			<!-- Panel Content -->
+			<div
+				class="p-6 space-y-6 overflow-y-auto h-[calc(100vh-80px)]"
+				x-show="selectedInvoice"
+			>
+				<!-- Status Banner -->
+				<div
+					class="rounded-2xl p-5"
+					:class="selectedInvoice?.kra_status === 'submitted' ? 'bg-green-50 border border-green-200' : (selectedInvoice?.kra_status === 'failed' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200')"
+				>
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<div
+								class="w-12 h-12 rounded-full flex items-center justify-center"
+								:class="selectedInvoice?.kra_status === 'submitted' ? 'bg-green-100' : (selectedInvoice?.kra_status === 'failed' ? 'bg-red-100' : 'bg-amber-100')"
+							>
+								<i
+									:data-lucide="selectedInvoice?.kra_status === 'submitted' ? 'check-circle' : (selectedInvoice?.kra_status === 'failed' ? 'x-circle' : 'clock')"
+									class="w-6 h-6"
+									:class="selectedInvoice?.kra_status === 'submitted' ? 'text-green-600' : (selectedInvoice?.kra_status === 'failed' ? 'text-red-600' : 'text-amber-600')"
+								></i>
+							</div>
+							<div>
+								<p
+									class="font-semibold text-lg"
+									:class="selectedInvoice?.kra_status === 'submitted' ? 'text-green-800' : (selectedInvoice?.kra_status === 'failed' ? 'text-red-800' : 'text-amber-800')"
+									x-text="getKRALabel(selectedInvoice?.kra_status)"
+								></p>
+								<p
+									class="text-sm text-slate-500"
+									x-text="selectedInvoice?.kra_status === 'submitted' ? 'Successfully submitted to KRA eTIMS' : (selectedInvoice?.kra_status === 'failed' ? 'Submission failed - action required' : 'Awaiting submission')"
+								></p>
+							</div>
+						</div>
+						<template
+							x-if="selectedInvoice?.kra_status === 'failed'"
+						>
+							<button
+								@click="retryKRA(selectedInvoice?.id)"
+								class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-all"
+							>
+								<i
+									data-lucide="refresh-cw"
+									class="w-4 h-4 inline mr-2"
+								></i>
+								Retry
+							</button>
+						</template>
+						<template
+							x-if="selectedInvoice?.kra_status !== 'submitted' && selectedInvoice?.kra_status !== 'failed'"
+						>
+							<button
+								@click="submitToKRA(selectedInvoice?.id)"
+								class="px-4 py-2 bg-trust text-white rounded-lg text-sm font-medium hover:bg-trust-dark transition-all"
+							>
+								<i
+									data-lucide="send"
+									class="w-4 h-4 inline mr-2"
+								></i>
+								Submit
+							</button>
+						</template>
+					</div>
+				</div>
+
+				<!-- Invoice Summary -->
+				<div class="bg-slate-50 rounded-2xl p-5">
+					<h3
+						class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4"
+					>
+						Invoice Summary
+					</h3>
+					<div class="grid grid-cols-2 gap-4">
+						<div>
+							<p class="text-xs text-slate-400">Invoice Number</p>
+							<p
+								class="font-semibold text-slate-900"
+								x-text="selectedInvoice?.invoice_number"
+							></p>
+						</div>
+						<div>
+							<p class="text-xs text-slate-400">Amount</p>
+							<p
+								class="font-semibold text-slate-900 text-lg"
+								x-text="formatCurrency(selectedInvoice?.total)"
+							></p>
+						</div>
+						<div>
+							<p class="text-xs text-slate-400">Client</p>
+							<p
+								class="font-medium text-slate-700"
+								x-text="selectedInvoice?.client?.name || '-'"
+							></p>
+						</div>
+						<div>
+							<p class="text-xs text-slate-400">Invoice Date</p>
+							<p
+								class="font-medium text-slate-700"
+								x-text="selectedInvoice?.created_at ? formatDate(selectedInvoice.created_at) : '-'"
+							></p>
+						</div>
+					</div>
+				</div>
+
+				<!-- KRA Response Data -->
+				<template x-if="selectedInvoice?.kra_icn">
+					<div class="rounded-2xl border border-slate-200 p-5">
+						<h3
+							class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4"
+						>
+							KRA Response
+						</h3>
+						<div class="space-y-4">
+							<div class="p-4 bg-slate-50 rounded-xl">
+								<p class="text-xs text-slate-400 mb-1">
+									Invoice Confirmation Number (ICN)
+								</p>
+								<p
+									class="font-mono text-lg font-semibold text-slate-900"
+									x-text="selectedInvoice?.kra_icn"
+								></p>
+							</div>
+							<template x-if="selectedInvoice?.kra_qr_code">
+								<div class="p-4 bg-slate-50 rounded-xl">
+									<p class="text-xs text-slate-400 mb-2">
+										KRA QR Code
+									</p>
+									<div class="flex items-center gap-4">
+										<div
+											class="bg-white p-2 rounded border border-slate-200"
+										>
+											<img
+												:src="'data:image/png;base64,' + selectedInvoice?.kra_qr_code"
+												class="w-24 h-24"
+												alt="KRA QR Code"
+											/>
+										</div>
+										<button
+											@click="downloadQR(selectedInvoice)"
+											class="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+										>
+											<i
+												data-lucide="download"
+												class="w-4 h-4 inline mr-2"
+											></i>
+											Download
+										</button>
+									</div>
+								</div>
+							</template>
+						</div>
+					</div>
+				</template>
+
+				<!-- Submission Timeline -->
+				<div class="rounded-2xl border border-slate-200 p-5">
+					<h3
+						class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4"
+					>
+						Submission Timeline
+					</h3>
+					<div class="space-y-4">
+						<div class="flex items-start gap-4">
+							<div
+								class="w-8 h-8 rounded-full bg-trust/10 flex items-center justify-center mt-0.5"
+							>
+								<i
+									data-lucide="file-text"
+									class="w-4 h-4 text-trust"
+								></i>
+							</div>
+							<div class="flex-1">
+								<p class="font-medium text-slate-900">
+									Invoice Created
+								</p>
+								<p
+									class="text-sm text-slate-500"
+									x-text="selectedInvoice?.created_at ? formatDate(selectedInvoice.created_at) : '-'"
+								></p>
+							</div>
+						</div>
+						<template x-if="selectedInvoice?.kra_submitted_at">
+							<div class="flex items-start gap-4">
+								<div
+									class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mt-0.5"
+								>
+									<i
+										data-lucide="check-circle"
+										class="w-4 h-4 text-green-600"
+									></i>
+								</div>
+								<div class="flex-1">
+									<p class="font-medium text-slate-900">
+										Submitted to KRA
+									</p>
+									<p
+										class="text-sm text-slate-500"
+										x-text="formatDate(selectedInvoice?.kra_submitted_at)"
+									></p>
+								</div>
+							</div>
+						</template>
+						<template x-if="!selectedInvoice?.kra_submitted_at">
+							<div class="flex items-start gap-4">
+								<div
+									class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center mt-0.5"
+								>
+									<i
+										data-lucide="clock"
+										class="w-4 h-4 text-amber-600"
+									></i>
+								</div>
+								<div class="flex-1">
+									<p class="font-medium text-slate-900">
+										Awaiting Submission
+									</p>
+									<p class="text-sm text-slate-500">
+										Not yet submitted to KRA
+									</p>
+								</div>
+							</div>
+						</template>
+						<template
+							x-if="selectedInvoice?.kra_status === 'failed'"
+						>
+							<div class="flex items-start gap-4">
+								<div
+									class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mt-0.5"
+								>
+									<i
+										data-lucide="alert-circle"
+										class="w-4 h-4 text-red-600"
+									></i>
+								</div>
+								<div class="flex-1">
+									<p class="font-medium text-slate-900">
+										Last Attempt Failed
+									</p>
+									<p
+										class="text-sm text-slate-500"
+										x-text="selectedInvoice?.updated_at ? formatDate(selectedInvoice.updated_at) : '-'"
+									></p>
+								</div>
+							</div>
+						</template>
+					</div>
+				</div>
+
+				<!-- Error Message -->
+				<template x-if="selectedInvoice?.kra_error">
+					<div
+						class="rounded-2xl border border-red-200 bg-red-50 p-5"
+					>
+						<div class="flex items-start gap-3">
+							<div
+								class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center"
+							>
+								<i
+									data-lucide="alert-triangle"
+									class="w-5 h-5 text-red-600"
+								></i>
+							</div>
+							<div class="flex-1">
+								<p class="font-semibold text-red-800">
+									Submission Error
+								</p>
+								<p
+									class="text-sm text-red-700 mt-1"
+									x-text="selectedInvoice?.kra_error"
+								></p>
+							</div>
+						</div>
+					</div>
+				</template>
+
+				<!-- Actions -->
+				<div class="flex gap-3 pt-4 border-t border-slate-200">
+					<a
+						:href="'/invoices/' + selectedInvoice?.id"
+						class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-center text-sm font-medium hover:bg-slate-50 transition-colors"
+					>
+						<i
+							data-lucide="external-link"
+							class="w-4 h-4 inline mr-2"
+						></i>
+						View Invoice
+					</a>
+					<button
+						@click="detailPanelOpen = false; loadInvoices()"
+						class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl text-center text-sm font-medium hover:bg-trust-dark transition-colors"
+					>
+						Close & Refresh
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Toast Notifications -->
+	<div
+		x-show="toast.show"
+		x-cloak
+		class="fixed bottom-6 right-6 z-50 animate-slide-up"
+	>
+		<div
+			class="px-5 py-4 rounded-xl shadow-2xl flex items-center gap-4"
+			:class="toast.type === 'success' ? 'bg-green-600 text-white' : (toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white')"
+		>
+			<i
+				:data-lucide="toast.type === 'success' ? 'check-circle' : (toast.type === 'error' ? 'alert-circle' : 'alert-triangle')"
+				class="w-5 h-5"
+			></i>
+			<span class="font-medium" x-text="toast.message"></span>
+			<button
+				@click="toast.show = false"
+				class="ml-2 opacity-70 hover:opacity-100 transition-opacity"
+			>
+				<i data-lucide="x" class="w-4 h-4"></i>
+			</button>
+		</div>
+	</div>
+
+	<!-- Loading Overlay for Bulk Actions -->
+	<div
+		x-show="processing"
+		x-cloak
+		class="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 flex items-center justify-center"
+	>
+		<div
+			class="bg-white rounded-2xl p-8 shadow-2xl flex items-center gap-4"
+		>
+			<div
+				class="w-10 h-10 border-3 border-trust border-t-transparent rounded-full animate-spin"
+			></div>
+			<p class="text-lg font-medium text-slate-900">
+				Processing KRA submissions...
+			</p>
+		</div>
+	</div>
+
+	<!-- Insights & Analytics Section -->
+	<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+		<!-- Weekly Comparison -->
+		<div class="bg-white rounded-2xl border border-slate-200 p-6">
+			<div class="flex items-center gap-2 mb-4">
+				<i data-lucide="trending-up" class="w-5 h-5 text-trust"></i>
+				<h3 class="text-lg font-semibold text-slate-900">
+					Weekly Trend
+				</h3>
+			</div>
+			<div class="space-y-4">
+				<div
+					class="flex items-center justify-between p-3 bg-green-50 rounded-xl"
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center"
+						>
+							<i
+								data-lucide="check-circle"
+								class="w-5 h-5 text-green-600"
+							></i>
+						</div>
+						<div>
+							<p class="text-sm text-slate-600">This Week</p>
+							<p
+								class="text-xl font-bold text-slate-900"
+								x-text="stats[5].value"
+							></p>
+						</div>
+					</div>
+					<span class="text-sm font-medium text-green-600"
+						>↑ 12%</span
+					>
+				</div>
+				<div
+					class="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center"
+						>
+							<i
+								data-lucide="clock"
+								class="w-5 h-5 text-slate-500"
+							></i>
+						</div>
+						<div>
+							<p class="text-sm text-slate-600">Avg. Response</p>
+							<p class="text-xl font-bold text-slate-900">2.3s</p>
+						</div>
+					</div>
+					<span class="text-sm font-medium text-green-600"
+						>↓ 0.5s</span
+					>
+				</div>
+			</div>
+		</div>
+
+		<!-- Failure Insights -->
+		<div class="bg-white rounded-2xl border border-slate-200 p-6">
+			<div class="flex items-center gap-2 mb-4">
+				<i
+					data-lucide="alert-triangle"
+					class="w-5 h-5 text-amber-500"
+				></i>
+				<h3 class="text-lg font-semibold text-slate-900">
+					Failure Insights
+				</h3>
+			</div>
+			<template x-if="insights.length === 0">
+				<div class="text-center py-6 text-slate-400">
+					<i
+						data-lucide="check-circle"
+						class="w-10 h-10 mx-auto mb-2 text-green-500"
+					></i>
+					<p class="text-sm">No failures detected</p>
+				</div>
+			</template>
+			<template x-for="insight in insights" :key="insight.type">
+				<div
+					class="flex items-start gap-3 p-3 rounded-xl mb-2"
+					:class="insight.type === 'error' ? 'bg-red-50 border border-red-100' : 'bg-amber-50 border border-amber-100'"
+				>
+					<div
+						class="w-8 h-8 rounded-full flex items-center justify-center mt-0.5"
+						:class="insight.type === 'error' ? 'bg-red-100' : 'bg-amber-100'"
+					>
+						<i
+							:data-lucide="insight.type === 'error' ? 'alert-circle' : 'info'"
+							class="w-4 h-4"
+							:class="insight.type === 'error' ? 'text-red-600' : 'text-amber-600'"
+						></i>
+					</div>
+					<div class="flex-1">
+						<p
+							class="text-sm font-medium text-slate-900"
+							x-text="insight.message"
+						></p>
+						<p
+							class="text-xs text-slate-500 mt-1"
+							x-text="insight.suggestion"
+						></p>
+					</div>
+				</div>
+			</template>
+			<template x-if="failedCount > 0">
+				<div
+					class="mt-4 p-3 bg-red-50 rounded-xl border border-red-100"
+				>
+					<div class="flex items-center gap-2">
+						<i
+							data-lucide="alert-circle"
+							class="w-4 h-4 text-red-600"
+						></i>
+						<span
+							class="text-sm font-medium text-red-800"
+							x-text="failedCount + ' invoice' + (failedCount > 1 ? 's' : '') + ' require attention'"
+						></span>
+					</div>
+				</div>
+			</template>
+		</div>
+
+		<!-- Quick Actions Panel -->
+		<div class="bg-white rounded-2xl border border-slate-200 p-6">
+			<div class="flex items-center gap-2 mb-4">
+				<i data-lucide="zap" class="w-5 h-5 text-trust"></i>
+				<h3 class="text-lg font-semibold text-slate-900">
+					Quick Actions
+				</h3>
+			</div>
+			<div class="space-y-3">
+				<button
+					@click="submitAllPending()"
+					:disabled="pendingCount === 0 || processing"
+					class="w-full p-4 rounded-xl border border-slate-200 hover:border-trust hover:bg-trust/5 transition-all text-left"
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="w-10 h-10 rounded-xl bg-trust/10 flex items-center justify-center"
+						>
+							<i
+								data-lucide="send"
+								class="w-5 h-5 text-trust"
+							></i>
+						</div>
+						<div class="flex-1">
+							<p class="font-medium text-slate-900">
+								Submit All Pending
+							</p>
+							<p
+								class="text-sm text-slate-500"
+								x-text="pendingCount + ' invoices awaiting submission'"
+							></p>
+						</div>
+						<i
+							data-lucide="chevron-right"
+							class="w-5 h-5 text-slate-300"
+						></i>
+					</div>
+				</button>
+				<button
+					@click="retryAllFailed()"
+					:disabled="failedCount === 0"
+					class="w-full p-4 rounded-xl border border-slate-200 hover:border-red-400 hover:bg-red-50 transition-all text-left"
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"
+						>
+							<i
+								data-lucide="refresh-cw"
+								class="w-5 h-5 text-red-600"
+							></i>
+						</div>
+						<div class="flex-1">
+							<p class="font-medium text-slate-900">
+								Retry Failed
+							</p>
+							<p
+								class="text-sm text-slate-500"
+								x-text="failedCount + ' failed submission' + (failedCount > 1 ? 's' : '')"
+							></p>
+						</div>
+						<i
+							data-lucide="chevron-right"
+							class="w-5 h-5 text-slate-300"
+						></i>
+					</div>
+				</button>
+				<button
+					@click="exportKRA()"
+					class="w-full p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left"
+				>
+					<div class="flex items-center gap-3">
+						<div
+							class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"
+						>
+							<i
+								data-lucide="download"
+								class="w-5 h-5 text-blue-600"
+							></i>
+						</div>
+						<div class="flex-1">
+							<p class="font-medium text-slate-900">
+								Export Report
+							</p>
+							<p class="text-sm text-slate-500">
+								Download compliance report
+							</p>
+						</div>
+						<i
+							data-lucide="chevron-right"
+							class="w-5 h-5 text-slate-300"
+						></i>
+					</div>
+				</button>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		function kraCompliance() {
+			return {
+				loading: false,
+				activityLoading: false,
+				processing: false,
+				invoices: [],
+				activities: [],
+				insights: [],
+				total: 0,
+				page: 1,
+				perPage: 15,
+				totalPages: 1,
+				search: "",
+				filterStatus: "",
+				filterDateFrom: "",
+				filterDateTo: "",
+				detailPanelOpen: false,
+				selectedInvoice: null,
+				currentRequest: null,
+				pendingCount: 0,
+				failedCount: 0,
+				complianceRate: 0,
+				toast: { show: false, message: "", type: "success" },
+				stats: [
+					{
+						label: "Total Invoices",
+						value: "0",
+						icon: "file-text",
+						color: "text-trust",
+						bg: "bg-trust/10",
+						trend: null,
+						sparkline: null,
+					},
+					{
+						label: "Submitted",
+						value: "0",
+						icon: "check-circle",
+						color: "text-green-600",
+						bg: "bg-green-100",
+						trend: null,
+						sparkline: null,
+					},
+					{
+						label: "Pending",
+						value: "0",
+						icon: "clock",
+						color: "text-amber-600",
+						bg: "bg-amber-100",
+						trend: null,
+						sparkline: null,
+					},
+					{
+						label: "Failed",
+						value: "0",
+						icon: "x-circle",
+						color: "text-red-600",
+						bg: "bg-red-100",
+						trend: null,
+						sparkline: null,
+					},
+					{
+						label: "Compliance",
+						value: "0%",
+						icon: "percent",
+						color: "text-blue-600",
+						bg: "bg-blue-100",
+						trend: null,
+						sparkline: null,
+					},
+					{
+						label: "Today",
+						value: "0",
+						icon: "calendar",
+						color: "text-purple-600",
+						bg: "bg-purple-100",
+						trend: null,
+						sparkline: null,
+					},
+				],
+
+				get visiblePages() {
+					const pages = [];
+					const maxVisible = 5;
+					let start = Math.max(
+						1,
+						this.page - Math.floor(maxVisible / 2),
+					);
+					let end = Math.min(this.totalPages, start + maxVisible - 1);
+					if (end - start + 1 < maxVisible) {
+						start = Math.max(1, end - maxVisible + 1);
+					}
+					for (let i = start; i <= end; i++) {
+						pages.push(i);
+					}
+					return pages;
+				},
+
+				async init() {
+				    lucide.createIcons();
+				    await this.loadStats();
+				    await this.loadInvoices();
+				    await this.loadActivity();
+				
+				    // ✅ store reference
+				    this.interval = setInterval(() => {
+				        this.loadStats();
+				        this.loadActivity();
+				    }, 30000);
+				},
+
+				async loadStats() {
+					try {
+						const data =
+							await InvoiceFastAPI.invoices.getKRAStats();
+						this.stats[0].value = data.total || 0;
+						this.stats[1].value = data.submitted || 0;
+						this.stats[2].value = data.pending || 0;
+						this.stats[3].value = data.failed || 0;
+						this.pendingCount = data.pending || 0;
+						this.failedCount = data.failed || 0;
+
+						const compliance =
+							data.total > 0
+								? Math.round(
+										(data.submitted / data.total) * 100,
+									)
+								: 0;
+						this.complianceRate = compliance;
+						this.stats[4].value = compliance + "%";
+						this.stats[5].value = data.submitted || 0;
+
+						// Generate insights based on data
+						this.generateInsights(data);
+
+						// Update sparklines
+						this.stats[1].sparkline = Array.from(
+							{ length: 7 },
+							() => Math.floor(Math.random() * 50) + 10,
+						);
+						this.stats[1].sparklineMax = Math.max(
+							...this.stats[1].sparkline,
+						);
+						this.stats[1].sparklineColor = "bg-green-400";
+
+						this.updateDonutChart();
+					} catch (err) {
+						console.error("Failed to load stats:", err);
+					}
+					lucide.createIcons();
+				},
+
+				generateInsights(data) {
+					this.insights = [];
+
+					if (data.failed > 0) {
+						if (data.failed <= 3) {
+							this.insights.push({
+								type: "warning",
+								message: `${data.failed} submission needs attention`,
+								suggestion:
+									"Review and retry these invoices to maintain compliance",
+							});
+						} else {
+							this.insights.push({
+								type: "error",
+								message: `${data.failed} submissions failed`,
+								suggestion:
+									"Immediate action required - check error messages and retry",
+							});
+						}
+					}
+
+					if (data.pending > 10) {
+						this.insights.push({
+							type: "info",
+							message: `${data.pending} invoices pending submission`,
+							suggestion:
+								"Consider batch submitting to improve compliance rate",
+						});
+					}
+
+					if (data.total > 0 && data.submitted / data.total < 0.5) {
+						this.insights.push({
+							type: "warning",
+							message: "Compliance rate below 50%",
+							suggestion:
+								"Urgent: Submit pending invoices to avoid penalties",
+						});
+					}
+				},
+
+				updateDonutChart() {
+					const submitted = parseInt(this.stats[1].value) || 0;
+					const pending = parseInt(this.stats[2].value) || 0;
+					const failed = parseInt(this.stats[3].value) || 0;
+					const total = submitted + pending + failed || 1;
+
+					const canvas = document.getElementById("kraDonutChart");
+					if (!canvas) return;
+
+					const scale = window.devicePixelRatio || 1;
+					canvas.width = 160 * scale;
+					canvas.height = 160 * scale;
+					canvas.getContext("2d").scale(scale, scale);
+
+					const ctx = canvas.getContext("2d");
+					const centerX = canvas.width / 2;
+					const centerY = canvas.height / 2;
+					const radius = Math.min(centerX, centerY) - 10;
+
+					ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+					const drawArc = (startAngle, endAngle, color) => {
+						ctx.beginPath();
+						ctx.moveTo(centerX, centerY);
+						ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+						ctx.closePath();
+						ctx.fillStyle = color;
+						ctx.fill();
+					};
+
+					let startAngle = -Math.PI / 2;
+					if (submitted > 0) {
+						const submittedAngle =
+							(submitted / total) * 2 * Math.PI;
+						drawArc(
+							startAngle,
+							startAngle + submittedAngle,
+							"#22c55e",
+						);
+						startAngle += submittedAngle;
+					}
+					if (pending > 0) {
+						const pendingAngle = (pending / total) * 2 * Math.PI;
+						drawArc(
+							startAngle,
+							startAngle + pendingAngle,
+							"#f59e0b",
+						);
+						startAngle += pendingAngle;
+					}
+					if (failed > 0) {
+						drawArc(
+							startAngle,
+							startAngle + (failed / total) * 2 * Math.PI,
+							"#ef4444",
+						);
+					}
+				},
+
+				async loadActivity() {
+					this.activityLoading = true;
+					try {
+						const data =
+							await InvoiceFastAPI.invoices.getKRAActivity(20);
+						this.activities = data.events || [];
+					} catch (err) {
+						console.error("Failed to load activity:", err);
+						this.activities = [];
+					} finally {
+						this.activityLoading = false;
+						lucide.createIcons();
+					}
+				},
+
+				async loadInvoices() {
+					this.loading = true;
+					try {
+						const params = new URLSearchParams({
+							page: this.page,
+							limit: this.perPage,
+						});
+						if (this.search) params.append("search", this.search);
+						if (this.filterStatus)
+							params.append("kra_status", this.filterStatus);
+						if (this.filterDateFrom)
+							params.append("date_from", this.filterDateFrom);
+						if (this.filterDateTo)
+							params.append("date_to", this.filterDateTo);
+
+						const data = await InvoiceFastAPI.invoices.list(
+							Object.fromEntries(params),
+						);
+						this.invoices = data.invoices || [];
+						this.total = data.total || 0;
+						this.totalPages =
+							Math.ceil(this.total / this.perPage) || 1;
+					} catch (err) {
+						console.error("Failed to load invoices:", err);
+						this.invoices = [];
+						this.showToast("Failed to load invoices", "error");
+					} finally {
+						this.loading = false;
+						lucide.createIcons();
+					}
+				},
+
+				goToPage(p) {
+					if (p >= 1 && p <= this.totalPages) {
+						this.page = p;
+						this.loadInvoices();
+					}
+				},
+
+				clearFilters() {
+					this.search = "";
+					this.filterStatus = "";
+					this.filterDateFrom = "";
+					this.filterDateTo = "";
+					this.page = 1;
+					this.loadInvoices();
+				},
+
+				async submitToKRA(id) {
+					try {
+						await InvoiceFastAPI.invoices.submitToKRA(id);
+						this.showToast(
+							"Submitted to KRA successfully",
+							"success",
+						);
+						await this.loadInvoices();
+						await this.loadStats();
+						await this.loadActivity();
+					} catch (err) {
+						this.showToast(
+							err.message || "Failed to submit to KRA",
+							"error",
+						);
+					}
+				},
+
+				async retryKRA(id) {
+					try {
+						await InvoiceFastAPI.request(
+							"/tenant/invoices/" + id + "/kra/retry",
+							{ method: "POST" },
+						);
+						this.showToast("Retry successful", "success");
+						this.detailPanelOpen = false;
+						await this.loadInvoices();
+						await this.loadStats();
+						await this.loadActivity();
+					} catch (err) {
+						this.showToast(err.message || "Retry failed", "error");
+					}
+				},
+
+				async submitAllPending() {
+					this.processing = true;
+					try {
+						const result =
+							await InvoiceFastAPI.invoices.submitAllPendingToKRA();
+						this.showToast(
+							`Submitted ${result.submitted} invoices, ${result.failed} failed`,
+							result.failed > 0 ? "warning" : "success",
+						);
+						await this.loadInvoices();
+						await this.loadStats();
+						await this.loadActivity();
+					} catch (err) {
+						this.showToast(
+							err.message || "Bulk submission failed",
+							"error",
+						);
+					} finally {
+						this.processing = false;
+					}
+				},
+
+				async refreshActivity() {
+					await this.loadActivity();
+					await this.loadStats();
+				},
+
+				async retryAllFailed() {
+					this.processing = true;
+					try {
+						const failedInvoices = this.invoices.filter(
+							(inv) => inv.kra_status === "failed",
+						);
+						let successCount = 0;
+						let failCount = 0;
+
+						for (const inv of failedInvoices) {
+							try {
+								await InvoiceFastAPI.request(
+									"/tenant/invoices/" + inv.id + "/kra/retry",
+									{ method: "POST" },
+								);
+								successCount++;
+							} catch (e) {
+								failCount++;
+							}
+						}
+
+						this.showToast(
+							`Retried ${successCount} invoices, ${failCount} still failed`,
+							failCount > 0 ? "warning" : "success",
+						);
+						await this.loadInvoices();
+						await this.loadStats();
+						await this.loadActivity();
+					} catch (err) {
+						this.showToast("Bulk retry failed", "error");
+					} finally {
+						this.processing = false;
+					}
+				},
+
+				viewKRADetails(inv) {
+					this.selectedInvoice = inv;
+					this.detailPanelOpen = true;
+					lucide.createIcons();
+				},
+
+				async viewKRADetailsById(invoiceId) {
+				    try {
+				        let inv = this.invoices.find(i => i.id === invoiceId);
+				
+				        if (!inv) {
+				            const data = await InvoiceFastAPI.invoices.list({ limit: 100 });
+				            inv = data.invoices?.find(i => i.id === invoiceId);
+				        }
+				
+				        if (inv) {
+				            this.viewKRADetails(inv);
+				        } else {
+				            this.showToast('Invoice not found', 'error');
+				        }
+				
+				    } catch (e) {
+				        console.error(e);
+				        this.showToast('Failed to load invoice details', 'error');
+				    }
+				},
+
+				downloadQR(inv) {
+					if (inv.kra_qr_code) {
+						const link = document.createElement("a");
+						link.href = "data:image/png;base64," + inv.kra_qr_code;
+						link.download = "kra-qr-" + inv.invoice_number + ".png";
+						link.click();
+					}
+				},
+
+				exportKRA() {
+					window.location.href =
+						"/api/v1/tenant/reports/kra-export?status=" +
+						this.filterStatus;
+				},
+
+				getKRAStatusClass(status) {
+					if (!status || status === "")
+						return "bg-slate-100 text-slate-600 border border-slate-200";
+					const classes = {
+						submitted:
+							"bg-green-100 text-green-700 border border-green-200",
+						pending:
+							"bg-amber-100 text-amber-700 border border-amber-200",
+						failed: "bg-red-100 text-red-700 border border-red-200",
+						not_submitted:
+							"bg-slate-100 text-slate-600 border border-slate-200",
+					};
+					return (
+						classes[status] ||
+						"bg-slate-100 text-slate-600 border border-slate-200"
+					);
+				},
+
+				getKRALabel(status) {
+					if (!status || status === "") return "Pending";
+					const labels = {
+						submitted: "Submitted",
+						pending: "Pending",
+						failed: "Failed",
+						not_submitted: "Not Submitted",
+					};
+					return labels[status] || "Pending";
+				},
+
+				formatCurrency(amount) {
+					return new Intl.NumberFormat("en-KE", {
+						style: "currency",
+						currency: "KES",
+						minimumFractionDigits: 0,
+					}).format(amount || 0);
+				},
+
+				formatDate(date) {
+					if (!date || date === null || date === "") return "-";
+					const d = new Date(date);
+					if (isNaN(d.getTime())) return "-";
+					return d.toLocaleDateString("en-KE", {
+						year: "numeric",
+						month: "short",
+						day: "numeric",
+						hour: "2-digit",
+						minute: "2-digit",
+					});
+				},
+
+				formatTimeAgo(dateStr) {
+					if (!dateStr) return "";
+					const date = new Date(dateStr);
+					const now = new Date();
+					const diffMs = now - date;
+					const diffMins = Math.floor(diffMs / 60000);
+					const diffHours = Math.floor(diffMins / 60);
+					const diffDays = Math.floor(diffHours / 24);
+
+					if (diffMins < 1) return "Just now";
+					if (diffMins < 60) return diffMins + "m ago";
+					if (diffHours < 24) return diffHours + "h ago";
+					if (diffDays < 7) return diffDays + "d ago";
+					return date.toLocaleDateString();
+				},
+
+				showToast(message, type = "success") {
+					this.toast = { show: true, message, type };
+					setTimeout(() => {
+						this.toast.show = false;
+					}, 4000);
+				},
+			};
+		}
+	</script>
+
+	<style>
+		@keyframes slide-up {
+			from {
+				transform: translateY(100%);
+				opacity: 0;
+			}
+			to {
+				transform: translateY(0);
+				opacity: 1;
+			}
+		}
+		.animate-slide-up {
+			animation: slide-up 0.3s ease-out;
+		}
+	</style>
+</div>

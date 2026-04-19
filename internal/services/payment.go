@@ -310,12 +310,17 @@ func (s *PaymentService) GetPaymentsByInvoice(ctx context.Context, tenantID, inv
 
 // PaymentFilter for querying payments with tenant isolation
 type PaymentFilter struct {
+	Search    string
 	Status    string
+	Method    string
+	DateFrom  string
+	DateTo    string
+	ClientID  string
 	InvoiceID string
+	Page      int
+	Limit     int
 	FromDate  *time.Time
 	ToDate    *time.Time
-	Limit     int
-	Offset    int
 }
 
 // GetTenantPayments retrieves all payments for a tenant (tenant-scoped)
@@ -345,8 +350,9 @@ func (s *PaymentService) GetTenantPayments(ctx context.Context, tenantID string,
 	if filter.Limit > 0 {
 		query = query.Limit(filter.Limit)
 	}
-	if filter.Offset > 0 {
-		query = query.Offset(filter.Offset)
+	offset := (filter.Page - 1) * filter.Limit
+	if offset > 0 {
+		query = query.Offset(offset)
 	}
 
 	if err := query.Order("created_at DESC").Find(&payments).Error; err != nil {

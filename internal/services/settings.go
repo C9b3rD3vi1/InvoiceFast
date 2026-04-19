@@ -130,7 +130,7 @@ func (s *SettingsService) MaskSecrets(settings *TenantSettings) {
 
 func (s *SettingsService) GetSettings(tenantID string) (*TenantSettings, error) {
 	var tenant models.Tenant
-	err := s.db.Scopes(database.TenantFilter(tenantID)).First(&tenant, "id = ?", tenantID).Error
+	err := s.db.First(&tenant, "id = ?", tenantID).Error
 	if err != nil {
 		return nil, fmt.Errorf("tenant not found: %w", err)
 	}
@@ -161,8 +161,7 @@ func (s *SettingsService) SaveSettings(tenantID string, settings *TenantSettings
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	result := s.db.Model(&models.Tenant{}).
-		Scopes(database.TenantFilter(tenantID)).
+result := s.db.Model(&models.Tenant{}).
 		Where("id = ?", tenantID).
 		Update("settings", string(settingsJSON))
 

@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -209,7 +211,7 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		}
 	}
 
-	invoice := &models.Invoice{
+invoice := &models.Invoice{
 		ID:                  uuid.New().String(),
 		TenantID:            tenantID,
 		UserID:              userID,
@@ -231,7 +233,8 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		BrandColor:          req.BrandColor,
 		LogoURL:             req.LogoURL,
 		MagicToken:          uuid.New().String(),
-		MagicTokenExpiresAt: sql.NullTime{Time: time.Now().AddDate(0, 3, 0), Valid: true}, // 3 months expiry
+		MagicTokenExpiresAt: sql.NullTime{Time: time.Now().AddDate(0, 3, 0), Valid: true},
+		KRAStatus:           "pending",
 	}
 
 	// Set title if provided
@@ -420,7 +423,18 @@ func (s *InvoiceService) GetUserInvoices(tenantID string, filter InvoiceFilter) 
 	}
 	if filter.Search != "" {
 		search := "%" + strings.TrimSpace(filter.Search) + "%"
-		query = query.Where("invoice_number ILIKE ? OR reference ILIKE ?", search, search)
+		if s.db.IsPostgres() {
+			query = query.Where("invoice_number ILIKE ? OR reference ILIKE ?", search, search)
+		} else {
+			query = query.Where("LOWER(invoice_number) LIKE LOWER(?) OR LOWER(reference) LIKE LOWER(?)", search, search)
+		}
+	}
+	if filter.KRAStatus != "" {
+		if filter.KRAStatus == "not_submitted" {
+			query = query.Where("kra_status = 'pending'")
+		} else {
+			query = query.Where("kra_status = ?", filter.KRAStatus)
+		}
 	}
 
 	// Count total
@@ -719,13 +733,19 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 			kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
 			if err != nil {
 				log.Printf("[KRA] Failed to submit invoice %s: %v", invoiceNum, err)
+				s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+					"kra_status": "failed",
+					"kra_error":  err.Error(),
+				})
 				return
 			}
 
-			// Update invoice with KRA response
 			s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
-				"kra_icn":     kraResp.ICN,
-				"kra_qr_code": kraResp.QRCode,
+				"kra_icn":          kraResp.ICN,
+				"kra_qr_code":      kraResp.QRCode,
+				"kra_status":       "submitted",
+				"kra_submitted_at": time.Now(),
+				"kra_error":        "",
 			})
 			log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoiceNum, kraResp.ICN)
 		}()
@@ -1108,6 +1128,37 @@ func (s *InvoiceService) GetInvoiceStats(tenantID string) (*InvoiceStats, error)
 	return &stats, nil
 }
 
+type KRADashboardStats struct {
+	Total     int64 `json:"total"`
+	Submitted int64 `json:"submitted"`
+	Pending   int64 `json:"pending"`
+	Failed    int64 `json:"failed"`
+}
+
+func (s *InvoiceService) GetKRADashboardStats(tenantID string) (*KRADashboardStats, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+
+	var stats KRADashboardStats
+
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Count(&stats.Total)
+
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
+		Where("kra_status = 'submitted'").
+		Count(&stats.Submitted)
+
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
+		Where("kra_status = 'pending'").
+		Count(&stats.Pending)
+
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).
+		Where("kra_status = 'failed'").
+		Count(&stats.Failed)
+
+	return &stats, nil
+}
+
 // Helper functions for dashboard stats
 
 func (s *InvoiceService) getMonthlyRevenue(tenantID string, months int) []MonthlyData {
@@ -1420,13 +1471,14 @@ type UpdateInvoiceRequest struct {
 }
 
 type InvoiceFilter struct {
-	Status   string
-	ClientID string
-	FromDate *time.Time
-	ToDate   *time.Time
-	Search   string
-	Offset   int
-	Limit    int
+	Status    string
+	ClientID  string
+	FromDate  *time.Time
+	ToDate    *time.Time
+	Search    string
+	Offset    int
+	Limit     int
+	KRAStatus string
 }
 
 type InvoiceStats struct {
@@ -1654,6 +1706,10 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 
 	kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
 	if err != nil {
+		s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+			"kra_status": "failed",
+			"kra_error":  err.Error(),
+		})
 		s.db.Create(&models.AuditLog{
 			ID:         uuid.New().String(),
 			UserID:     userID,
@@ -1666,8 +1722,11 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 	}
 
 	s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
-		"kra_icn":     kraResp.ICN,
-		"kra_qr_code": kraResp.QRCode,
+		"kra_icn":          kraResp.ICN,
+		"kra_qr_code":      kraResp.QRCode,
+		"kra_status":       "submitted",
+		"kra_submitted_at": time.Now(),
+		"kra_error":        "",
 	})
 
 	s.db.Create(&models.AuditLog{
@@ -1681,4 +1740,141 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 
 	log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoice.InvoiceNumber, kraResp.ICN)
 	return kraResp, nil
+}
+
+// ClearKRAData clears KRA submission data for retry
+func (s *InvoiceService) ClearKRAData(tenantID, invoiceID string) error {
+	if tenantID == "" {
+		return ErrTenantRequired
+	}
+	return s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+		"kra_icn":          "",
+		"kra_qr_code":      "",
+		"kra_status":       "",
+		"kra_submitted_at": nil,
+		"kra_error":        "",
+	}).Error
+}
+
+// KRAActivityEvent represents a KRA activity event
+type KRAActivityEvent struct {
+	ID            string    `json:"id"`
+	InvoiceID     string    `json:"invoice_id"`
+	InvoiceNumber string    `json:"invoice_number"`
+	Action        string    `json:"action"` // submitted, failed, retried
+	Status        string    `json:"status"`
+	ICN           string    `json:"icn,omitempty"`
+	Error         string    `json:"error,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
+// GetKRAActivityFeed returns recent KRA activity for the tenant
+func (s *InvoiceService) GetKRAActivityFeed(tenantID string, limit int) ([]KRAActivityEvent, error) {
+	if tenantID == "" {
+		return nil, ErrTenantRequired
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	var events []KRAActivityEvent
+
+	// Get invoices with KRA activity in the last 24 hours
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("kra_status IN ('submitted', 'failed') OR kra_icn IS NOT NULL").
+		Order("updated_at DESC").
+		Limit(limit).
+		Find(&events)
+
+	// Build activity events from audit logs for more detail
+	var auditLogs []models.AuditLog
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("action IN ('kra_success', 'kra_failed')").
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&auditLogs)
+
+	// Merge audit logs with invoice data
+	activityMap := make(map[string]*KRAActivityEvent)
+	for _, inv := range events {
+		ts := inv.Timestamp
+		if ts.IsZero() {
+			ts = time.Now()
+		}
+		activityMap[inv.InvoiceID] = &inv
+	}
+
+	// Add more recent events from audit logs
+	for _, log := range auditLogs {
+		if existing, ok := activityMap[log.EntityID]; ok {
+			if existing.Error == "" {
+				var details map[string]interface{}
+				json.Unmarshal([]byte(log.Details), &details)
+				if err, ok := details["error"].(string); ok && err != "" {
+					existing.Error = err
+				}
+			}
+			continue
+		}
+		// Create event from audit log
+		var inv models.Invoice
+		if err := s.db.First(&inv, "id = ?", log.EntityID).Error; err != nil {
+			continue
+		}
+		action := "submitted"
+		if log.Action == "kra_failed" {
+			action = "failed"
+		}
+		var details map[string]interface{}
+		json.Unmarshal([]byte(log.Details), &details)
+		errMsg := ""
+		if err, ok := details["error"].(string); ok {
+			errMsg = err
+		}
+		events = append(events, KRAActivityEvent{
+			ID:            log.ID,
+			InvoiceID:     log.EntityID,
+			InvoiceNumber: inv.InvoiceNumber,
+			Action:        action,
+			Status:        inv.KRAStatus,
+			ICN:           inv.KRAICN,
+			Error:         errMsg,
+			Timestamp:     log.CreatedAt,
+		})
+	}
+
+	// Sort by timestamp
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].Timestamp.After(events[j].Timestamp)
+	})
+
+	if len(events) > limit {
+		events = events[:limit]
+	}
+
+	return events, nil
+}
+
+// SubmitAllPendingToKRA submits all pending invoices to KRA
+func (s *InvoiceService) SubmitAllPendingToKRA(tenantID string) (submitted, failed int, err error) {
+	if tenantID == "" {
+		return 0, 0, ErrTenantRequired
+	}
+
+	var pendingInvoices []models.Invoice
+	s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("(kra_status IS NULL OR kra_status = '') AND (kra_icn IS NULL OR kra_icn = '')").
+		Find(&pendingInvoices)
+
+	for _, inv := range pendingInvoices {
+		_, err := s.SubmitInvoiceToKRA(tenantID, inv.ID)
+		if err != nil {
+			failed++
+			log.Printf("[KRA] Failed to submit invoice %s: %v", inv.InvoiceNumber, err)
+		} else {
+			submitted++
+		}
+	}
+
+	return submitted, failed, nil
 }

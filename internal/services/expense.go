@@ -2,21 +2,27 @@ package services
 
 import (
 	"fmt"
+	"mime/multipart"
 	"time"
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type ExpenseService struct {
-	db *database.DB
+	db          *database.DB
+	attachmentService *ExpenseAttachmentService
 }
 
 func NewExpenseService(db *database.DB) *ExpenseService {
-	return &ExpenseService{db: db}
+	return &ExpenseService{
+		db: db,
+		attachmentService: NewExpenseAttachmentService(db, "./uploads/expense_attachments"),
+	}
 }
 
 type CreateExpenseRequest struct {
@@ -103,14 +109,55 @@ func (s *ExpenseService) GetExpenses(tenantID string, filters map[string]interfa
 	if status, ok := filters["status"].(string); ok && status != "" {
 		query = query.Where("status = ?", status)
 	}
-	if startDate, ok := filters["start_date"].(string); ok && startDate != "" {
+	
+	// Date range
+	startDate := ""
+	endDate := ""
+	
+	// Handle "this_month" quick filter
+	if period, ok := filters["period"].(string); ok && period != "" {
+		now := time.Now()
+		if period == "today" {
+			startDate = now.Format("2006-01-02")
+			endDate = now.Format("2006-01-02")
+		} else if period == "week" {
+			startOfWeek := now
+			startOfWeek.Weekday()
+			day := int(now.Weekday())
+			startOfWeek = now.AddDate(0, 0, -day)
+			startDate = startOfWeek.Format("2006-01-02")
+			endDate = now.Format("2006-01-02")
+		} else if period == "month" {
+			startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+			startDate = startOfMonth.Format("2006-01-02")
+			endDate = now.Format("2006-01-02")
+		}
+	}
+	
+	if sd, ok := filters["start_date"].(string); ok && sd != "" {
+		startDate = sd
+	}
+	if ed, ok := filters["end_date"].(string); ok && ed != "" {
+		endDate = ed
+	}
+	
+	if startDate != "" {
 		parsed, _ := time.Parse("2006-01-02", startDate)
 		query = query.Where("date >= ?", parsed)
 	}
-	if endDate, ok := filters["end_date"].(string); ok && endDate != "" {
+	if endDate != "" {
 		parsed, _ := time.Parse("2006-01-02", endDate)
 		query = query.Where("date <= ?", parsed)
 	}
+	
+	// Amount range
+	if minAmt, ok := filters["min_amount"].(float64); ok && minAmt > 0 {
+		query = query.Where("amount >= ?", minAmt)
+	}
+	if maxAmt, ok := filters["max_amount"].(float64); ok && maxAmt > 0 {
+		query = query.Where("amount <= ?", maxAmt)
+	}
+	
 	if search, ok := filters["search"].(string); ok && search != "" {
 		query = query.Where("title ILIKE ? OR description ILIKE ? OR vendor ILIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
 	}
@@ -252,23 +299,99 @@ func (s *ExpenseService) CreateCategory(tenantID string, name, description strin
 	return category, nil
 }
 
-func (s *ExpenseService) GetTotalExpenses(tenantID, startDate, endDate string) (float64, error) {
-	query := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ('approved', 'paid')", tenantID)
+func (s *ExpenseService) GetExpenseSummary(tenantID, period string) (map[string]interface{}, error) {
+	now := time.Now()
+	var startDate, endDate string
+	
+	// Handle period quick filter for filtering results
+	if period == "today" {
+		startDate = now.Format("2006-01-02")
+		endDate = now.Format("2006-01-02")
+	} else if period == "week" {
+		weekday := int(now.Weekday())
+		startOfWeek := now.AddDate(0, 0, -weekday)
+		startDate = startOfWeek.Format("2006-01-02")
+		endDate = now.Format("2006-01-02")
+	} else if period == "month" {
+		startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		startDate = startOfMonth.Format("2006-01-02")
+		endDate = now.Format("2006-01-02")
+	}
 
-	if startDate != "" {
+	// Get total all time
+	var totalAll float64
+	err := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ('approved', 'paid')", tenantID).
+		Select("COALESCE(SUM(amount), 0)").Scan(&totalAll).Error
+	if err != nil {
+		totalAll = 0
+	}
+
+	// ALWAYS get this month's total (regardless of period filter)
+	thisMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	thisMonthEnd := now
+	var thisMonth float64
+	err = s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ('approved', 'paid') AND date >= ? AND date <= ?", tenantID, thisMonthStart, thisMonthEnd).
+		Select("COALESCE(SUM(amount), 0)").Scan(&thisMonth).Error
+	if err != nil {
+		thisMonth = 0
+	}
+
+	// Get counts by status - use period if provided
+	var pending, approved, paid, rejected int64
+	if startDate != "" && endDate != "" {
 		parsed, _ := time.Parse("2006-01-02", startDate)
-		query = query.Where("date >= ?", parsed)
-	}
-	if endDate != "" {
-		parsed, _ := time.Parse("2006-01-02", endDate)
-		query = query.Where("date <= ?", parsed)
+		parsed2, _ := time.Parse("2006-01-02", endDate)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ? AND date >= ? AND date <= ?", tenantID, parsed, parsed2).Where("status = ?", "pending").Count(&pending)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ? AND date >= ? AND date <= ?", tenantID, parsed, parsed2).Where("status = ?", "approved").Count(&approved)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ? AND date >= ? AND date <= ?", tenantID, parsed, parsed2).Where("status = ?", "paid").Count(&paid)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ? AND date >= ? AND date <= ?", tenantID, parsed, parsed2).Where("status = ?", "rejected").Count(&rejected)
+	} else {
+		s.db.Model(&models.Expense{}).Where("tenant_id = ?", tenantID).Where("status = ?", "pending").Count(&pending)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ?", tenantID).Where("status = ?", "approved").Count(&approved)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ?", tenantID).Where("status = ?", "paid").Count(&paid)
+		s.db.Model(&models.Expense{}).Where("tenant_id = ?", tenantID).Where("status = ?", "rejected").Count(&rejected)
 	}
 
-	var total float64
-	if err := query.Select("COALESCE(SUM(amount), 0)").Scan(&total).Error; err != nil {
-		return 0, fmt.Errorf("failed to calculate total: %w", err)
+	// Get by category with names
+	type categoryResult struct {
+		CategoryID   string
+		CategoryName string
+		Total       float64
 	}
-	return total, nil
+	byCategory := make(map[string]float64)
+	byCategoryRaw := make(map[string]string)
+	
+	var results []categoryResult
+	query := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ('approved', 'paid')", tenantID)
+	if startDate != "" && endDate != "" {
+		parsed, _ := time.Parse("2006-01-02", startDate)
+		parsed2, _ := time.Parse("2006-01-02", endDate)
+		query = query.Where("date >= ? AND date <= ?", parsed, parsed2)
+	}
+	query.Select("category_id, SUM(amount) as total").Group("category_id").Find(&results)
+	
+	for _, r := range results {
+		catName := "Uncategorized"
+		if r.CategoryID != "" {
+			var cat models.ExpenseCategory
+			if err := s.db.Where("id = ?", r.CategoryID).First(&cat).Error; err == nil {
+				catName = cat.Name
+			}
+		}
+		byCategory[catName] = r.Total
+		byCategoryRaw[r.CategoryID] = catName
+	}
+
+	return map[string]interface{}{
+		"total":          totalAll,
+		"this_month":    thisMonth,
+		"pending":        pending,
+		"approved":       approved,
+		"paid":           paid,
+		"rejected":       rejected,
+		"by_category":     byCategory,
+		"by_category_raw": byCategoryRaw,
+	}, nil
 }
 
 func (s *ExpenseService) GetExpensesByCategory(tenantID, startDate, endDate string) (map[string]float64, error) {
@@ -298,4 +421,24 @@ func (s *ExpenseService) GetExpensesByCategory(tenantID, startDate, endDate stri
 		result[r.CategoryID] = r.Total
 	}
 	return result, nil
+}
+
+// UploadExpenseAttachment handles file upload for an expense
+func (s *ExpenseService) UploadExpenseAttachment(tenantID, expenseID string, fileHeader *multipart.FileHeader, c *fiber.Ctx) (*models.ExpenseAttachment, error) {
+	return s.attachmentService.UploadFile(tenantID, expenseID, fileHeader, c)
+}
+
+// GetExpenseAttachments retrieves all attachments for an expense
+func (s *ExpenseService) GetExpenseAttachments(tenantID, expenseID string) ([]models.ExpenseAttachment, error) {
+	return s.attachmentService.GetAttachments(tenantID, expenseID)
+}
+
+// DeleteExpenseAttachment removes an attachment from an expense
+func (s *ExpenseService) DeleteExpenseAttachment(tenantID, attachmentID string) error {
+	return s.attachmentService.DeleteAttachment(tenantID, attachmentID)
+}
+
+// GetExpenseAttachmentByID retrieves a single attachment by ID
+func (s *ExpenseService) GetExpenseAttachmentByID(tenantID, attachmentID string) (*models.ExpenseAttachment, error) {
+	return s.attachmentService.GetAttachmentByID(tenantID, attachmentID)
 }

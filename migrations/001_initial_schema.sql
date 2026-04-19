@@ -102,6 +102,9 @@ CREATE TABLE IF NOT EXISTS invoices (
     magic_token_expires_at TIMESTAMP WITH TIME ZONE,
     kra_icn VARCHAR(100), -- KRA Invoice Confirmation Number
     kra_qr_code TEXT, -- KRA QR Code data
+    kra_status VARCHAR(20) DEFAULT '', -- submitted, failed, pending
+    kra_submitted_at TIMESTAMP WITH TIME ZONE, -- Submission timestamp
+    kra_error TEXT, -- Error message if failed
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(tenant_id, invoice_number)
@@ -115,6 +118,8 @@ CREATE INDEX idx_invoices_client_id ON invoices(client_id);
 CREATE INDEX idx_invoices_due_date ON invoices(due_date);
 CREATE INDEX idx_invoices_magic_token ON invoices(magic_token) WHERE magic_token IS NOT NULL;
 CREATE INDEX idx_invoices_kra_icn ON invoices(kra_icn) WHERE kra_icn IS NOT NULL;
+CREATE INDEX idx_invoices_kra_status ON invoices(tenant_id, kra_status);
+CREATE INDEX idx_invoices_kra_submitted ON invoices(tenant_id, kra_submitted_at) WHERE kra_submitted_at IS NOT NULL;
 
 -- Invoice Items
 CREATE TABLE IF NOT EXISTS invoice_items (
