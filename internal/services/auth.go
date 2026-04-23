@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -20,6 +22,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -544,8 +548,8 @@ func (s *AuthService) ChangePassword(tenantID, userID, oldPassword, newPassword 
 	if tenantID == "" {
 		return errors.New("tenant_id is required")
 	}
-	if len(newPassword) < 6 {
-		return ErrWeakPassword
+	if err := validatePassword(newPassword); err != nil {
+		return err
 	}
 
 	user, err := s.GetUserByID(tenantID, userID)
@@ -562,12 +566,22 @@ func (s *AuthService) ChangePassword(tenantID, userID, oldPassword, newPassword 
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	now := time.Now()
 	user.PasswordHash = string(hashedPassword)
+	user.PasswordChangedAt = &now
+	if user.TwoFactorEnabled {
+		user.TwoFactorVerifiedAt = nil
+	}
 	if err := s.db.Save(user).Error; err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 
 	s.db.Scopes(database.TenantFilter(tenantID)).Where("user_id = ?", userID).Delete(&models.RefreshToken{})
+	s.db.Scopes(database.TenantFilter(tenantID)).Where("user_id = ?", userID).Delete(&models.UserSession{})
+
+	if s.auditService != nil {
+		s.auditService.LogSecurityEvent(context.Background(), tenantID, userID, "password_changed", map[string]interface{}{})
+	}
 
 	return nil
 }
@@ -849,4 +863,258 @@ func generateSubdomain(companyName string) string {
 	}
 
 	return result
+}
+
+type TwoFactorSetup struct {
+	Secret         string   `json:"secret"`
+	QRCodeURL      string   `json:"qr_code_url"`
+	QRCodeImageURL string   `json:"qr_code_image_url"`
+	BackupCodes    []string `json:"backup_codes"`
+}
+
+func (s *AuthService) SetupTwoFactor(tenantID, userID string) (*TwoFactorSetup, error) {
+	user, err := s.GetUserByID(tenantID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.TwoFactorEnabled {
+		return nil, errors.New("two-factor authentication is already enabled")
+	}
+
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "InvoiceFast",
+		AccountName: user.Email,
+		Algorithm:   otp.AlgorithmSHA1,
+		Digits:      otp.DigitsSix,
+		Period:      30,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate 2FA key: %w", err)
+	}
+
+	backupCodes := generateBackupCodes(8)
+
+	user.TwoFactorSecret = s.encryptSecret(key.Secret())
+	if err := s.db.Save(user).Error; err != nil {
+		return nil, fmt.Errorf("failed to save 2FA secret: %w", err)
+	}
+
+	return &TwoFactorSetup{
+		Secret:         key.Secret(),
+		QRCodeURL:      key.URL(),
+		QRCodeImageURL: key.URL(),
+		BackupCodes:    backupCodes,
+	}, nil
+}
+
+func (s *AuthService) VerifyAndEnableTwoFactor(tenantID, userID, code string) error {
+	user, err := s.GetUserByID(tenantID, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.TwoFactorEnabled {
+		return errors.New("two-factor authentication is already enabled")
+	}
+
+	if user.TwoFactorSecret == "" {
+		return errors.New("please set up 2FA first")
+	}
+
+	secret := s.decryptSecret(user.TwoFactorSecret)
+	if !validateTOTP(secret, code) {
+		return errors.New("invalid verification code")
+	}
+
+	now := time.Now()
+	user.TwoFactorEnabled = true
+	user.TwoFactorVerifiedAt = &now
+
+	backupCodes := generateBackupCodes(10)
+	user.TwoFactorSecret = s.encryptSecret(secret + "|" + strings.Join(backupCodes, ","))
+
+	if err := s.db.Save(user).Error; err != nil {
+		return fmt.Errorf("failed to enable 2FA: %w", err)
+	}
+
+	if s.auditService != nil {
+		s.auditService.LogSecurityEvent(context.Background(), tenantID, userID, "two_factor_enabled", map[string]interface{}{})
+	}
+
+	return nil
+}
+
+func (s *AuthService) DisableTwoFactor(tenantID, userID, password, code string) error {
+	user, err := s.GetUserByID(tenantID, userID)
+	if err != nil {
+		return err
+	}
+
+	if !user.TwoFactorEnabled {
+		return nil
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return ErrWrongPassword
+	}
+
+	secret := s.decryptSecret(user.TwoFactorSecret)
+	parts := strings.Split(secret, "|")
+	if len(parts) > 1 {
+		backupCodes := strings.Split(parts[1], ",")
+		for _, bc := range backupCodes {
+			if bc == code {
+				goto verified
+			}
+		}
+	}
+
+	if !validateTOTP(secret, code) {
+		return errors.New("invalid verification code")
+	}
+
+verified:
+	user.TwoFactorEnabled = false
+	user.TwoFactorSecret = ""
+	user.TwoFactorVerifiedAt = nil
+
+	if err := s.db.Save(user).Error; err != nil {
+		return fmt.Errorf("failed to disable 2FA: %w", err)
+	}
+
+	if s.auditService != nil {
+		s.auditService.LogSecurityEvent(context.Background(), tenantID, userID, "two_factor_disabled", map[string]interface{}{})
+	}
+
+	return nil
+}
+
+func (s *AuthService) GetSessions(tenantID, userID string) ([]models.UserSession, error) {
+	var sessions []models.UserSession
+	err := s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("user_id = ? AND expires_at > ?", userID, time.Now()).
+		Order("last_active_at DESC").
+		Find(&sessions).Error
+	return sessions, err
+}
+
+func (s *AuthService) RevokeSession(tenantID, userID, sessionID string) error {
+	session := models.UserSession{}
+	err := s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("id = ? AND user_id = ?", sessionID, userID).
+		First(&session).Error
+	if err != nil {
+		return errors.New("session not found")
+	}
+
+	if session.IsCurrent {
+		return errors.New("cannot revoke current session")
+	}
+
+	return s.db.Delete(&session).Error
+}
+
+func (s *AuthService) RevokeAllSessions(tenantID, userID, exceptCurrent string) error {
+	query := s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("user_id = ? AND expires_at > ?", userID, time.Now())
+
+	if exceptCurrent != "" {
+		query = query.Where("id != ?", exceptCurrent)
+	}
+
+	return query.Delete(&models.UserSession{}).Error
+}
+
+func (s *AuthService) GetLoginHistory(tenantID, userID string, limit int) ([]map[string]interface{}, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	var logs []models.AuditLog
+	err := s.db.Scopes(database.TenantFilter(tenantID)).
+		Where("user_id = ? AND action = 'login'", userID).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]interface{}, len(logs))
+	for i, log := range logs {
+		result[i] = map[string]interface{}{
+			"id":         log.ID,
+			"ip_address": log.IPAddress,
+			"action":     log.Action,
+			"details":    log.Details,
+			"created_at": log.CreatedAt,
+		}
+	}
+
+	return result, nil
+}
+
+func (s *AuthService) UpdateLoginAlerts(tenantID, userID string, enabled bool) error {
+	user, err := s.GetUserByID(tenantID, userID)
+	if err != nil {
+		return err
+	}
+	user.LoginAlertEnabled = enabled
+	return s.db.Save(user).Error
+}
+
+func generateBackupCodes(count int) []string {
+	codes := make([]string, count)
+	for i := 0; i < count; i++ {
+		b := make([]byte, 4)
+		rand.Read(b)
+		codes[i] = fmt.Sprintf("%08x", b)
+	}
+	return codes
+}
+
+func validateTOTP(secret, code string) bool {
+	plainSecret := strings.Split(secret, "|")[0]
+	return totp.Validate(code, plainSecret)
+}
+
+func (s *AuthService) encryptSecret(plaintext string) string {
+	if s.cfg == nil {
+		return plaintext
+	}
+	key := []byte(s.cfg.JWT.Secret)
+	if len(key) < 32 {
+		key = append(key, make([]byte, 32-len(key))...)
+	}
+	block, _ := aes.NewCipher(key[:32])
+	iv := make([]byte, block.BlockSize())
+	rand.Read(iv)
+	cfb := cipher.NewCFBEncrypter(block, iv)
+	ciphertext := make([]byte, len(plaintext))
+	cfb.XORKeyStream(ciphertext, []byte(plaintext))
+	result := append(iv, ciphertext...)
+	return base64.StdEncoding.EncodeToString(result)
+}
+
+func (s *AuthService) decryptSecret(encoded string) string {
+	if s.cfg == nil {
+		return encoded
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return ""
+	}
+	key := []byte(s.cfg.JWT.Secret)
+	if len(key) < 32 {
+		key = append(key, make([]byte, 32-len(key))...)
+	}
+	block, _ := aes.NewCipher(key[:32])
+	iv := data[:block.BlockSize()]
+	ciphertext := data[block.BlockSize():]
+	block2, _ := aes.NewCipher(key[:32])
+	plaintext := make([]byte, len(ciphertext))
+	cfb := cipher.NewCFBDecrypter(block2, iv)
+	cfb.XORKeyStream(plaintext, ciphertext)
+	return string(plaintext)
 }

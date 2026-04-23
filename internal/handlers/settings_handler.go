@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"invoicefast/internal/middleware"
@@ -46,24 +47,154 @@ func (h *SettingsHandler) SaveSettings(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
 	}
 
-	var req services.TenantSettings
-	if err := c.BodyParser(&req); err != nil {
+	var reqBody map[string]interface{}
+	if err := c.BodyParser(&reqBody); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	if req.Branding != nil {
-		if strings.TrimSpace(req.Branding.CompanyName) == "" {
+	// Build settings from flexible input (frontend sends nested like {invoice: {...}}, {business: {...}})
+	settings := &services.TenantSettings{}
+
+	// Handle business/branding
+	if business, ok := reqBody["business"].(map[string]interface{}); ok {
+		settings.Branding = &services.BrandingSettings{}
+		if name, ok := business["name"].(string); ok {
+			settings.Branding.CompanyName = name
+		}
+		if logo, ok := business["logoUrl"].(string); ok {
+			settings.Branding.LogoURL = logo
+		}
+		if color, ok := business["brandColor"].(string); ok {
+			settings.Branding.BrandColor = color
+		}
+	}
+
+	// Handle branding directly
+	if branding, ok := reqBody["branding"].(map[string]interface{}); ok {
+		if settings.Branding == nil {
+			settings.Branding = &services.BrandingSettings{}
+		}
+		if name, ok := branding["company_name"].(string); ok {
+			settings.Branding.CompanyName = name
+		}
+		if logo, ok := branding["logo_url"].(string); ok {
+			settings.Branding.LogoURL = logo
+		}
+		if color, ok := branding["brand_color"].(string); ok {
+			settings.Branding.BrandColor = color
+		}
+	}
+
+	// Validate branding
+	if settings.Branding != nil {
+		if strings.TrimSpace(settings.Branding.CompanyName) == "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Company name is required"})
 		}
-		if len([]rune(req.Branding.CompanyName)) > 100 {
+		if len([]rune(settings.Branding.CompanyName)) > 100 {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Company name must be less than 100 characters"})
 		}
-		if req.Branding.BrandColor != "" && !isValidHexColor(req.Branding.BrandColor) {
+		if settings.Branding.BrandColor != "" && !isValidHexColor(settings.Branding.BrandColor) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid brand color format"})
 		}
 	}
 
-	if err := h.settingsService.SaveSettings(tenantID, &req); err != nil {
+	// Handle invoice settings
+	if invoice, ok := reqBody["invoice"].(map[string]interface{}); ok {
+		settings.Invoice = &services.InvoiceSettings{}
+		if prefix, ok := invoice["prefix"].(string); ok {
+			settings.Invoice.Prefix = prefix
+		}
+		if nextNum, ok := invoice["nextNumber"].(float64); ok {
+			settings.Invoice.NextNumber = int(nextNum)
+		}
+		if currency, ok := invoice["currency"].(string); ok {
+			settings.Invoice.Currency = currency
+		}
+		if taxRate, ok := invoice["defaultTaxRate"].(string); ok {
+			// Handle string
+			if f, err := strconv.ParseFloat(taxRate, 64); err == nil {
+				settings.Invoice.DefaultTaxRate = int(f)
+			}
+		} else if taxRate, ok := invoice["defaultTaxRate"].(float64); ok {
+			settings.Invoice.DefaultTaxRate = int(taxRate)
+		}
+		if terms, ok := invoice["paymentTerms"].(string); ok {
+			settings.Invoice.PaymentTerms = terms
+		}
+		if partial, ok := invoice["allowPartialPayments"].(bool); ok {
+			settings.Invoice.AllowPartialPayments = partial
+		}
+		if discount, ok := invoice["allowDiscounts"].(bool); ok {
+			settings.Invoice.AllowDiscounts = discount
+		}
+		if deposit, ok := invoice["allowDeposits"].(bool); ok {
+			settings.Invoice.AllowDeposits = deposit
+		}
+		if auto, ok := invoice["autoNumber"].(bool); ok {
+			settings.Invoice.AutoNumber = auto
+		}
+	}
+
+	// Handle payments settings
+	if payments, ok := reqBody["payments"].(map[string]interface{}); ok {
+		settings.Payments = &services.PaymentSettings{
+			Mpesa: &services.MpesaSettings{},
+			Card:  services.CardSettings{Enabled: false},
+		}
+		if mpesa, ok := payments["mpesa"].(map[string]interface{}); ok {
+			settings.Payments.Mpesa = &services.MpesaSettings{}
+			if key, ok := mpesa["consumerKey"].(string); ok {
+				settings.Payments.Mpesa.ConsumerKey = key
+			}
+			if secret, ok := mpesa["consumerSecret"].(string); ok {
+				settings.Payments.Mpesa.ConsumerSecret = secret
+			}
+			if code, ok := mpesa["shortcode"].(string); ok {
+				settings.Payments.Mpesa.Shortcode = code
+			}
+			if bsCode, ok := mpesa["businessShortcode"].(string); ok {
+				settings.Payments.Mpesa.Shortcode = bsCode
+			}
+			if enabled, ok := mpesa["enabled"].(bool); ok {
+				settings.Payments.Mpesa.Enabled = enabled
+			}
+		}
+		if card, ok := payments["card"].(map[string]interface{}); ok {
+			if enabled, ok := card["enabled"].(bool); ok {
+				settings.Payments.Card.Enabled = enabled
+			}
+		}
+	}
+
+	// Handle notifications - simple boolean format from frontend
+	if notifications, ok := reqBody["notifications"].(map[string]interface{}); ok {
+		settings.Notifications = &services.NotificationSettings{}
+		
+		// Handle simple boolean format { email: true, sms: false, whatsapp: false }
+		if emailEnabled, ok := notifications["email"].(bool); ok {
+			settings.Notifications.Email = []services.NotificationEvent{
+				{Key: "invoice_created", Label: "Invoice Created", Enabled: emailEnabled},
+				{Key: "payment_received", Label: "Payment Received", Enabled: emailEnabled},
+				{Key: "payment_due", Label: "Payment Due Reminder", Enabled: emailEnabled},
+				{Key: "invoice_overdue", Label: "Invoice Overdue", Enabled: emailEnabled},
+			}
+		}
+		if smsEnabled, ok := notifications["sms"].(bool); ok {
+			settings.Notifications.SMS = []services.NotificationEvent{
+				{Key: "invoice_created", Label: "Invoice Created", Enabled: smsEnabled},
+				{Key: "payment_received", Label: "Payment Received", Enabled: smsEnabled},
+				{Key: "payment_due", Label: "Payment Due Reminder", Enabled: smsEnabled},
+			}
+		}
+		if whatsappEnabled, ok := notifications["whatsapp"].(bool); ok {
+			settings.Notifications.Slack = []services.NotificationEvent{
+				{Key: "invoice_created", Label: "Invoice Created", Enabled: whatsappEnabled},
+				{Key: "payment_received", Label: "Payment Received", Enabled: whatsappEnabled},
+			}
+		}
+	}
+
+	if err := h.settingsService.SaveSettings(tenantID, settings); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 

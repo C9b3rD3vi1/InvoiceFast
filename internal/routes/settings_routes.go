@@ -14,6 +14,15 @@ func SettingsRoutes(app *fiber.App, h *handlers.SettingsHandler, authService *se
 	group := app.Group("/api/v1/tenant/settings")
 	group.Use(middleware.TenantMiddleware(authService, db))
 
+	// Disable caching for all settings endpoints
+	group.Use(func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+		c.Set("Pragma", "no-cache")
+		c.Set("Expires", "0")
+		c.Set("Surrogate-Control", "no-store")
+		return c.Next()
+	})
+
 	group.Get("/", h.GetSettings)
 	group.Put("/", h.SaveSettings)
 	group.Get("/mpesa", h.GetMpesaSettings)
