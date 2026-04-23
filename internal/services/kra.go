@@ -555,12 +555,14 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 		}
 	}
 
-// Determine buyer classification based on client
-	buyerClassification := "B2C"
-	if cli.KRAPIN != "" {
-		buyerClassification = "B2B"
-	} else if cli.Email != "" && (strings.Contains(cli.Email, ".export") || strings.Contains(cli.Email, "abroad")) {
-		buyerClassification = "EXPORT"
+// Determine buyer classification from invoice (prefer invoice-level, fallback to client)
+	buyerClassification := invoice.BuyerClassification
+	if buyerClassification == "" {
+		if cli != nil {
+			buyerClassification = DetectBuyerType(cli)
+		} else {
+			buyerClassification = "B2C"
+		}
 	}
 
 	// Get seller address from user profile (not hardcoded)
@@ -572,16 +574,18 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 		sellerAddress = "Kenya" // Fallback
 	}
 
-	return &KRAInvoiceData{
-		InvoiceNumber: invoice.InvoiceNumber,
-		InvoiceDate:   invoice.CreatedAt.Format("2006-01-02"),
-		InvoiceTime:   invoice.CreatedAt.Format("15:04:05"),
+return &KRAInvoiceData{
+		InvoiceNumber:     invoice.InvoiceNumber,
+		InvoiceDate:    invoice.CreatedAt.Format("2006-01-02"),
+		InvoiceTime:    invoice.CreatedAt.Format("15:04:05"),
+		InvoiceType:    invoice.InvoiceType,
+		OriginalICN:    invoice.OriginalICN,
 		Seller: KRASeller{
 			RegistrationNumber: usr.KRAPIN,
-			BusinessName:       usr.CompanyName,
-			Address:            sellerAddress,
-			ContactMobile:      usr.Phone,
-			ContactEmail:       usr.Email,
+			BusinessName:    usr.CompanyName,
+			Address:        sellerAddress,
+			ContactMobile:  usr.Phone,
+			ContactEmail:  usr.Email,
 		},
 		Buyer: KRABuyer{
 			BuyerType:          buyerClassification,
@@ -598,10 +602,10 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 		VATRate:           taxRate,
 		VATAmount:         invoice.TotalTax,
 		TotalIncludingVAT: invoice.Total,
-		PaymentMode:       "CASH", // Would map from actual payment method
+		PaymentMode:       "CASH",
 		ESDAmount:         invoice.ExciseDuty,
 		ESCAmount:         0,
-Currency:          invoice.Currency,
+		Currency:          invoice.Currency,
 	}
 }
 

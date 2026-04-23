@@ -683,6 +683,39 @@ func (h *InvoiceHandler) CreateCreditNote(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(creditNote)
 }
 
+// CreateDebitNote creates a debit note for an invoice
+func (h *InvoiceHandler) CreateDebitNote(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
+	}
+
+	var req struct {
+		Items []services.CreateDebitNoteItem `json:"items"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	if len(req.Items) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "at least one item required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	debitNote, err := h.invoiceService.CreateDebitNote(tenantID, userID, invoiceID, req.Items)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(debitNote)
+}
+
 // CreateInvoiceAttachment handles file upload for an invoice
 func (h *InvoiceHandler) CreateInvoiceAttachment(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)

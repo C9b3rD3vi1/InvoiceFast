@@ -149,8 +149,8 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 			Reference:   req.Reference,
 			PhoneNumber: req.CustomerPhone,
 		}
-		payment.CompletedAt.Valid = true
-		payment.CompletedAt.Time = time.Now()
+	now := time.Now()
+	payment.CompletedAt = &now
 
 		if err := tx.Create(&payment).Error; err != nil {
 			log.Printf("[Webhook] Failed to create payment: %v", err)

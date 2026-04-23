@@ -327,6 +327,10 @@ func main() {
 	expenseService := services.NewExpenseService(db)
 	expenseHandler := handlers.NewExpenseHandler(expenseService)
 
+	// Integration handler
+	integrationService := services.NewIntegrationService(db)
+	integrationHandler := handlers.NewIntegrationHandler(integrationService)
+
 	// Static files
 	app.Static("/static", "./static")
 	app.Static("/css", "./static/css")
@@ -377,6 +381,9 @@ func main() {
 	reminderSequenceService := services.NewReminderSequenceService(db, emailService)
 	reminderSequenceHandler := handlers.NewReminderSequenceHandler(reminderSequenceService)
 	routes.ReminderSequenceRoutes(app, reminderSequenceHandler, authService, db)
+
+	// Integration routes
+	routes.IntegrationRoutes(app, integrationHandler, authService, db)
 
 	// Subdomain routing for branded client portal (AFTER main routes)
 	app.Use(func(c *fiber.Ctx) error {
