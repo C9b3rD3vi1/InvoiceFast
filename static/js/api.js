@@ -697,6 +697,23 @@ const InvoiceFastAPI = {
             return InvoiceFastAPI.request('/tenant/payments/' + id);
         },
         
+        async stats() {
+            return InvoiceFastAPI.request('/tenant/payments/stats');
+        },
+        
+        async reconcile() {
+            return InvoiceFastAPI.request('/tenant/payments/reconcile', {
+                method: 'POST',
+            });
+        },
+        
+        async create(data) {
+            return InvoiceFastAPI.request('/tenant/payments', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        },
+        
         async request(data) {
             return InvoiceFastAPI.request('/tenant/payments/request', {
                 method: 'POST',
