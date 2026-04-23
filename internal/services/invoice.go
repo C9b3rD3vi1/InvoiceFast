@@ -2,7 +2,6 @@ package services
 
 import (
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -211,30 +211,34 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		}
 	}
 
-invoice := &models.Invoice{
-		ID:                  uuid.New().String(),
-		TenantID:            tenantID,
-		UserID:              userID,
-		ClientID:            clientID,
-		InvoiceNumber:       generateInvoiceNumber(userID),
-		Reference:           strings.TrimSpace(req.Reference),
-		Currency:            currency,
-		KESEquivalent:       math.Round(kesEquivalent*100) / 100,
-		ExchangeRate:        exchangeRate,
-		Subtotal:            math.Round(subtotal*100) / 100,
-		TaxRate:             taxRate,
-		TaxAmount:           math.Round(taxAmount*100) / 100,
-		Discount:            math.Round(discount*100) / 100,
-		Total:               math.Round(total*100) / 100,
-		Status:              models.InvoiceStatusDraft,
-		DueDate:             req.DueDate,
-		Notes:               strings.TrimSpace(req.Notes),
-		Terms:               strings.TrimSpace(req.Terms),
-		BrandColor:          req.BrandColor,
-		LogoURL:             req.LogoURL,
-		MagicToken:          uuid.New().String(),
-		MagicTokenExpiresAt: sql.NullTime{Time: time.Now().AddDate(0, 3, 0), Valid: true},
-		KRAStatus:           "pending",
+magicTokenExpires := time.Now().AddDate(0, 3, 0)
+	invoice := &models.Invoice{
+		ID:            uuid.New().String(),
+		TenantID:      tenantID,
+		UserID:        userID,
+		ClientID:      clientID,
+		Reference:     strings.TrimSpace(req.Reference),
+		Currency:      currency,
+		KESEquivalent:  math.Round(kesEquivalent*100) / 100,
+		ExchangeRate:  exchangeRate,
+		ExchangeRateAt: time.Now(),
+		Subtotal:      math.Round(subtotal*100) / 100,
+		TaxRate:       taxRate,
+		TotalTax:      math.Round(taxAmount*100) / 100,
+		Discount:      math.Round(discount*100) / 100,
+		Total:         math.Round(total*100) / 100,
+		BalanceDue:    math.Round(total*100) / 100,
+		TaxType:       models.TaxTypeStandard,
+		Status:        models.InvoiceStatusDraft,
+		DueDate:       req.DueDate,
+		Notes:         strings.TrimSpace(req.Notes),
+		Terms:         strings.TrimSpace(req.Terms),
+		BrandColor:    req.BrandColor,
+		LogoURL:       req.LogoURL,
+		MagicToken:    uuid.New().String(),
+		MagicTokenExpiresAt: &magicTokenExpires,
+		KRAStatus:     models.KRAInvoiceStatusPending,
+		Version:       1,
 	}
 
 	// Set title if provided
@@ -242,8 +246,17 @@ invoice := &models.Invoice{
 		invoice.Title = req.Title
 	}
 
-	// Use transaction for data integrity
+	// Use transaction for data integrity - including sequential numbering
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Get next sequence number in a transaction-safe manner
+		seq := models.InvoiceSequence{TenantID: tenantID, Prefix: "INV", Padding: 6}
+		seqNum, err := seq.GetNextSequence(tx)
+		if err != nil {
+			return fmt.Errorf("failed to generate invoice number: %w", err)
+		}
+		invoice.InvoiceNumber = models.FormatInvoiceNumber("INV", seqNum, 6)
+		invoice.SequenceNumber = seqNum
+
 		if err := tx.Create(invoice).Error; err != nil {
 			return fmt.Errorf("failed to create invoice: %w", err)
 		}
@@ -254,6 +267,11 @@ invoice := &models.Invoice{
 		}
 		if err := tx.Create(&items).Error; err != nil {
 			return fmt.Errorf("failed to create invoice items: %w", err)
+		}
+
+		// Validate totals before committing
+		if err := models.ValidateInvoiceTotals(invoice, items); err != nil {
+			return fmt.Errorf("invoice totals validation failed: %w", err)
 		}
 
 		return nil
@@ -334,7 +352,7 @@ func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, 
 	}
 
 	// Check if token has expired
-	if invoice.MagicTokenExpiresAt.Valid && invoice.MagicTokenExpiresAt.Time.Before(time.Now()) {
+	if invoice.MagicTokenExpiresAt != nil && invoice.MagicTokenExpiresAt.Before(time.Now()) {
 		return nil, errors.New("payment link has expired")
 	}
 
@@ -355,8 +373,9 @@ func (s *InvoiceService) GetInvoiceByMagicToken(token string) (*models.Invoice, 
 	}
 
 	// Track viewed status if not already set
-	if !invoice.ViewedAt.Valid {
-		s.db.Model(&invoice).Update("viewed_at", time.Now())
+	if invoice.ViewedAt == nil {
+		now := time.Now()
+		s.db.Model(&invoice).Update("viewed_at", now)
 	}
 
 	return &invoice, nil
@@ -752,7 +771,8 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 	}
 
 	invoice.Status = models.InvoiceStatusSent
-	invoice.SentAt = sql.NullTime{Time: time.Now(), Valid: true}
+	now := time.Now()
+	invoice.SentAt = &now
 
 	if err := s.db.Save(invoice).Error; err != nil {
 		return nil, fmt.Errorf("failed to send invoice: %w", err)
@@ -831,97 +851,161 @@ func (s *InvoiceService) getBaseURL() string {
 }
 
 // RecordPayment records a payment for an invoice (tenant-scoped)
+// RecordPayment records a payment for an invoice with proper state machine enforcement
 func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *models.Payment) error {
 	if tenantID == "" {
 		return ErrTenantRequired
 	}
 
-	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
-	if err != nil {
-		return err
-	}
+	// Use transaction for payment processing
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var invoice models.Invoice
+		if err := tx.Scopes(database.TenantFilter(tenantID)).
+			Preload("Items").
+			First(&invoice, "id = ?", invoiceID).Error; err != nil {
+			return ErrInvoiceNotFound
+		}
 
-	// Save payment
-	payment.InvoiceID = invoiceID
-	// Ensure status is completed for manually recorded payments
-	payment.Status = models.PaymentStatusCompleted
-
-	// Generate new UUID to avoid any constraint conflicts
-	if payment.ID == "" {
-		payment.ID = uuid.New().String()
-	}
-
-	if err := s.db.Create(payment).Error; err != nil {
-		// If unique constraint error, try with a new ID
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			payment.ID = uuid.New().String()
-			if err := s.db.Create(payment).Error; err != nil {
-				return fmt.Errorf("failed to record payment: %w", err)
+		// State machine: Only allow payments on SENT, VIEWED, OVERDUE, or PARTIALLY_PAID
+		allowedStatuses := []models.InvoiceStatus{
+			models.InvoiceStatusSent,
+			models.InvoiceStatusViewed,
+			models.InvoiceStatusOverdue,
+			models.InvoiceStatusPartiallyPaid,
+		}
+		allowed := false
+		for _, status := range allowedStatuses {
+			if invoice.Status == status {
+				allowed = true
+				break
 			}
-		} else {
+		}
+		if !allowed {
+			return fmt.Errorf("cannot record payment on invoice with status %s", invoice.Status)
+		}
+
+		// Validate payment amount
+		if payment.Amount <= 0 {
+			return errors.New("payment amount must be positive")
+		}
+
+		// Calculate new balance using decimal for precision
+		oldPaidAmount := decimal.NewFromFloat(invoice.PaidAmount)
+		paymentDecimal := decimal.NewFromFloat(payment.Amount)
+		newPaidAmount := oldPaidAmount.Add(paymentDecimal)
+		total := decimal.NewFromFloat(invoice.Total)
+
+		// Handle overpayment gracefully
+		if newPaidAmount.GreaterThan(total) {
+			overpayment := newPaidAmount.Sub(total)
+			newPaidAmount = total
+			overpaymentFloat, _ := overpayment.Float64()
+			payment.Amount = overpaymentFloat
+		}
+
+		// Set payment details
+		payment.InvoiceID = invoiceID
+		payment.Status = models.PaymentStatusCompleted
+		if payment.ID == "" {
+			payment.ID = uuid.New().String()
+		}
+
+		// Save payment
+		if err := tx.Create(payment).Error; err != nil {
 			return fmt.Errorf("failed to record payment: %w", err)
 		}
-	}
 
-	// Update invoice
-	invoice.PaidAmount += payment.Amount
-	invoice.PaidAmount = math.Round(invoice.PaidAmount*100) / 100
+		// Update invoice with optimistic locking
+		invoice.PaidAmount, _ = newPaidAmount.Float64()
+		invoice.PaidAmount = math.Round(invoice.PaidAmount*100) / 100
+		balanceDue := total.Sub(newPaidAmount)
+		invoice.BalanceDue, _ = balanceDue.Float64()
+		invoice.BalanceDue = math.Round(invoice.BalanceDue*100) / 100
 
-	// Determine status based on paid amount
-	if invoice.PaidAmount >= invoice.Total {
-		// Full payment - cap at total (handle overpayment gracefully)
-		invoice.PaidAmount = invoice.Total
-		invoice.Status = models.InvoiceStatusPaid
-		invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
-	} else if invoice.PaidAmount > 0 {
-		// Partial payment
-		invoice.Status = models.InvoiceStatusPartiallyPaid
-	}
+		// Determine new status based on paid amount
+		newStatus := invoice.Status
+		if newPaidAmount.Equal(total) || invoice.BalanceDue <= 0.01 {
+			// Full payment
+			newStatus = models.InvoiceStatusPaid
+			now := time.Now()
+			invoice.PaidAt = &now
+		} else if newPaidAmount.GreaterThan(decimal.Zero) {
+			// Partial payment
+			newStatus = models.InvoiceStatusPartiallyPaid
+		}
 
-	if err := s.db.Save(invoice).Error; err != nil {
-		return fmt.Errorf("failed to update invoice: %w", err)
-	}
+		// Validate state transition
+		if err := models.ValidateTransition(invoice.Status, newStatus); err != nil {
+			return err
+		}
+		invoice.Status = newStatus
+		invoice.Version++
 
-	// Log the action
-	s.db.Create(&models.AuditLog{
-		ID:         uuid.New().String(),
-		UserID:     payment.UserID,
-		Action:     "payment.received",
-		EntityType: "payment",
-		EntityID:   payment.ID,
-		Details:    fmt.Sprintf(`{"invoice_id": "%s", "amount": %f, "method": "%s"}`, invoiceID, payment.Amount, payment.Method),
+		if err := tx.Save(&invoice).Error; err != nil {
+			return fmt.Errorf("failed to update invoice: %w", err)
+		}
+
+		// Log the action
+		tx.Create(&models.AuditLog{
+			ID:         uuid.New().String(),
+			TenantID:   tenantID,
+			UserID:     payment.UserID,
+			Action:     "payment.received",
+			EntityType: "payment",
+			EntityID:   payment.ID,
+			Details:    fmt.Sprintf(`{"invoice_id": "%s", "amount": %f, "method": "%s", "status": "%s"}`, invoiceID, payment.Amount, payment.Method, newStatus),
+		})
+
+		return nil
 	})
-
-	return nil
 }
 
-// CancelInvoice cancels an invoice (tenant-scoped)
+// CancelInvoice cancels an invoice with proper state machine validation
 func (s *InvoiceService) CancelInvoice(tenantID, invoiceID, userID string) error {
 	if tenantID == "" {
 		return ErrTenantRequired
 	}
 
-	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
-	if err != nil {
-		return err
-	}
+	// Use transaction for cancellation
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var invoice models.Invoice
+		if err := tx.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", invoiceID).Error; err != nil {
+			return ErrInvoiceNotFound
+		}
 
-	// Edge case: Cannot cancel paid invoice
-	if invoice.Status == models.InvoiceStatusPaid {
-		return ErrCannotCancelPaid
-	}
+		// Validate state transition using state machine
+		newStatus := models.InvoiceStatusCancelled
+		if err := models.ValidateTransition(invoice.Status, newStatus); err != nil {
+			return err
+		}
 
-	// Edge case: Cannot cancel already cancelled
-	if invoice.Status == models.InvoiceStatusCancelled {
-		return errors.New("invoice already cancelled")
-	}
+		// Additional checks: cannot cancel if KRA accepted
+		if invoice.KRAStatus == models.KRAInvoiceStatusAccepted {
+			return errors.New("cannot cancel invoice: KRA accepted")
+		}
 
-	invoice.Status = models.InvoiceStatusCancelled
-	if err := s.db.Save(invoice).Error; err != nil {
-		return fmt.Errorf("failed to cancel invoice: %w", err)
-	}
+		now := time.Now()
+		invoice.Status = newStatus
+		invoice.CancelledAt = &now
+		invoice.Version++
 
-	return nil
+		if err := tx.Save(&invoice).Error; err != nil {
+			return fmt.Errorf("failed to cancel invoice: %w", err)
+		}
+
+		// Log cancellation
+		tx.Create(&models.AuditLog{
+			ID:         uuid.New().String(),
+			TenantID:   tenantID,
+			UserID:     userID,
+			Action:     "invoice_cancelled",
+			EntityType: "invoice",
+			EntityID:   invoiceID,
+			Details:    fmt.Sprintf(`{"invoice_number": "%s", "previous_status": "%s"}`, invoice.InvoiceNumber, invoice.Status),
+		})
+
+		return nil
+	})
 }
 
 // DeleteInvoice permanently deletes an invoice (tenant-scoped)
@@ -1653,93 +1737,132 @@ func internalClientToKRA(client *models.Client) *kraClient {
 }
 
 // SubmitInvoiceToKRA manually submits an invoice to KRA eTIMS
+// SubmitInvoiceToKRA submits an invoice to KRA with idempotency
 func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRAResponse, error) {
 	if s.kraService == nil {
 		return nil, errors.New("KRA service not configured")
 	}
 
-	invoice, err := s.GetInvoiceByID(tenantID, invoiceID)
-	if err != nil {
-		return nil, err
-	}
+	var result *KRAResponse
 
-	if invoice.KRAICN != "" {
-		return &KRAResponse{
-			ICN:    invoice.KRAICN,
-			QRCode: invoice.KRAQRCode,
-		}, nil
-	}
+	// Use transaction for idempotent submission
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var invoice models.Invoice
+		if err := tx.Scopes(database.TenantFilter(tenantID)).
+			Preload("Items").
+			First(&invoice, "id = ?", invoiceID).Error; err != nil {
+			return ErrInvoiceNotFound
+		}
 
-	userID := invoice.UserID
-	var cli models.Client
-	var usr models.User
-	s.db.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID)
-	s.db.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", userID)
+		// Idempotency check: if already submitted, return existing result
+		if invoice.KRAStatus == models.KRAInvoiceStatusSubmitted || invoice.KRAStatus == models.KRAInvoiceStatusAccepted {
+			if invoice.KRAICN != "" {
+				return nil // Already submitted successfully
+			}
+		}
 
-	items := make([]KRAItem, 0)
-	s.db.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items)
+		// Check for pending idempotency key to prevent duplicate submissions
+		if invoice.KRAIdempotencyKey != "" {
+			// Check if we have a recent submission attempt
+			if invoice.KRASubmittedAt != nil {
+				timeSince := time.Since(*invoice.KRASubmittedAt)
+				if timeSince < 5*time.Minute {
+					// Still processing or failed, don't resubmit
+					if invoice.KRAStatus == models.KRAInvoiceStatusFailed {
+						return fmt.Errorf("KRA submission in progress or failed, please wait or retry later")
+					}
+					return nil // Already processing
+				}
+			}
+		}
 
-	kraData := &KRAInvoiceData{
-		InvoiceNumber: invoice.InvoiceNumber,
-		InvoiceDate:   invoice.CreatedAt.Format("2006-01-02"),
-		InvoiceTime:   invoice.CreatedAt.Format("15:04:05"),
-		Seller: KRASeller{
-			RegistrationNumber: usr.KRAPIN,
-			BusinessName:       usr.CompanyName,
-			ContactMobile:      usr.Phone,
-			ContactEmail:       usr.Email,
-		},
-		Buyer: KRABuyer{
-			CustomerName:       cli.Name,
-			ContactMobile:      cli.Phone,
-			ContactEmail:       cli.Email,
-			RegistrationNumber: cli.KRAPIN,
-		},
-		Items:             items,
-		SubTotal:          invoice.Subtotal,
-		TotalExcludingVAT: invoice.Subtotal - invoice.Discount,
-		VATRate:           invoice.TaxRate,
-		VATAmount:         invoice.TaxAmount,
-		TotalIncludingVAT: invoice.Total,
-		Currency:          invoice.Currency,
-	}
+		// Generate idempotency key
+		idempotencyKey := uuid.New().String()
+		tx.Model(&models.Invoice{}).Where("id = ?", invoiceID).Update("kra_idempotency_key", idempotencyKey)
 
-	kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
-	if err != nil {
-		s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
-			"kra_status": "failed",
-			"kra_error":  err.Error(),
+		// Get related data
+		var cli models.Client
+		var usr models.User
+		tx.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID)
+		tx.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", invoice.UserID)
+
+		items := make([]KRAItem, 0)
+		tx.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items)
+
+		kraData := &KRAInvoiceData{
+			InvoiceNumber: invoice.InvoiceNumber,
+			InvoiceDate:   invoice.CreatedAt.Format("2006-01-02"),
+			InvoiceTime:   invoice.CreatedAt.Format("15:04:05"),
+			Seller: KRASeller{
+				RegistrationNumber: usr.KRAPIN,
+				BusinessName:       usr.CompanyName,
+				ContactMobile:      usr.Phone,
+				ContactEmail:       usr.Email,
+			},
+			Buyer: KRABuyer{
+				CustomerName:       cli.Name,
+				ContactMobile:      cli.Phone,
+				ContactEmail:       cli.Email,
+				RegistrationNumber: cli.KRAPIN,
+			},
+			Items:              items,
+			SubTotal:          invoice.Subtotal,
+			TotalExcludingVAT: invoice.Subtotal - invoice.Discount,
+			VATRate:           invoice.TaxRate,
+			VATAmount:         invoice.TotalTax,
+			TotalIncludingVAT: invoice.Total,
+			Currency:          invoice.Currency,
+		}
+
+		kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
+		if err != nil {
+			tx.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+				"kra_status":      models.KRAInvoiceStatusFailed,
+				"kra_error":      err.Error(),
+				"kra_retry_count": gorm.Expr("kra_retry_count + 1"),
+			})
+			tx.Create(&models.AuditLog{
+				ID:         uuid.New().String(),
+				TenantID:   tenantID,
+				UserID:     invoice.UserID,
+				Action:     "kra_failed",
+				EntityType: "invoice",
+				EntityID:   invoiceID,
+				Details:    fmt.Sprintf(`{"invoice_number": "%s", "error": "%s"}`, invoice.InvoiceNumber, err.Error()),
+			})
+			return err
+		}
+
+		now := time.Now()
+		tx.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+			"kra_icn":              kraResp.ICN,
+			"kra_qr_code":          kraResp.QRCode,
+			"kra_status":           models.KRAInvoiceStatusSubmitted,
+			"kra_submitted_at":     now,
+			"kra_error":            "",
+			"kra_idempotency_key":  "",
 		})
-		s.db.Create(&models.AuditLog{
+
+		tx.Create(&models.AuditLog{
 			ID:         uuid.New().String(),
-			UserID:     userID,
-			Action:     "kra_failed",
+			TenantID:   tenantID,
+			UserID:     invoice.UserID,
+			Action:     "kra_success",
 			EntityType: "invoice",
 			EntityID:   invoiceID,
-			Details:    fmt.Sprintf(`{"invoice_number": "%s", "error": "%s"}`, invoice.InvoiceNumber, err.Error()),
+			Details:    fmt.Sprintf(`{"invoice_number": "%s", "icn": "%s"}`, invoice.InvoiceNumber, kraResp.ICN),
 		})
+
+		log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoice.InvoiceNumber, kraResp.ICN)
+
+		result = kraResp
+		return nil
+	})
+
+	if err != nil {
 		return nil, err
 	}
-
-	s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
-		"kra_icn":          kraResp.ICN,
-		"kra_qr_code":      kraResp.QRCode,
-		"kra_status":       "submitted",
-		"kra_submitted_at": time.Now(),
-		"kra_error":        "",
-	})
-
-	s.db.Create(&models.AuditLog{
-		ID:         uuid.New().String(),
-		UserID:     userID,
-		Action:     "kra_success",
-		EntityType: "invoice",
-		EntityID:   invoiceID,
-		Details:    fmt.Sprintf(`{"invoice_number": "%s", "icn": "%s"}`, invoice.InvoiceNumber, kraResp.ICN),
-	})
-
-	log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoice.InvoiceNumber, kraResp.ICN)
-	return kraResp, nil
+	return result, nil
 }
 
 // ClearKRAData clears KRA submission data for retry
@@ -1836,7 +1959,7 @@ func (s *InvoiceService) GetKRAActivityFeed(tenantID string, limit int) ([]KRAAc
 			InvoiceID:     log.EntityID,
 			InvoiceNumber: inv.InvoiceNumber,
 			Action:        action,
-			Status:        inv.KRAStatus,
+			Status:        string(inv.KRAStatus),
 			ICN:           inv.KRAICN,
 			Error:         errMsg,
 			Timestamp:     log.CreatedAt,

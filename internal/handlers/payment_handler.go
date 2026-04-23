@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
@@ -79,8 +78,6 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 			Status:    models.PaymentStatusCompleted,
 			Reference: payload.Reference,
 		}
-		payment.CompletedAt.Valid = true
-		payment.CompletedAt.Time = time.Now()
 
 		h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
 

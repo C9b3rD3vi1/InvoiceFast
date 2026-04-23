@@ -201,6 +201,7 @@ func (db *DB) Migrate() error {
 		&models.Client{},
 		&models.Invoice{},
 		&models.InvoiceItem{},
+		&models.InvoiceSequence{},
 		&models.ItemLibrary{},
 		&models.Attachment{},
 		&models.Payment{},
@@ -235,6 +236,10 @@ func (db *DB) Migrate() error {
 		&models.Expense{},
 		&models.ExpenseCategory{},
 		&models.ExpenseAttachment{},
+		// Integration models
+		&models.Integration{},
+		// Security models
+		&models.UserSession{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)

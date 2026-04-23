@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -196,7 +195,8 @@ func (s *PaymentService) CompletePaymentFromCallback(ctx context.Context, provid
 		// Update payment to completed
 		payment.Status = models.PaymentStatusCompleted
 		payment.Reference = receipt
-		payment.CompletedAt = sql.NullTime{Time: time.Now(), Valid: true}
+		now := time.Now()
+		payment.CompletedAt = &now
 		if err := tx.Save(payment).Error; err != nil {
 			return fmt.Errorf("failed to update payment: %w", err)
 		}
@@ -206,7 +206,8 @@ func (s *PaymentService) CompletePaymentFromCallback(ctx context.Context, provid
 		if invoice.PaidAmount >= invoice.Total {
 			invoice.PaidAmount = invoice.Total
 			invoice.Status = models.InvoiceStatusPaid
-			invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
+			now := time.Now()
+			invoice.PaidAt = &now
 		} else {
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}
@@ -533,7 +534,8 @@ func (s *PaymentService) completePaymentFromWebhook(payment *models.Payment, pay
 		// Update payment
 		payment.Status = models.PaymentStatusCompleted
 		payment.Reference = payload.Reference
-		payment.CompletedAt = sql.NullTime{Time: time.Now(), Valid: true}
+		now := time.Now()
+		payment.CompletedAt = &now
 		if err := tx.Save(payment).Error; err != nil {
 			return fmt.Errorf("failed to update payment: %w", err)
 		}
@@ -548,7 +550,7 @@ func (s *PaymentService) completePaymentFromWebhook(payment *models.Payment, pay
 		if invoice.PaidAmount >= invoice.Total {
 			invoice.PaidAmount = invoice.Total
 			invoice.Status = models.InvoiceStatusPaid
-			invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
+			invoice.PaidAt = &now
 		} else {
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}

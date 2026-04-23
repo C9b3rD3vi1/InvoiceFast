@@ -347,10 +347,10 @@ func (s *ClientService) GetClientStats(tenantID, clientID string) (*ClientStats,
 	var totalDays float64
 	var paidCount int64
 	for _, p := range payments {
-		if p.Status == "completed" && p.CompletedAt.Valid {
+		if p.Status == "completed" && p.CompletedAt != nil {
 			var invoice models.Invoice
 			if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, p.InvoiceID).Error; err == nil {
-				days := p.CompletedAt.Time.Sub(invoice.CreatedAt).Hours() / 24
+				days := (*p.CompletedAt).Sub(invoice.CreatedAt).Hours() / 24
 				totalDays += days
 				paidCount++
 			}
@@ -554,11 +554,11 @@ func (s *ClientService) GetClientActivity(tenantID, clientID string, limit int) 
 			},
 		})
 
-		if inv.SentAt.Valid {
+		if inv.SentAt != nil {
 			activities = append(activities, map[string]interface{}{
 				"type":        "invoice_sent",
 				"description": "Invoice " + inv.InvoiceNumber + " sent",
-				"timestamp":   inv.SentAt.Time,
+				"timestamp":   *inv.SentAt,
 				"data": map[string]interface{}{
 					"invoice_id":     inv.ID,
 					"invoice_number": inv.InvoiceNumber,
@@ -566,11 +566,11 @@ func (s *ClientService) GetClientActivity(tenantID, clientID string, limit int) 
 			})
 		}
 
-		if inv.PaidAt.Valid {
+		if inv.PaidAt != nil {
 			activities = append(activities, map[string]interface{}{
 				"type":        "payment_received",
 				"description": "Payment received for " + inv.InvoiceNumber,
-				"timestamp":   inv.PaidAt.Time,
+				"timestamp":   *inv.PaidAt,
 				"data": map[string]interface{}{
 					"invoice_id":     inv.ID,
 					"invoice_number": inv.InvoiceNumber,

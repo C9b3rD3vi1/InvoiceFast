@@ -3,7 +3,12 @@ package models
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Tenant represents an organization/company in the system
@@ -12,6 +17,11 @@ type Tenant struct {
 	Name      string    `json:"name" gorm:"not null"`
 	Subdomain string    `json:"subdomain" gorm:"uniqueIndex"` // For custom domains
 	Plan      string    `json:"plan" gorm:"default:'free'"`   // free, pro, agency, enterprise
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone"`
+	Website   string    `json:"website"`
+	Country   string    `json:"country" gorm:"default:'KE'"`
+	Timezone  string    `json:"timezone" gorm:"default:'Africa/Nairobi'"`
 	Settings  string    `json:"settings" gorm:"type:text"`    // JSON settings
 	IsActive  bool      `json:"is_active" gorm:"default:true"`
 	CreatedAt time.Time `json:"created_at"`
@@ -20,21 +30,43 @@ type Tenant struct {
 
 // User represents a user/tenant in the system
 type User struct {
-	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID     string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	Email        string    `json:"email" gorm:"uniqueIndex;not null"`
-	PasswordHash string    `json:"-" gorm:"not null"`
-	Name         string    `json:"name"`
-	Phone        string    `json:"phone"`
-	CompanyName  string    `json:"company_name"`
-	KRAPIN       string    `json:"kra_pin"`                    // Encrypted - stored as ciphertext
-	Plan         string    `json:"plan" gorm:"default:'free'"` // free, pro, agency, enterprise
-	IsActive     bool      `json:"is_active" gorm:"default:true"`
-	Role         string    `json:"role" gorm:"default:'user'"` // admin, manager, user
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                 string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID           string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	Email              string    `json:"email" gorm:"uniqueIndex;not null"`
+	PasswordHash       string    `json:"-" gorm:"not null"`
+	Name               string    `json:"name"`
+	Phone              string    `json:"phone"`
+	CompanyName        string    `json:"company_name"`
+	KRAPIN             string    `json:"-"` // Encrypted - stored as ciphertext
+	Plan               string    `json:"plan" gorm:"default:'free'"` // free, pro, agency, enterprise
+	IsActive           bool      `json:"is_active" gorm:"default:true"`
+	Role               string    `json:"role" gorm:"default:'user'"` // admin, manager, user
+	TwoFactorEnabled   bool      `json:"two_factor_enabled" gorm:"default:false"`
+	TwoFactorSecret    string    `json:"-"` // Encrypted TOTP secret
+	TwoFactorVerifiedAt *time.Time `json:"two_factor_verified_at"`
+	PasswordChangedAt  *time.Time `json:"password_changed_at"`
+	LastLoginAt        *time.Time `json:"last_login_at"`
+	LoginAlertEnabled  bool      `json:"login_alert_enabled" gorm:"default:true"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 
 	Tenant Tenant `json:"tenant,omitempty" gorm:"foreignKey:TenantID"`
+}
+
+// UserSession represents an active user session
+type UserSession struct {
+	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID       string    `json:"user_id" gorm:"type:uuid;index;not null"`
+	TenantID     string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	TokenHash    string    `json:"-" gorm:"not null"`
+	DeviceInfo   string    `json:"device_info"`
+	IPAddress    string    `json:"ip_address"`
+	UserAgent    string    `json:"user_agent"`
+	Location     string    `json:"location"`
+	IsCurrent    bool      `json:"is_current" gorm:"default:false"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	CreatedAt    time.Time `json:"created_at"`
+	LastActiveAt time.Time `json:"last_active_at"`
 }
 
 // ClientStatus represents the status of a client
@@ -90,51 +122,101 @@ const (
 	InvoiceStatusDebitNote     InvoiceStatus = "debit_note"
 )
 
-// Invoice represents an invoice
+// KRAInvoiceStatus represents KRA submission status
+type KRAInvoiceStatus string
+
+const (
+	KRAInvoiceStatusPending   KRAInvoiceStatus = "pending"
+	KRAInvoiceStatusSubmitted KRAInvoiceStatus = "submitted"
+	KRAInvoiceStatusFailed    KRAInvoiceStatus = "failed"
+	KRAInvoiceStatusAccepted  KRAInvoiceStatus = "accepted"
+	KRAInvoiceStatusRejected  KRAInvoiceStatus = "rejected"
+)
+
+// TaxType represents the type of tax applied
+type TaxType string
+
+const (
+	TaxTypeStandard   TaxType = "standard"   // Standard rate (e.g., 16% VAT)
+	TaxTypeZeroRated  TaxType = "zero_rated" // 0% - exports, international services
+	TaxTypeExempt     TaxType = "exempt"     // Exempt from tax
+	TaxTypeNone       TaxType = "none"       // No tax
+)
+
+// Invoice represents an invoice - IMMUTABLE after PAID or KRA SUBMITTED
 type Invoice struct {
-	ID                string  `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID          string  `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	UserID            string  `json:"user_id" gorm:"type:uuid;index;not null"`
-	ClientID          string  `json:"client_id" gorm:"type:uuid;index;not null"`
-	InvoiceNumber     string  `json:"invoice_number" gorm:"uniqueIndex"`
-	Reference         string  `json:"reference"`
-	Title             string  `json:"title"` // Invoice title/subject
-	Currency          string  `json:"currency" gorm:"default:'KES'"`
-	KESEquivalent     float64 `json:"kes_equivalent" gorm:"default:0"`
-	ExchangeRate      float64 `json:"exchange_rate" gorm:"default:1"`
-	InvoiceType       string  `json:"invoice_type" gorm:"default:'invoice'"`      // invoice, credit_note, debit_note
-	OriginalInvoiceID string  `json:"original_invoice_id" gorm:"type:uuid;index"` // For credit/debit notes
+	ID                string           `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID          string           `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID            string           `json:"user_id" gorm:"type:uuid;index;not null"`
+	ClientID          string           `json:"client_id" gorm:"type:uuid;index;not null"`
+	InvoiceNumber     string           `json:"invoice_number" gorm:"uniqueIndex"`
+	SequenceNumber    int64            `json:"sequence_number"` // For sequential numbering
+	Reference         string           `json:"reference"`
+	Title             string           `json:"title"` // Invoice title/subject
+	Currency          string           `json:"currency" gorm:"default:'KES'"`
+	KESEquivalent     float64          `json:"kes_equivalent" gorm:"default:0"`     // KES value for forex
+	ExchangeRate      float64          `json:"exchange_rate" gorm:"default:1"`      // Rate at invoice creation
+	ExchangeRateAt    time.Time        `json:"exchange_rate_at"`                   // When rate was captured
+	InvoiceType       string           `json:"invoice_type" gorm:"default:'invoice'"` // invoice, credit_note, debit_note
+	OriginalInvoiceID string           `json:"original_invoice_id" gorm:"type:uuid;index"` // For credit/debit notes
 
 	// Recurring Invoice
-	IsRecurring         bool          `json:"is_recurring" gorm:"default:false"`
-	RecurringFrequency  string        `json:"recurring_frequency"` // daily, weekly, monthly, quarterly, yearly
-	RecurringNextDate   time.Time     `json:"recurring_next_date"`
-	RecurringParentID   string        `json:"recurring_parent_id" gorm:"type:uuid;index"` // Child invoice from recurring
-	Subtotal            float64       `json:"subtotal" gorm:"not null"`
-	TaxRate             float64       `json:"tax_rate" gorm:"default:0"`
-	TaxAmount           float64       `json:"tax_amount" gorm:"default:0"`
-	Discount            float64       `json:"discount" gorm:"default:0"`
-	Total               float64       `json:"total" gorm:"not null"`
-	PaidAmount          float64       `json:"paid_amount" gorm:"default:0"`
-	Status              InvoiceStatus `json:"status" gorm:"default:'draft'"`
-	DueDate             time.Time     `json:"due_date"`
-	SentAt              sql.NullTime  `json:"sent_at"`
-	ViewedAt            sql.NullTime  `json:"viewed_at"`
-	PaidAt              sql.NullTime  `json:"paid_at"`
-	Notes               string        `json:"notes"`
-	Terms               string        `json:"terms"`
-	BrandColor          string        `json:"brand_color" gorm:"default:'#2563eb'"`
-	LogoURL             string        `json:"logo_url"`
-	PaymentLink         string        `json:"payment_link"`
-	MagicToken          string        `json:"magic_token" gorm:"uniqueIndex"` // For client portal
-	MagicTokenExpiresAt sql.NullTime  `json:"magic_token_expires_at"`         // Token expiration
-	KRAICN              string        `json:"kra_icn"`                        // KRA Invoice Confirmation Number
-	KRAQRCode           string        `json:"kra_qr_code"`                    // KRA QR Code
-	KRAStatus           string        `json:"kra_status"`                     // submitted, failed, pending
-	KRASubmittedAt      sql.NullTime  `json:"kra_submitted_at"`               // Submission timestamp
-	KRAError            string        `json:"kra_error"`                      // Error message if failed
-	CreatedAt           time.Time     `json:"created_at"`
-	UpdatedAt           time.Time     `json:"updated_at"`
+	IsRecurring        bool          `json:"is_recurring" gorm:"default:false"`
+	RecurringFrequency string        `json:"recurring_frequency"` // daily, weekly, monthly, quarterly, yearly
+	RecurringNextDate  time.Time     `json:"recurring_next_date"`
+	RecurringParentID  string        `json:"recurring_parent_id" gorm:"type:uuid;index"` // Child invoice from recurring
+
+	// Monetary fields - Using float64 for DB compatibility, but MUST use decimal in code
+	Subtotal     float64 `json:"subtotal"`
+	Discount     float64 `json:"discount" gorm:"default:0"`
+	TotalTax     float64 `json:"total_tax" gorm:"default:0"`
+	TaxAmount    float64 `json:"tax_amount" gorm:"-"` // Alias for TotalTax (backward compatibility)
+	Total        float64 `json:"total" gorm:"not null"`
+	PaidAmount   float64 `json:"paid_amount" gorm:"default:0"`
+	BalanceDue   float64 `json:"balance_due" gorm:"default:0"` // Calculated: Total - PaidAmount
+
+	// Tax breakdown for KRA compliance
+	TaxType           TaxType  `json:"tax_type" gorm:"default:'standard'"`
+	TaxRate           float64 `json:"tax_rate" gorm:"default:16"` // 16% default for VAT
+	TaxableAmount     float64 `json:"taxable_amount"`              // Amount before tax
+	ExemptAmount      float64 `json:"exempt_amount"`               // Exempt portion
+	ZeroRatedAmount   float64 `json:"zero_rated_amount"`          // Zero-rated portion
+
+	Status InvoiceStatus `json:"status" gorm:"default:'draft'"`
+
+	DueDate     time.Time  `json:"due_date"`
+	SentAt      *time.Time `json:"sent_at"`
+	ViewedAt    *time.Time `json:"viewed_at"`
+	PaidAt      *time.Time `json:"paid_at"`
+	CancelledAt *time.Time `json:"cancelled_at"`
+
+	Notes      string `json:"notes"`
+	Terms      string `json:"terms"`
+	BrandColor string `json:"brand_color" gorm:"default:'#2563eb'"`
+	LogoURL    string `json:"logo_url"`
+
+	PaymentLink         string     `json:"payment_link"`
+	MagicToken          string     `json:"magic_token" gorm:"uniqueIndex"` // For client portal
+	MagicTokenExpiresAt *time.Time `json:"magic_token_expires_at"`         // Token expiration
+
+	// KRA eTIMS Fields
+	KRAICN           string           `json:"kra_icn"`            // KRA Invoice Confirmation Number
+	KRAQRCode        string            `json:"kra_qr_code"`        // KRA QR Code
+	KRAStatus        KRAInvoiceStatus  `json:"kra_status"`         // pending, submitted, failed, accepted, rejected
+	KRASubmittedAt   *time.Time        `json:"kra_submitted_at"`  // When submitted to KRA
+	KRAError         string            `json:"kra_error"`          // Error message if failed
+	KRARetryCount    int               `json:"kra_retry_count"`   // Number of retry attempts
+	KRAIdempotencyKey string           `json:"kra_idempotency_key"` // Prevent duplicate submissions
+
+	// Concurrency control
+	Version int `json:"version" gorm:"default:1"` // Optimistic locking
+
+	// Soft delete
+	DeletedAt *time.Time `json:"-" gorm:"index"`
+
+	// Timestamps
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Relations
 	User     User          `json:"-" gorm:"foreignKey:UserID"`
@@ -143,21 +225,276 @@ type Invoice struct {
 	Payments []Payment     `json:"payments,omitempty" gorm:"foreignKey:InvoiceID"`
 }
 
+// BeforeUpdate - Prevent modifications to immutable invoices
+func (i *Invoice) BeforeUpdate(tx *gorm.DB) error {
+	// Check if invoice is paid - immutable
+	if i.Status == InvoiceStatusPaid || i.Status == InvoiceStatusPartiallyPaid {
+		return errors.New("invoice cannot be modified: status is paid or partially paid")
+	}
+
+	// Check if KRA submitted - immutable
+	if i.KRAStatus == KRAInvoiceStatusSubmitted || i.KRAStatus == KRAInvoiceStatusAccepted {
+		return errors.New("invoice cannot be modified: KRA submission in progress or accepted")
+	}
+
+	// Check version for optimistic locking
+	var current Invoice
+	if err := tx.First(&current, "id = ?", i.ID).Error; err != nil {
+		return err
+	}
+	if current.Version != i.Version {
+		return errors.New("concurrent modification detected: invoice was modified by another process")
+	}
+
+	// Increment version
+	i.Version = current.Version + 1
+	return nil
+}
+
+// BeforeDelete - Prevent hard deletes
+func (i *Invoice) BeforeDelete(tx *gorm.DB) error {
+	// Soft delete only - never hard delete financial records
+	if i.Status == InvoiceStatusPaid || i.Status == InvoiceStatusPartiallyPaid {
+		return errors.New("invoice cannot be deleted: financial records must be preserved")
+	}
+	if i.KRAStatus == KRAInvoiceStatusSubmitted || i.KRAStatus == KRAInvoiceStatusAccepted {
+		return errors.New("invoice cannot be deleted: KRA submission exists")
+	}
+	return nil
+}
+
+// GetTaxAmount returns the tax amount (alias for TotalTax for backward compatibility)
+func (i *Invoice) GetTaxAmount() float64 {
+	return i.TaxAmount
+}
+
+// SetTaxAmount sets the tax amount (alias for TotalTax for backward compatibility)
+func (i *Invoice) SetTaxAmount(amount float64) {
+	i.TaxAmount = amount
+	i.TotalTax = amount
+}
+
+// ============================================
+// STATE MACHINE - Invoice Status Transitions
+// ============================================
+
+// ValidTransitions defines allowed status transitions
+var ValidTransitions = map[InvoiceStatus][]InvoiceStatus{
+	InvoiceStatusDraft:         {InvoiceStatusSent, InvoiceStatusCancelled, InvoiceStatusVoid},
+	InvoiceStatusSent:          {InvoiceStatusPaid, InvoiceStatusPartiallyPaid, InvoiceStatusOverdue, InvoiceStatusCancelled, InvoiceStatusVoid},
+	InvoiceStatusViewed:        {InvoiceStatusPaid, InvoiceStatusPartiallyPaid, InvoiceStatusOverdue, InvoiceStatusCancelled, InvoiceStatusVoid},
+	InvoiceStatusPartiallyPaid: {InvoiceStatusPaid, InvoiceStatusOverdue, InvoiceStatusCancelled},
+	InvoiceStatusPaid:          {InvoiceStatusVoid}, // Only void allowed after paid
+	InvoiceStatusOverdue:       {InvoiceStatusPaid, InvoiceStatusPartiallyPaid, InvoiceStatusCancelled},
+	InvoiceStatusCancelled:     {},
+	InvoiceStatusVoid:         {},
+	InvoiceStatusCreditNote:    {},
+	InvoiceStatusDebitNote:    {},
+}
+
+// CanTransition checks if transition from one status to another is valid
+func CanTransition(from, to InvoiceStatus) bool {
+	allowed, exists := ValidTransitions[from]
+	if !exists {
+		return false
+	}
+	for _, status := range allowed {
+		if status == to {
+			return true
+		}
+	}
+	return false
+}
+
+// TransitionError represents an invalid state transition
+type TransitionError struct {
+	From InvoiceStatus
+	To   InvoiceStatus
+}
+
+func (e *TransitionError) Error() string {
+	return fmt.Sprintf("invalid status transition from %s to %s", e.From, e.To)
+}
+
+// ValidateTransition returns error if transition is invalid
+func ValidateTransition(from, to InvoiceStatus) error {
+	if !CanTransition(from, to) {
+		return &TransitionError{From: from, To: to}
+	}
+	return nil
+}
+
+// ============================================
+// INVOICE SEQUENCE - Sequential Numbering
+// ============================================
+
+// InvoiceSequence tracks invoice numbers per tenant
+type InvoiceSequence struct {
+	ID              string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID        string    `json:"tenant_id" gorm:"type:uuid;uniqueIndex;not null"`
+	LastSequenceNum int64     `json:"last_sequence_num" gorm:"default:0"`
+	Prefix         string    `json:"prefix" gorm:"default:'INV'"`
+	Padding        int       `json:"padding" gorm:"default:6"` // Number of digits (INV-000001)
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// GetNextSequence returns the next sequence number in a transaction-safe manner
+func (s *InvoiceSequence) GetNextSequence(tx *gorm.DB) (int64, error) {
+	var seq InvoiceSequence
+	
+	// Try with locking first (for PostgreSQL)
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		FirstOrCreate(&seq, InvoiceSequence{TenantID: s.TenantID}).Error
+	
+	// If locking not supported (SQLite), fallback to regular FirstOrCreate
+	if err != nil || seq.TenantID == "" {
+		err = tx.FirstOrCreate(&seq, InvoiceSequence{TenantID: s.TenantID}).Error
+	}
+	
+	if err != nil {
+		return 0, fmt.Errorf("failed to get sequence: %w", err)
+	}
+
+	newNum := seq.LastSequenceNum + 1
+	
+	// Use Update with explicit WHERE clause for SQLite compatibility
+	err = tx.Model(&seq).Where("tenant_id = ?", s.TenantID).Update("last_sequence_num", newNum).Error
+	if err != nil {
+		return 0, fmt.Errorf("failed to update sequence: %w", err)
+	}
+
+	return newNum, nil
+}
+
+// FormatInvoiceNumber formats sequence number with prefix and padding
+func FormatInvoiceNumber(prefix string, sequence int64, padding int) string {
+	return fmt.Sprintf("%s-%0*d", prefix, padding, sequence)
+}
+
+// ============================================
+// FINANCIAL VALIDATION
+// ============================================
+
+// ValidateInvoiceTotals ensures financial integrity
+func ValidateInvoiceTotals(invoice *Invoice, items []InvoiceItem) error {
+	var calculatedSubtotal float64
+	var calculatedTax float64
+	var calculatedTotal float64
+
+	for _, item := range items {
+		// Subtotal = quantity * unit_price
+		itemSubtotal := item.Quantity * item.UnitPrice
+
+		// Discount
+		var discount float64
+		if item.DiscountRate > 0 {
+			discount = itemSubtotal * (item.DiscountRate / 100)
+		} else if item.DiscountAmt > 0 {
+			discount = item.DiscountAmt
+		}
+
+		// Taxable amount after discount
+		taxable := itemSubtotal - discount
+
+		// Tax amount
+		var tax float64
+		if item.TaxRate > 0 && item.TaxType != TaxTypeNone && item.TaxType != TaxTypeExempt {
+			tax = taxable * (item.TaxRate / 100)
+		}
+
+		// Item total = taxable + tax (matches service calculation)
+		itemTotal := taxable + tax
+
+		calculatedSubtotal += itemSubtotal
+		calculatedTax += tax
+		calculatedTotal += itemTotal
+	}
+
+	// Apply global discount
+	calculatedTotal = calculatedSubtotal + calculatedTax - invoice.Discount
+
+	// Allow 0.01 rounding tolerance for KES
+	const tolerance = 0.01
+
+	if !withinTolerance(invoice.Total, calculatedTotal, tolerance) {
+		return fmt.Errorf("total mismatch: stored=%v, calculated=%v", invoice.Total, calculatedTotal)
+	}
+
+	// Validate non-negative
+	if invoice.Total < 0 {
+		return errors.New("invoice total cannot be negative")
+	}
+	if invoice.BalanceDue < 0 {
+		return errors.New("balance due cannot be negative")
+	}
+
+	return nil
+}
+
+
+func withinTolerance(a, b, tolerance float64) bool {
+	diff := a - b
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= tolerance
+}
+
+// ============================================
+// TAX CALCULATION ENGINE
+// ============================================
+
+// CalculateLineItemTax calculates tax for a single line item
+func CalculateLineItemTax(quantity, unitPrice, discountRate, discountAmt, taxRate float64, taxType TaxType) (subtotal, taxAmount, total float64) {
+	subtotal = quantity * unitPrice
+
+	// Calculate discount
+	var discount float64
+	if discountRate > 0 {
+		discount = subtotal * (discountRate / 100)
+	} else {
+		discount = discountAmt
+	}
+
+	afterDiscount := subtotal - discount
+
+	// Calculate tax based on type
+	if taxType == TaxTypeStandard && taxRate > 0 {
+		taxAmount = afterDiscount * (taxRate / 100)
+	} else {
+		taxAmount = 0
+	}
+
+	total = afterDiscount + taxAmount
+	return
+}
+
 // InvoiceItem represents a line item in an invoice
 type InvoiceItem struct {
-	ID           string    `json:"id" gorm:"type:uuid;primaryKey"`
-	InvoiceID    string    `json:"invoice_id" gorm:"type:uuid;index;not null"`
-	Description  string    `json:"description" gorm:"not null"`
-	Quantity     float64   `json:"quantity" gorm:"default:1"`
-	UnitPrice    float64   `json:"unit_price" gorm:"not null"`
-	Unit         string    `json:"unit"` // e.g., "hours", "items", "pieces"
-	TaxRate      float64   `json:"tax_rate" gorm:"default:0"`
-	TaxAmount    float64   `json:"tax_amount" gorm:"default:0"`
-	DiscountRate float64   `json:"discount_rate" gorm:"default:0"`
-	DiscountAmt  float64   `json:"discount_amount" gorm:"default:0"`
-	Total        float64   `json:"total" gorm:"not null"`
-	SortOrder    int       `json:"sort_order" gorm:"default:0"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string   `json:"id" gorm:"type:uuid;primaryKey"`
+	InvoiceID    string   `json:"invoice_id" gorm:"type:uuid;index;not null"`
+	Description  string   `json:"description" gorm:"not null"`
+	Quantity     float64  `json:"quantity" gorm:"default:1"`
+	UnitPrice    float64  `json:"unit_price" gorm:"not null"` // Unit price before tax/discount
+	Unit         string   `json:"unit"`                         // e.g., "hours", "items", "pieces"
+
+	// Tax per line item
+	TaxType   TaxType  `json:"tax_type" gorm:"default:'standard'"`
+	TaxRate   float64  `json:"tax_rate" gorm:"default:0"`  // e.g., 16 for 16%
+	TaxAmount float64  `json:"tax_amount" gorm:"default:0"` // Calculated tax
+
+	// Discount per line item
+	DiscountRate float64 `json:"discount_rate" gorm:"default:0"` // Percentage discount
+	DiscountAmt  float64 `json:"discount_amount" gorm:"default:0"` // Fixed discount amount
+
+	// Calculated fields (MUST match: quantity * unit_price + tax - discount)
+	Subtotal    float64 `json:"subtotal"`    // quantity * unit_price
+	Total       float64 `json:"total" gorm:"not null"`       // Subtotal + TaxAmount - DiscountAmt
+
+	SortOrder int       `json:"sort_order" gorm:"default:0"`
+	DeletedAt  *time.Time `json:"-" gorm:"index"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 // PaymentMethod represents the payment method
@@ -196,9 +533,9 @@ type Payment struct {
 	PhoneNumber   string        `json:"phone_number"`
 	CustomerEmail string        `json:"customer_email"`
 	FailureReason string        `json:"failure_reason"`
-	CompletedAt   sql.NullTime  `json:"completed_at"`
-	CreatedAt     time.Time     `json:"created_at"`
-	UpdatedAt     time.Time     `json:"updated_at"`
+	CompletedAt   *time.Time    `json:"completed_at"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
 
 	Invoice Invoice `json:"-" gorm:"foreignKey:InvoiceID"`
 }
@@ -560,4 +897,18 @@ func (s *Subscription) DaysUntilRenewal() int {
 
 func (s *Subscription) HasTrial() bool {
 	return s.TrialEndsAt != nil && time.Now().Before(*s.TrialEndsAt)
+}
+
+// Integration represents an external service integration
+type Integration struct {
+	ID            string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	Provider      string    `json:"provider" gorm:"not null"` // whatsapp, sms, email, smtp, slack
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	Config        string    `json:"-" gorm:"type:text"`        // Encrypted JSON config
+	IsActive      bool      `json:"is_active" gorm:"default:true"`
+	IsConfigured  bool      `json:"is_configured"`             // True if credentials are configured
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }

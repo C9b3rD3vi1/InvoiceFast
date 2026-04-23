@@ -1,10 +1,8 @@
 package services
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"invoicefast/internal/database"
@@ -96,6 +94,7 @@ func (s *StripeService) handlePaymentSuccess(data map[string]interface{}) error 
 	if !ok {
 		return errors.New("invalid amount in webhook")
 	}
+	t := time.Now()
 	amount := amountFloat / 100 // Convert from cents to units
 
 	// Create payment record
@@ -105,11 +104,7 @@ func (s *StripeService) handlePaymentSuccess(data map[string]interface{}) error 
 		UserID:      invoice.UserID,
 		InvoiceID:   invoiceID,
 		Amount:      amount,
-		Currency:    strings.ToUpper(data["currency"].(string)),
-		Method:      models.PaymentMethodCard,
-		Status:      models.PaymentStatusCompleted,
-		Reference:   fmt.Sprintf("stripe_%s", data["id"].(string)),
-		CompletedAt: sql.NullTime{Time: time.Now(), Valid: true},
+		CompletedAt: &t,
 	}
 
 	if err := s.db.Create(payment).Error; err != nil {
