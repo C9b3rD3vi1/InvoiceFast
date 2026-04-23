@@ -85,6 +85,8 @@ type KRAInvoiceData struct {
 	InvoiceNumber     string    `json:"invoiceNumber"`
 	InvoiceDate       string    `json:"invoiceDate"`
 	InvoiceTime       string    `json:"invoiceTime"`
+	InvoiceType       string    `json:"invoiceType"`         // invoice, credit_note, debit_note
+	OriginalICN        string    `json:"originalICN"`       // For credit/debit notes
 	Seller            KRASeller `json:"seller"`
 	Buyer             KRABuyer  `json:"buyer"`
 	Items             []KRAItem `json:"items"`
