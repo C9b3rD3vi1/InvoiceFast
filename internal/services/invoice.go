@@ -1754,6 +1754,11 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 			return ErrInvoiceNotFound
 		}
 
+		// PRE-KRA VALIDATION: Validate invoice before submission
+		if err := s.validateInvoiceForKRA(&invoice); err != nil {
+			return fmt.Errorf("invoice validation failed: %w", err)
+		}
+
 		// Idempotency check: if already submitted, return existing result
 		if invoice.KRAStatus == models.KRAInvoiceStatusSubmitted || invoice.KRAStatus == models.KRAInvoiceStatusAccepted {
 			if invoice.KRAICN != "" {
@@ -1780,15 +1785,39 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 		idempotencyKey := uuid.New().String()
 		tx.Model(&models.Invoice{}).Where("id = ?", invoiceID).Update("kra_idempotency_key", idempotencyKey)
 
-		// Get related data
+		// Get related data with error handling
 		var cli models.Client
+		if err := tx.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID).Error; err != nil {
+			return fmt.Errorf("failed to fetch client: %w", err)
+		}
+		
 		var usr models.User
-		tx.Scopes(database.TenantFilter(tenantID)).First(&cli, "id = ?", invoice.ClientID)
-		tx.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", invoice.UserID)
+		if err := tx.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", invoice.UserID).Error; err != nil {
+			return fmt.Errorf("failed to fetch user: %w", err)
+		}
 
 		items := make([]KRAItem, 0)
-		tx.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items)
+		if err := tx.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items).Error; err != nil {
+			return fmt.Errorf("failed to fetch invoice items: %w", err)
+		}
 
+		// Determine buyer classification based on client
+		buyerClassification := determineBuyerClassification(&cli)
+
+		// Get seller address from user - use CompanyName as fallback
+		sellerAddress := usr.CompanyName
+		// Note: PhysicalAddress should be added to User model for full KRA compliance
+		// For now using CompanyName as it typically contains business location
+
+		// Determine invoice classification
+		invoiceClassification := invoice.InvoiceClassification
+		if invoiceClassification == "" {
+			invoiceClassification = "normal"
+		}
+
+		// Determine payment mode from payments (simplified)
+		paymentMode := "CASH"
+		
 		kraData := &KRAInvoiceData{
 			InvoiceNumber: invoice.InvoiceNumber,
 			InvoiceDate:   invoice.CreatedAt.Format("2006-01-02"),
@@ -1796,11 +1825,14 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 			Seller: KRASeller{
 				RegistrationNumber: usr.KRAPIN,
 				BusinessName:       usr.CompanyName,
+				Address:            sellerAddress,
 				ContactMobile:      usr.Phone,
 				ContactEmail:       usr.Email,
 			},
 			Buyer: KRABuyer{
+				BuyerType:          buyerClassification,
 				CustomerName:       cli.Name,
+				Address:            cli.Address,
 				ContactMobile:      cli.Phone,
 				ContactEmail:       cli.Email,
 				RegistrationNumber: cli.KRAPIN,
@@ -1812,6 +1844,7 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 			VATAmount:         invoice.TotalTax,
 			TotalIncludingVAT: invoice.Total,
 			Currency:          invoice.Currency,
+			PaymentMode:       paymentMode,
 		}
 
 		kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
@@ -2000,4 +2033,71 @@ func (s *InvoiceService) SubmitAllPendingToKRA(tenantID string) (submitted, fail
 	}
 
 	return submitted, failed, nil
+}
+
+// validateInvoiceForKRA validates invoice before KRA submission
+func (s *InvoiceService) validateInvoiceForKRA(invoice *models.Invoice) error {
+	// Check required fields
+	if invoice.InvoiceNumber == "" {
+		return errors.New("invoice number is required")
+	}
+	
+	if invoice.Total <= 0 {
+		return errors.New("invoice total must be greater than zero")
+	}
+	
+	// Validate seller KRA PIN
+	if invoice.UserID == "" {
+		return errors.New("user ID is required")
+	}
+	
+	// Validate client
+	if invoice.ClientID == "" {
+		return errors.New("client is required")
+	}
+	
+	// Tax validation
+	if invoice.TaxRate < 0 || invoice.TaxRate > 100 {
+		return errors.New("invalid tax rate (must be 0-100)")
+	}
+	
+	// For credit/debit notes, require original ICN
+	if invoice.InvoiceType == "credit_note" || invoice.InvoiceType == "debit_note" {
+		if invoice.OriginalICN == "" {
+			return errors.New("credit/debit notes must reference original invoice ICN")
+		}
+	}
+	
+	return nil
+}
+
+// determineBuyerClassification determines KRA buyer classification based on client
+func determineBuyerClassification(client *models.Client) string {
+	if client == nil {
+		return "B2C" // Default
+	}
+	
+	// B2B if client has KRA PIN with valid format
+	if client.KRAPIN != "" {
+		// Validate PIN format: starts with A, ends with B
+		if strings.HasPrefix(client.KRAPIN, "A") && strings.HasSuffix(client.KRAPIN, "B") {
+			return "B2B"
+		}
+		// Invalid PIN format, treat as B2C
+		return "B2C"
+	}
+	
+	// Check for export indicators in email/address
+	email := strings.ToLower(client.Email)
+	address := strings.ToLower(client.Address)
+	
+	if strings.Contains(email, ".export") || 
+	   strings.Contains(email, "abroad") ||
+	   strings.Contains(address, "export") ||
+	   strings.Contains(address, "duty free") {
+		return "EXPORT"
+	}
+	
+	// Default to B2C for consumers
+	return "B2C"
 }
