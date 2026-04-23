@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"net/url"
@@ -298,11 +297,11 @@ func (h *InvoiceHandler) GetInvoiceStats(c *fiber.Ctx) error {
 // HandleIntasendWebhook processes Intasend webhook callbacks
 func (h *InvoiceHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 	var payload struct {
-		Event         string `json:"event"`
+		Event          string `json:"event"`
 		CheckoutID    string `json:"checkout_id"`
 		InvoiceNumber string `json:"invoice_number"`
-		Amount        string `json:"amount"`
-		Reference     string `json:"reference"`
+		Amount       string `json:"amount"`
+		Reference    string `json:"reference"`
 	}
 
 	if err := c.BodyParser(&payload); err != nil {
@@ -333,17 +332,18 @@ func (h *InvoiceHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		amount = invoice.Total
 	}
 
+	now := time.Now()
 	payment := &models.Payment{
-		TenantID:  invoice.TenantID,
-		InvoiceID: invoice.ID,
-		UserID:    invoice.UserID,
-		Amount:    amount,
-		Currency:  invoice.Currency,
-		Method:    models.PaymentMethodMpesa,
-		Status:    models.PaymentStatusCompleted,
-		Reference: payload.Reference,
+		TenantID:    invoice.TenantID,
+		InvoiceID:  invoice.ID,
+		UserID:      invoice.UserID,
+		Amount:      amount,
+		Currency:    invoice.Currency,
+		Method:     models.PaymentMethodMpesa,
+		Status:     models.PaymentStatusCompleted,
+		Reference:  payload.Reference,
+		CompletedAt: &now,
 	}
-	payment.CompletedAt.Valid = true
 
 	h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
 
@@ -616,7 +616,7 @@ func (h *InvoiceHandler) RecordPayment(c *fiber.Ctx) error {
 		Method:      models.PaymentMethod(req.Method),
 		Status:      models.PaymentStatusCompleted,
 		Reference:   req.Reference,
-		CompletedAt: sql.NullTime{Time: paymentDate, Valid: true},
+		CompletedAt: &paymentDate,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}

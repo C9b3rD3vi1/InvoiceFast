@@ -271,8 +271,8 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 
 		payment.Status = models.PaymentStatusCompleted
 		payment.Reference = receipt
-		payment.CompletedAt.Valid = true
-		payment.CompletedAt.Time = time.Now()
+		now := time.Now()
+		payment.CompletedAt = &now
 
 		if err := tx.Save(&payment).Error; err != nil {
 			return fmt.Errorf("failed to update payment: %w", err)
@@ -288,8 +288,8 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 		if invoice.PaidAmount >= invoice.Total {
 			invoice.PaidAmount = invoice.Total
 			invoice.Status = models.InvoiceStatusPaid
-			invoice.PaidAt.Valid = true
-			invoice.PaidAt.Time = time.Now()
+			now := time.Now()
+			invoice.PaidAt = &now
 		} else {
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}

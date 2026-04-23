@@ -1,7 +1,6 @@
 package services
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -151,8 +150,9 @@ func (s *PaymentMatchingService) MatchPayment(paymentID, invoiceID, userID strin
 			Status:      models.PaymentStatusCompleted,
 			Reference:   unallocated.Reference,
 			PhoneNumber: unallocated.PhoneNumber,
-			CompletedAt: sql.NullTime{Time: time.Now(), Valid: true},
 		}
+		now := time.Now()
+		payment.CompletedAt = &now
 
 		if err := tx.Create(payment).Error; err != nil {
 			return fmt.Errorf("failed to create payment: %w", err)
@@ -161,7 +161,7 @@ func (s *PaymentMatchingService) MatchPayment(paymentID, invoiceID, userID strin
 		invoice.PaidAmount += unallocated.Amount
 		if invoice.PaidAmount >= invoice.Total {
 			invoice.Status = models.InvoiceStatusPaid
-			invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
+			invoice.PaidAt = &now
 		} else {
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}
@@ -170,7 +170,6 @@ func (s *PaymentMatchingService) MatchPayment(paymentID, invoiceID, userID strin
 			return fmt.Errorf("failed to update invoice: %w", err)
 		}
 
-		now := time.Now()
 		if err := tx.Model(&unallocated).Updates(map[string]interface{}{
 			"is_matched": true,
 			"matched_at": now,
@@ -201,8 +200,9 @@ func (s *PaymentMatchingService) ManualMatch(tenantID, invoiceID, reference, pho
 			Status:      models.PaymentStatusCompleted,
 			Reference:   reference,
 			PhoneNumber: phone,
-			CompletedAt: sql.NullTime{Time: time.Now(), Valid: true},
 		}
+		now := time.Now()
+		payment.CompletedAt = &now
 
 		if err := tx.Create(payment).Error; err != nil {
 			return fmt.Errorf("failed to create payment: %w", err)
@@ -211,7 +211,7 @@ func (s *PaymentMatchingService) ManualMatch(tenantID, invoiceID, reference, pho
 		invoice.PaidAmount += amount
 		if invoice.PaidAmount >= invoice.Total {
 			invoice.Status = models.InvoiceStatusPaid
-			invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
+			invoice.PaidAt = &now
 		} else {
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}
@@ -271,7 +271,8 @@ func (s *PaymentMatchingService) ReconcilePayment(tenantID, paymentID, userID st
 
 		if newPaidAmount >= invoice.Total {
 			invoice.Status = models.InvoiceStatusPaid
-			invoice.PaidAt = sql.NullTime{Time: time.Now(), Valid: true}
+			now := time.Now()
+			invoice.PaidAt = &now
 		} else if newPaidAmount > 0 {
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}
