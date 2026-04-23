@@ -182,6 +182,12 @@ type Invoice struct {
 	ExemptAmount      float64 `json:"exempt_amount"`               // Exempt portion
 	ZeroRatedAmount   float64 `json:"zero_rated_amount"`          // Zero-rated portion
 
+	// Additional KRA compliance fields
+	InvoiceClassification string `json:"invoice_classification" gorm:"default:'normal'"` // normal, demo
+	OriginalICN           string `json:"original_icn"` // For credit/debit notes - links to original invoice
+	ExciseDuty            float64 `json:"excise_duty"` // Excise duty amount
+	BuyerClassification  string `json:"buyer_classification" gorm:"default:'B2C'"` // B2C, B2B, B2E, EXPORT
+
 	Status InvoiceStatus `json:"status" gorm:"default:'draft'"`
 
 	DueDate     time.Time  `json:"due_date"`

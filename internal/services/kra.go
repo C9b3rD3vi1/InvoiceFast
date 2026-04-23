@@ -528,8 +528,15 @@ func (s *KRAService) mockSubmit(data *KRAInvoiceData) (*KRAResponse, error) {
 }
 
 // ConvertInvoiceToKRA converts internal invoice to KRA format
-func (s *KRAService) ConvertInvoiceToKRA(invoice *Invoice, user *User, client *Client) *KRAInvoiceData {
+func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.User, cli *models.Client) *KRAInvoiceData {
 	items := make([]KRAItem, len(invoice.Items))
+	
+	// Get tax rate from invoice
+	taxRate := invoice.TaxRate
+	if taxRate == 0 {
+		taxRate = 16 // Default to 16% VAT
+	}
+	
 	for i, item := range invoice.Items {
 		items[i] = KRAItem{
 			ItemCode:               fmt.Sprintf("ITEM%03d", i+1),
@@ -538,17 +545,29 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *Invoice, user *User, client *C
 			UnitOfMeasure:          item.Unit,
 			UnitPrice:              item.UnitPrice,
 			Total:                  item.Total,
-			Discount:               0,
-			ExciseDuty:             0,
-			VATRate:                invoice.TaxRate,
-			VATAmount:              item.Total * (invoice.TaxRate / 100),
-			ItemClassificationCode: "001", // General goods
+			Discount:               item.DiscountAmt,
+			ExciseDuty:             0, // Will be calculated if excise applies
+			VATRate:                taxRate,
+			VATAmount:              item.TaxAmount,
+			ItemClassificationCode: "001", // General goods - would be mapped from item category
 		}
 	}
 
-	buyerType := "B2C"
-	if client.KRAPIN != "" {
-		buyerType = "B2B"
+// Determine buyer classification based on client
+	buyerClassification := "B2C"
+	if cli.KRAPIN != "" {
+		buyerClassification = "B2B"
+	} else if cli.Email != "" && (strings.Contains(cli.Email, ".export") || strings.Contains(cli.Email, "abroad")) {
+		buyerClassification = "EXPORT"
+	}
+
+	// Get seller address from user profile (not hardcoded)
+	sellerAddress := ""
+	if usr != nil {
+		sellerAddress = usr.CompanyName // Would pull from user settings in production
+	}
+	if sellerAddress == "" {
+		sellerAddress = "Kenya" // Fallback
 	}
 
 	return &KRAInvoiceData{
@@ -556,91 +575,32 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *Invoice, user *User, client *C
 		InvoiceDate:   invoice.CreatedAt.Format("2006-01-02"),
 		InvoiceTime:   invoice.CreatedAt.Format("15:04:05"),
 		Seller: KRASeller{
-			RegistrationNumber: user.KRAPIN,
-			BusinessName:       user.CompanyName,
-			Address:            "Nairobi, Kenya",
-			ContactMobile:      user.Phone,
-			ContactEmail:       user.Email,
+			RegistrationNumber: usr.KRAPIN,
+			BusinessName:       usr.CompanyName,
+			Address:            sellerAddress,
+			ContactMobile:      usr.Phone,
+			ContactEmail:       usr.Email,
 		},
 		Buyer: KRABuyer{
-			BuyerType:          buyerType,
-			RegistrationNumber: client.KRAPIN,
-			CustomerName:       client.Name,
-			Address:            client.Address,
-			ContactMobile:      client.Phone,
-			ContactEmail:       client.Email,
+			BuyerType:          buyerClassification,
+			RegistrationNumber: cli.KRAPIN,
+			CustomerName:       cli.Name,
+			Address:            cli.Address,
+			ContactMobile:      cli.Phone,
+			ContactEmail:       cli.Email,
 		},
 		Items:             items,
 		SubTotal:          invoice.Subtotal,
 		Discount:          invoice.Discount,
 		TotalExcludingVAT: invoice.Subtotal - invoice.Discount,
-		VATRate:           invoice.TaxRate,
-		VATAmount:         invoice.TaxAmount,
+		VATRate:           taxRate,
+		VATAmount:         invoice.TotalTax,
 		TotalIncludingVAT: invoice.Total,
-		PaymentMode:       "CASH", // Would map from actual payment
-		ESDAmount:         0,
+		PaymentMode:       "CASH", // Would map from actual payment method
+		ESDAmount:         invoice.ExciseDuty,
 		ESCAmount:         0,
-		Currency:          invoice.Currency,
+Currency:          invoice.Currency,
 	}
-}
-
-// ValidateKRAPIN validates a KRA PIN
-func (s *KRAService) ValidateKRAPIN(pin string) (bool, error) {
-	// KRA PIN format: A123456789B
-	if len(pin) != 11 {
-		return false, fmt.Errorf("invalid PIN format")
-	}
-
-	// Check format
-	if !strings.HasPrefix(pin, "A") || !strings.HasSuffix(pin, "B") {
-		return false, fmt.Errorf("invalid PIN format")
-	}
-
-	// In production, call KRA API to validate
-	return true, nil
-}
-
-// Types for internal models (simplified)
-type Invoice struct {
-	ID            string
-	InvoiceNumber string
-	Currency      string
-	Subtotal      float64
-	TaxRate       float64
-	TaxAmount     float64
-	Discount      float64
-	Total         float64
-	PaidAmount    float64
-	CreatedAt     time.Time
-	DueDate       time.Time
-	Status        string
-	Items         []InvoiceItem
-}
-
-type InvoiceItem struct {
-	ID          string
-	Description string
-	Quantity    float64
-	Unit        string
-	UnitPrice   float64
-	Total       float64
-}
-
-type User struct {
-	ID          string
-	Email       string
-	Phone       string
-	CompanyName string
-	KRAPIN      string
-}
-
-type Client struct {
-	ID      string
-	Name    string
-	Email   string
-	Phone   string
-	Address string
-	KRAPIN  string
 }
 
 // maskPIN masks KRA PIN for secure logging (shows only last 4 chars)
