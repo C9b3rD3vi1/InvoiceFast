@@ -219,3 +219,58 @@ func (h *ClientHandler) GetDashboardStats(c *fiber.Ctx) error {
 
 	return c.JSON(stats)
 }
+
+// GetBuyerType - get buyer type suggestion for client
+func (h *ClientHandler) GetBuyerType(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	clientID := c.Params("id")
+	client, err := h.clientService.GetClient(tenantID, clientID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "client not found"})
+	}
+
+	result := services.GetBuyerTypeResult(client)
+	return c.JSON(result)
+}
+
+// SetBuyerType - set preferred buyer type for client
+func (h *ClientHandler) SetBuyerType(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	clientID := c.Params("id")
+	client, err := h.clientService.GetClient(tenantID, clientID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "client not found"})
+	}
+
+	var req struct {
+		PreferredBuyerType string `json:"preferred_buyer_type"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	updateReq := &services.UpdateClientRequest{
+		PreferredBuyerType: &req.PreferredBuyerType,
+	}
+	_, err = h.clientService.UpdateClient(tenantID, clientID, updateReq)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Reload client to get updated data
+	client, err = h.clientService.GetClient(tenantID, clientID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	result := services.GetBuyerTypeResult(client)
+	return c.JSON(result)
+}

@@ -390,6 +390,9 @@ type UpdateClientRequest struct {
 	InternalNotes        *string  `json:"internal_notes"`
 	Status               *string  `json:"status"`
 	Tags                 []string `json:"tags"`
+	Country              *string  `json:"country"`
+	IsEmployee          *bool    `json:"is_employee"`
+	PreferredBuyerType  *string  `json:"preferred_buyer_type"`
 }
 
 type ClientFilter struct {

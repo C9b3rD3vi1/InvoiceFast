@@ -832,8 +832,99 @@ const InvoiceFastAPI = {
                 body: JSON.stringify(data),
             });
         },
+
+        async updateNotifications(data) {
+            return InvoiceFastAPI.request('/tenant/settings/notifications', {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+
+        async changePassword(currentPassword, newPassword) {
+            return InvoiceFastAPI.request('/tenant/change-password', {
+                method: 'POST',
+                body: JSON.stringify({
+                    current_password: currentPassword,
+                    new_password: newPassword,
+                }),
+            });
+        },
+
+        async setup2FA() {
+            return InvoiceFastAPI.request('/tenant/2fa/setup', { method: 'POST' });
+        },
+        async verify2FA(code) {
+            return InvoiceFastAPI.request('/tenant/2fa/verify', {
+                method: 'POST',
+                body: JSON.stringify({ code: code }),
+            });
+        },
+        async disable2FA(password, code) {
+            return InvoiceFastAPI.request('/tenant/2fa/disable', {
+                method: 'POST',
+                body: JSON.stringify({ password, code }),
+            });
+        },
+
+        async getSessions() {
+            return InvoiceFastAPI.request('/tenant/sessions');
+        },
+        async revokeSession(id) {
+            return InvoiceFastAPI.request('/tenant/session/' + id, { method: 'DELETE' });
+        },
+        async revokeAllSessions() {
+            return InvoiceFastAPI.request('/tenant/sessions/revoke-all', { method: 'POST' });
+        },
+
+        async getSecurityStatus() {
+            return InvoiceFastAPI.request('/tenant/security-status');
+        },
+        async getLoginHistory(limit) {
+            return InvoiceFastAPI.request('/tenant/login-history?limit=' + (limit || 20));
+        },
+        async updateLoginAlerts(enabled) {
+            return InvoiceFastAPI.request('/tenant/login-alerts', {
+                method: 'PUT',
+                body: JSON.stringify({ enabled }),
+            });
+        },
     },
-    
+
+    // Integrations
+    integrations: {
+        async getAll() {
+            return InvoiceFastAPI.request('/tenant/integrations/');
+        },
+
+        async get(provider) {
+            return InvoiceFastAPI.request('/tenant/integrations/' + provider);
+        },
+
+        async getConfig(provider) {
+            return InvoiceFastAPI.request('/tenant/integrations/' + provider + '/config');
+        },
+
+        async save(provider, data) {
+            return InvoiceFastAPI.request('/tenant/integrations/' + provider, {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+
+        async delete(id) {
+            return InvoiceFastAPI.request('/tenant/integrations/' + id, {
+                method: 'DELETE',
+            });
+        },
+
+        async toggle(id, active) {
+            return InvoiceFastAPI.request('/tenant/integrations/' + id + '/toggle', {
+                method: 'POST',
+                body: JSON.stringify({ active }),
+            });
+        },
+    },
+
     // Team
     team: {
         async getMembers() {
@@ -956,6 +1047,79 @@ const InvoiceFastAPI = {
                 }),
             });
         },
+
+        // 2FA Setup
+        async setup2FA() {
+            return InvoiceFastAPI.request('/tenant/2fa/setup', { method: 'POST' });
+        },
+        async verify2FA(code) {
+            return InvoiceFastAPI.request('/tenant/2fa/verify', {
+                method: 'POST',
+                body: JSON.stringify({ code: code }),
+            });
+        },
+        async disable2FA(password, code) {
+            return InvoiceFastAPI.request('/tenant/2fa/disable', {
+                method: 'POST',
+                body: JSON.stringify({ password, code }),
+            });
+        },
+
+        // Sessions
+        async getSessions() {
+            return InvoiceFastAPI.request('/tenant/sessions');
+        },
+        async revokeSession(id) {
+            return InvoiceFastAPI.request('/tenant/session/' + id, { method: 'DELETE' });
+        },
+        async revokeAllSessions() {
+            return InvoiceFastAPI.request('/tenant/sessions/revoke-all', { method: 'POST' });
+        },
+
+        // Security
+        async getSecurityStatus() {
+            return InvoiceFastAPI.request('/tenant/security-status');
+        },
+        async getLoginHistory(limit) {
+            return InvoiceFastAPI.request('/tenant/login-history?limit=' + (limit || 20));
+        },
+        async updateLoginAlerts(enabled) {
+            return InvoiceFastAPI.request('/tenant/login-alerts', {
+                method: 'PUT',
+                body: JSON.stringify({ enabled }),
+            });
+        },
+
+        team: {
+            getMembers() {
+                return InvoiceFastAPI.request('/tenant/team/members');
+            },
+            invite(data) {
+                return InvoiceFastAPI.request('/tenant/team/invite', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+            },
+            remove(id) {
+                return InvoiceFastAPI.request('/tenant/team/member/' + id, {
+                    method: 'DELETE'
+                });
+            },
+            updateRole(id, data) {
+                return InvoiceFastAPI.request('/tenant/team/member/' + id + '/role', {
+                    method: 'PUT',
+                    body: JSON.stringify(data)
+                });
+            },
+            getInvitations() {
+                return InvoiceFastAPI.request('/tenant/team/invitations');
+            },
+            cancelInvitation(id) {
+                return InvoiceFastAPI.request('/tenant/team/invitation/' + id, {
+                    method: 'DELETE'
+                });
+            }
+        },
     },
 };
 
@@ -976,6 +1140,8 @@ function formatDate(date) {
         day: 'numeric',
     });
 }
+
+
 
 // Format status badge
 function formatStatus(status) {

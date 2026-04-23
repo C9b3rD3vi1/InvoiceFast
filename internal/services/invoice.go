@@ -28,10 +28,9 @@ var (
 	ErrCannotEditPaid   = errors.New("cannot edit paid invoice")
 	ErrCannotCancelPaid = errors.New("cannot cancel paid invoice")
 	ErrCannotSendDraft  = errors.New("cannot send draft invoice")
-	ErrAlreadySent      = errors.New("invoice already sent")
-	ErrOverdueAmount    = errors.New("payment exceeds invoice amount")
-	ErrInvalidCurrency  = errors.New("invalid currency code")
-	ErrTenantRequired   = errors.New("tenant_id required for this operation")
+	ErrInvalidBuyerType = errors.New("invalid buyer type for this client")
+	ErrTenantRequired  = errors.New("tenant ID is required")
+	ErrAlreadySent     = errors.New("invoice already sent")
 )
 
 var validCurrencies = map[string]bool{
@@ -212,33 +211,41 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 	}
 
 magicTokenExpires := time.Now().AddDate(0, 3, 0)
+	
+	// Determine buyer type from request or auto-detect
+	buyerType := req.BuyerType
+	if buyerType == "" {
+		buyerType = DetectBuyerType(client)
+	}
+	
 	invoice := &models.Invoice{
-		ID:            uuid.New().String(),
-		TenantID:      tenantID,
-		UserID:        userID,
-		ClientID:      clientID,
-		Reference:     strings.TrimSpace(req.Reference),
-		Currency:      currency,
-		KESEquivalent:  math.Round(kesEquivalent*100) / 100,
-		ExchangeRate:  exchangeRate,
-		ExchangeRateAt: time.Now(),
-		Subtotal:      math.Round(subtotal*100) / 100,
-		TaxRate:       taxRate,
-		TotalTax:      math.Round(taxAmount*100) / 100,
-		Discount:      math.Round(discount*100) / 100,
-		Total:         math.Round(total*100) / 100,
-		BalanceDue:    math.Round(total*100) / 100,
-		TaxType:       models.TaxTypeStandard,
-		Status:        models.InvoiceStatusDraft,
-		DueDate:       req.DueDate,
-		Notes:         strings.TrimSpace(req.Notes),
-		Terms:         strings.TrimSpace(req.Terms),
-		BrandColor:    req.BrandColor,
-		LogoURL:       req.LogoURL,
-		MagicToken:    uuid.New().String(),
+		ID:                uuid.New().String(),
+		TenantID:          tenantID,
+		UserID:            userID,
+		ClientID:          clientID,
+		Reference:         strings.TrimSpace(req.Reference),
+		Currency:          currency,
+		KESEquivalent:      math.Round(kesEquivalent*100) / 100,
+		ExchangeRate:      exchangeRate,
+		ExchangeRateAt:    time.Now(),
+		Subtotal:          math.Round(subtotal*100) / 100,
+		TaxRate:          taxRate,
+		TotalTax:          math.Round(taxAmount*100) / 100,
+		Discount:         math.Round(discount*100) / 100,
+		Total:            math.Round(total*100) / 100,
+		BalanceDue:       math.Round(total*100) / 100,
+		TaxType:          models.TaxTypeStandard,
+		Status:           models.InvoiceStatusDraft,
+		DueDate:         req.DueDate,
+		Notes:           strings.TrimSpace(req.Notes),
+		Terms:           strings.TrimSpace(req.Terms),
+		BrandColor:       req.BrandColor,
+		LogoURL:          req.LogoURL,
+		MagicToken:       uuid.New().String(),
 		MagicTokenExpiresAt: &magicTokenExpires,
-		KRAStatus:     models.KRAInvoiceStatusPending,
-		Version:       1,
+		KRAStatus:       models.KRAInvoiceStatusPending,
+		Version:         1,
+		BuyerClassification: buyerType,
 	}
 
 	// Set title if provided
@@ -292,12 +299,18 @@ func (s *InvoiceService) validateCreateRequest(userID, clientID string, req *Cre
 	if strings.TrimSpace(userID) == "" {
 		return errors.New("user ID is required")
 	}
-	if strings.TrimSpace(clientID) == "" {
-		return errors.New("client_id is required")
+
+	// Validate buyer type if provided
+	if req.BuyerType != "" {
+		client := &models.Client{}
+		if err := s.db.First(client, "id = ?", clientID).Error; err == nil {
+			// Client exists - validate buyer type
+			if err := ValidateBuyerType(req.BuyerType, client); err != nil {
+				return err
+			}
+		}
 	}
-	if req.DueDate.IsZero() {
-		return errors.New("due_date is required")
-	}
+
 	return nil
 }
 
@@ -1464,6 +1477,17 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 	discount := math.Max(0, original.Discount)
 	total := subtotal + taxAmount - discount
 
+	// Validate buyer type inheritance - must match original for KRA compliance
+	buyerType := original.BuyerClassification
+	if buyerType == "" {
+		buyerType = "B2C"
+	}
+
+	// Validate original was submitted to KRA
+	if original.KRAICN == "" {
+		return nil, fmt.Errorf("cannot create credit note: original invoice not submitted to KRA")
+	}
+
 	creditNote := &models.Invoice{
 		ID:                uuid.New().String(),
 		TenantID:          tenantID,
@@ -1474,11 +1498,13 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 		Currency:          original.Currency,
 		InvoiceType:       "credit_note",
 		OriginalInvoiceID: originalInvoiceID,
+		OriginalICN:       original.KRAICN, // Link to original KRA ICN
+		BuyerClassification: buyerType, // Inherit buyer type
 		Subtotal:          math.Round(subtotal*100) / 100,
 		TaxRate:           taxRate,
 		TaxAmount:         math.Round(taxAmount*100) / 100,
 		Discount:          math.Round(discount*100) / 100,
-		Total:             math.Round((-total)*100) / 100, // Negative for credit
+		Total:             math.Round((-total)*100) / 100,
 		Status:            models.InvoiceStatusCreditNote,
 		DueDate:           time.Now().AddDate(0, 0, 30),
 		Notes:             "Credit note for: " + original.InvoiceNumber,
@@ -1512,22 +1538,113 @@ type CreateCreditNoteItem struct {
 	Unit        string  `json:"unit"`
 }
 
+type CreateDebitNoteItem struct {
+	Description string  `json:"description"`
+	Quantity    float64 `json:"quantity"`
+	UnitPrice   float64 `json:"unit_price"`
+	Unit        string  `json:"unit"`
+}
+
+// CreateDebitNote creates a debit note from an original invoice
+// Debit notes are used when additional charges need to be billed (e.g., extra services)
+func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID string, items []CreateDebitNoteItem) (*models.Invoice, error) {
+	original, err := s.GetInvoiceByID(tenantID, originalInvoiceID)
+	if err != nil {
+		return nil, fmt.Errorf("original invoice not found: %w", err)
+	}
+
+	var debitItems []models.InvoiceItem
+	var subtotal float64
+	for i, item := range items {
+		lineTotal := item.Quantity * item.UnitPrice
+		subtotal += lineTotal
+		debitItems = append(debitItems, models.InvoiceItem{
+			ID:          uuid.New().String(),
+			Description: item.Description,
+			Quantity:    item.Quantity,
+			UnitPrice:   item.UnitPrice,
+			Unit:        item.Unit,
+			Total:       lineTotal,
+			SortOrder:   i,
+		})
+	}
+
+	taxRate := original.TaxRate
+	taxAmount := subtotal * (taxRate / 100)
+	discount := math.Max(0, original.Discount)
+	total := subtotal + taxAmount - discount
+
+	// Validate buyer type inheritance - must match original for KRA compliance
+	buyerType := original.BuyerClassification
+	if buyerType == "" {
+		buyerType = "B2C"
+	}
+
+	// Validate original was submitted to KRA
+	if original.KRAICN == "" {
+		return nil, fmt.Errorf("cannot create debit note: original invoice not submitted to KRA")
+	}
+
+	debitNote := &models.Invoice{
+		ID:                uuid.New().String(),
+		TenantID:          tenantID,
+		UserID:            userID,
+		ClientID:          original.ClientID,
+		InvoiceNumber:     generateDebitNoteNumber(userID),
+		Reference:         "Debit for " + original.InvoiceNumber,
+		Currency:          original.Currency,
+		InvoiceType:       "debit_note",
+		OriginalInvoiceID: originalInvoiceID,
+		OriginalICN:       original.KRAICN,
+		BuyerClassification: buyerType,
+		Subtotal:          math.Round(subtotal*100) / 100,
+		TaxRate:           taxRate,
+		TaxAmount:         math.Round(taxAmount*100) / 100,
+		Discount:          math.Round(discount*100) / 100,
+		Total:             math.Round(total*100) / 100,
+		Status:            models.InvoiceStatusSent,
+		DueDate:           time.Now().AddDate(0, 0, 30),
+		Notes:             "Debit note for: " + original.InvoiceNumber,
+	}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(debitNote).Error; err != nil {
+			return fmt.Errorf("failed to create debit note: %w", err)
+		}
+		for i := range debitItems {
+			debitItems[i].InvoiceID = debitNote.ID
+		}
+		if err := tx.Create(&debitItems).Error; err != nil {
+			return fmt.Errorf("failed to create debit note items: %w", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	debitNote.Items = debitItems
+	return debitNote, nil
+}
+
 // Request types
 type CreateInvoiceRequest struct {
-	ClientID      string               `json:"client_id" binding:"required"`
-	Reference     string               `json:"reference"`
-	Title         string               `json:"title"`
-	Currency      string               `json:"currency"`
-	TaxRate       float64              `json:"tax_rate"`
-	Discount      float64              `json:"discount"`
-	DueDate       time.Time            `json:"due_date"`
-	Notes         string               `json:"notes"`
-	Terms         string               `json:"terms"`
-	BrandColor    string               `json:"brand_color"`
-	LogoURL       string               `json:"logo_url"`
-	ExchangeRate  *float64             `json:"exchange_rate"`  // Manual override for exchange rate
-	KESEquivalent *float64             `json:"kes_equivalent"` // Manual override for KES equivalent
-	Items         []InvoiceItemRequest `json:"items" binding:"required,min=1"`
+	ClientID          string               `json:"client_id" binding:"required"`
+	Reference         string               `json:"reference"`
+	Title             string               `json:"title"`
+	Currency          string               `json:"currency"`
+	TaxRate           float64              `json:"tax_rate"`
+	Discount          float64              `json:"discount"`
+	DueDate           time.Time            `json:"due_date"`
+	Notes             string               `json:"notes"`
+	Terms             string               `json:"terms"`
+	BrandColor        string               `json:"brand_color"`
+	LogoURL           string               `json:"logo_url"`
+	BuyerType         string               `json:"buyer_type"` // B2B, B2C, B2E, EXPORT
+	ExchangeRate      *float64             `json:"exchange_rate"`  // Manual override for exchange rate
+	KESEquivalent     *float64             `json:"kes_equivalent"` // Manual override for KES equivalent
+	Items            []InvoiceItemRequest `json:"items" binding:"required,min=1"`
 }
 
 // InvoiceItemRequest with extended fields for frontend compatibility
@@ -1542,16 +1659,17 @@ type InvoiceItemRequest struct {
 }
 
 type UpdateInvoiceRequest struct {
-	Status     *string    `json:"status"`
-	DueDate    *time.Time `json:"due_date"`
-	Reference  *string    `json:"reference"`
-	Currency   *string    `json:"currency"`
-	Title      *string    `json:"title"`
-	TaxRate    *float64   `json:"tax_rate"`
+	Status      *string    `json:"status"`
+	DueDate     *time.Time `json:"due_date"`
+	Reference   *string    `json:"reference"`
+	Currency    *string    `json:"currency"`
+	Title       *string    `json:"title"`
+	TaxRate     *float64   `json:"tax_rate"`
 	Discount   *float64   `json:"discount"`
-	Notes      *string    `json:"notes"`
-	Terms      *string    `json:"terms"`
-	BrandColor *string    `json:"brand_color"`
+	Notes       *string    `json:"notes"`
+	Terms       *string    `json:"terms"`
+	BrandColor  *string    `json:"brand_color"`
+	BuyerType  *string    `json:"buyer_type"`
 }
 
 type InvoiceFilter struct {

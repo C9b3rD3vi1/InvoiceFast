@@ -46,6 +46,10 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 
 	group.Post("/:id/payments", h.RecordPayment)
 
+	// Credit/Debit Note routes
+	group.Post("/:id/credit-note", h.CreateCreditNote)
+	group.Post("/:id/debit-note", h.CreateDebitNote)
+
 	return group
 }
 
@@ -57,6 +61,11 @@ func ClientRoutes(app fiber.Router, h *handlers.ClientHandler, authService *serv
 	group.Post("/", h.CreateClient)
 	group.Get("/", h.GetClients)
 	group.Get("/stats", h.GetDashboardStats)
+
+	// Buyer type endpoint MUST come before :id route
+	group.Get("/:id/buyer-type", h.GetBuyerType)
+	group.Post("/:id/buyer-type", h.SetBuyerType)
+
 	group.Get("/:id", h.GetClient)
 	group.Put("/:id", h.UpdateClient)
 	group.Delete("/:id", h.DeleteClient)

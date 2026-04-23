@@ -89,6 +89,9 @@ type Client struct {
 	Address              string       `json:"address"`
 	KRAPIN               string       `json:"kra_pin"` // Encrypted - stored as ciphertext
 	Currency             string       `json:"currency" gorm:"default:'KES'"`
+	Country              string       `json:"country" gorm:"default:'KE'"` // Country code (KE, US, etc.)
+	IsEmployee          bool         `json:"is_employee" gorm:"default:false"` // For B2E classification
+	PreferredBuyerType  string       `json:"preferred_buyer_type"` // B2B, B2C, B2E, EXPORT - user override
 	PaymentTerms         int          `json:"payment_terms" gorm:"default:30"`               // days (Net 15, Net 30, Net 60, etc.)
 	DefaultPaymentMethod string       `json:"default_payment_method" gorm:"default:'mpesa'"` // mpesa, bank, card, cash
 	Status               ClientStatus `json:"status" gorm:"default:'active'"`
@@ -104,6 +107,25 @@ type Client struct {
 	UpdatedAt            time.Time    `json:"updated_at"`
 
 	Invoices []Invoice `json:"-" gorm:"foreignKey:ClientID"`
+}
+
+// BuyerClassification represents KRA buyer classification
+type BuyerClassification string
+
+const (
+	BuyerClassificationB2B    BuyerClassification = "B2B"    // Business with valid KRA PIN
+	BuyerClassificationB2C   BuyerClassification = "B2C"   // Consumer
+	BuyerClassificationB2E   BuyerClassification = "B2E"   // Employee
+	BuyerClassificationEXPORT BuyerClassification = "EXPORT" // Export/foreign
+)
+
+// IsValid checks if buyer classification is valid
+func (b BuyerClassification) IsValid() bool {
+	switch b {
+	case BuyerClassificationB2B, BuyerClassificationB2C, BuyerClassificationB2E, BuyerClassificationEXPORT:
+		return true
+	}
+	return false
 }
 
 // InvoiceStatus represents the status of an invoice
