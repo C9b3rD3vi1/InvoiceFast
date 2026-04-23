@@ -255,27 +255,13 @@ type Invoice struct {
 
 // BeforeUpdate - Prevent modifications to immutable invoices
 func (i *Invoice) BeforeUpdate(tx *gorm.DB) error {
-	// Check if invoice is paid - immutable
-	if i.Status == InvoiceStatusPaid || i.Status == InvoiceStatusPartiallyPaid {
-		return errors.New("invoice cannot be modified: status is paid or partially paid")
+	// Check if KRA REJECTED - immutable (can't modify after rejection)
+	if i.KRAStatus == KRAInvoiceStatusRejected {
+		return errors.New("invoice cannot be modified: KRA submission rejected")
 	}
 
-	// Check if KRA submitted - immutable
-	if i.KRAStatus == KRAInvoiceStatusSubmitted || i.KRAStatus == KRAInvoiceStatusAccepted {
-		return errors.New("invoice cannot be modified: KRA submission in progress or accepted")
-	}
-
-	// Check version for optimistic locking
-	var current Invoice
-	if err := tx.First(&current, "id = ?", i.ID).Error; err != nil {
-		return err
-	}
-	if current.Version != i.Version {
-		return errors.New("concurrent modification detected: invoice was modified by another process")
-	}
-
-	// Increment version
-	i.Version = current.Version + 1
+	// Note: Version check moved to service layer for proper transaction handling
+	// to avoid race conditions with concurrent modifications in same transaction
 	return nil
 }
 

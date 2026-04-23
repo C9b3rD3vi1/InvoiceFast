@@ -30,7 +30,18 @@ func TenantRoutes(app fiber.Router, h *handlers.AuthHandler, authService *servic
 	group.Post("/change-password", h.ChangePassword)
 	group.Post("/logout", h.Logout)
 
-	// Search endpoint
+	group.Post("/2fa/setup", h.SetupTwoFactor)
+	group.Post("/2fa/verify", h.VerifyTwoFactor)
+	group.Post("/2fa/disable", h.DisableTwoFactor)
+
+	group.Get("/sessions", h.GetSessions)
+	group.Delete("/session/:id", h.RevokeSession)
+	group.Post("/sessions/revoke-all", h.RevokeAllSessions)
+
+	group.Get("/login-history", h.GetLoginHistory)
+	group.Put("/login-alerts", h.UpdateLoginAlerts)
+	group.Get("/security-status", h.GetSecurityStatus)
+
 	group.Get("/search", h.Search)
 
 	return group

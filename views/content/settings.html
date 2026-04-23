@@ -218,6 +218,7 @@
 
                 <!-- Profile & Security -->
                 <div x-show="activeSection === 'profile'" class="space-y-6 animate-fade-in">
+                    <!-- Profile Info Card -->
                     <div class="bg-white rounded-2xl border border-slate-200 p-6">
                         <h3 class="font-semibold text-slate-900 mb-4">Profile Information</h3>
                         <div class="flex items-start gap-6 mb-6">
@@ -248,49 +249,274 @@
                         </div>
                     </div>
 
+                    <!-- Security Overview -->
                     <div class="bg-white rounded-2xl border border-slate-200 p-6">
-                        <h3 class="font-semibold text-slate-900 mb-4">Security</h3>
-                        <div class="space-y-4">
-                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
-                                <div class="flex items-center gap-4">
-                                    <div class="p-2 rounded-lg bg-slate-100">
-                                        <i data-lucide="key" class="w-5 h-5 text-slate-600"></i>
-                                    </div>
-                                    <div>
-                                        <p class="font-medium text-slate-900">Password</p>
-                                        <p class="text-sm text-slate-500">Last changed 30 days ago</p>
-                                    </div>
-                                </div>
-                                <button @click="showChangePassword = true" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50">Change</button>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-slate-900">Security</h3>
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium" :class="security.passwordStrength >= 4 ? 'bg-green-100 text-green-700' : security.passwordStrength >= 2 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'" x-text="security.passwordStrength >= 4 ? 'Strong' : security.passwordStrength >= 2 ? 'Moderate' : 'Weak'"></span>
                             </div>
-                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
-                                <div class="flex items-center gap-4">
-                                    <div class="p-2 rounded-lg bg-slate-100">
-                                        <i data-lucide="smartphone" class="w-5 h-5 text-slate-600"></i>
-                                    </div>
-                                    <div>
-                                        <p class="font-medium text-slate-900">Two-Factor Authentication</p>
-                                        <p class="text-sm text-slate-500" x-text="profile.twoFactorEnabled ? 'Enabled' : 'Add extra security'"></p>
-                                    </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            <div class="p-4 border border-slate-200 rounded-xl">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <i data-lucide="key" class="w-5 h-5 text-slate-500"></i>
+                                    <span class="text-sm font-medium text-slate-700">Password</span>
                                 </div>
-                                <button @click="profile.twoFactorEnabled = !profile.twoFactorEnabled" class="relative w-12 h-6 rounded-full transition-colors" :class="profile.twoFactorEnabled ? 'bg-trust' : 'bg-slate-200'">
-                                    <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="profile.twoFactorEnabled ? 'left-7' : 'left-1'"></span>
-                                </button>
+                                <p class="text-sm text-slate-500" x-text="security.lastPasswordChange ? 'Changed ' + security.lastPasswordChange : 'Not changed recently'"></p>
                             </div>
-                            <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
-                                <div class="flex items-center gap-4">
-                                    <div class="p-2 rounded-lg bg-slate-100">
-                                        <i data-lucide="mail" class="w-5 h-5 text-slate-600"></i>
-                                    </div>
-                                    <div>
-                                        <p class="font-medium text-slate-900">Login Alerts</p>
-                                        <p class="text-sm text-slate-500">Get notified of new logins</p>
-                                    </div>
+                            <div class="p-4 border border-slate-200 rounded-xl">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <i data-lucide="smartphone" class="w-5 h-5 text-slate-500"></i>
+                                    <span class="text-sm font-medium text-slate-700">2FA</span>
                                 </div>
-                                <button class="relative w-12 h-6 rounded-full transition-colors" :class="security.loginAlerts ? 'bg-trust' : 'bg-slate-200'" @click="security.loginAlerts = !security.loginAlerts">
+                                <p class="text-sm text-slate-500" x-text="security.twoFactorEnabled ? 'Enabled' : 'Not enabled'"></p>
+                            </div>
+                            <div class="p-4 border border-slate-200 rounded-xl">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <i data-lucide="monitor" class="w-5 h-5 text-slate-500"></i>
+                                    <span class="text-sm font-medium text-slate-700">Active Sessions</span>
+                                </div>
+                                <p class="text-sm text-slate-500" x-text="security.activeSessions + ' session' + (security.activeSessions !== 1 ? 's' : '')"></p>
+                            </div>
+                        </div>
+
+                        <!-- Password Change -->
+                        <div class="border-t border-slate-100 pt-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <p class="font-medium text-slate-900">Change Password</p>
+                                    <p class="text-sm text-slate-500">Use a strong password with letters, numbers, and symbols</p>
+                                </div>
+                                <button @click="showPasswordModal = true" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium">Change Password</button>
+                            </div>
+                        </div>
+
+                        <!-- Two-Factor Authentication -->
+                        <div class="border-t border-slate-100 pt-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <p class="font-medium text-slate-900">Two-Factor Authentication</p>
+                                    <p class="text-sm text-slate-500">Require a verification code when signing in</p>
+                                </div>
+                                <div x-show="security.twoFactorEnabled" class="flex items-center gap-3">
+                                    <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Enabled</span>
+                                    <button @click="showDisable2FAModal = true" class="px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-xs font-medium">Disable</button>
+                                </div>
+                                <button x-show="!security.twoFactorEnabled" @click="init2FASetup()" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium">Enable 2FA</button>
+                            </div>
+                        </div>
+
+                        <!-- Login Alerts -->
+                        <div class="border-t border-slate-100 pt-6">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-medium text-slate-900">Login Alerts</p>
+                                    <p class="text-sm text-slate-500">Get notified when someone signs into your account</p>
+                                </div>
+                                <button @click="toggleLoginAlerts()" class="relative w-12 h-6 rounded-full transition-colors" :class="security.loginAlerts ? 'bg-trust' : 'bg-slate-200'">
                                     <span class="absolute top-1 w-4 h-4 bg-white rounded-full transition-transform" :class="security.loginAlerts ? 'left-7' : 'left-1'"></span>
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Sessions -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-slate-900">Active Sessions</h3>
+                            <button @click="revokeAllSessions()" x-show="sessions.length > 1" class="text-sm text-red-600 hover:text-red-700 font-medium">Revoke All Other Sessions</button>
+                        </div>
+                        <div class="space-y-3">
+                            <template x-for="session in sessions" :key="session.id">
+                                <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50">
+                                    <div class="flex items-center gap-4">
+                                        <div class="p-2 rounded-lg bg-slate-100">
+                                            <i data-lucide="monitor" class="w-5 h-5 text-slate-600"></i>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-slate-900" x-text="session.device_info || 'Unknown Device'"></p>
+                                            <p class="text-sm text-slate-500">
+                                                <span x-text="session.ip_address"></span>
+                                                <span x-show="session.is_current" class="ml-2 px-1.5 py-0.5 bg-trust text-white rounded text-xs">Current</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-sm text-slate-500" x-text="session.last_active"></span>
+                                        <button x-show="!session.is_current" @click="revokeSession(session.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                            <i data-lucide="x" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="sessions.length === 0" class="text-center py-8 text-slate-500">
+                                <i data-lucide="monitor" class="w-8 h-8 mx-auto mb-2 text-slate-300"></i>
+                                <p>No active sessions</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Login History -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-slate-900">Recent Login Activity</h3>
+                            <button @click="loadLoginHistory()" class="text-sm text-trust hover:text-trust-dark font-medium">Refresh</button>
+                        </div>
+                        <div class="space-y-3">
+                            <template x-for="login in loginHistory" :key="login.id">
+                                <div class="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-2 h-2 rounded-full" :class="login.success ? 'bg-green-500' : 'bg-red-500'"></div>
+                                        <div>
+                                            <p class="text-sm text-slate-900" x-text="login.ip_address"></p>
+                                            <p class="text-xs text-slate-500" x-text="login.action"></p>
+                                        </div>
+                                    </div>
+                                    <span class="text-sm text-slate-500" x-text="login.created_at"></span>
+                                </div>
+                            </template>
+                            <div x-show="loginHistory.length === 0" class="text-center py-6 text-slate-500 text-sm">No login history available</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Password Change Modal -->
+                <div x-show="showPasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" x-transition>
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
+                        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 class="text-lg font-semibold text-slate-900">Change Password</h3>
+                            <button @click="showPasswordModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                                <i data-lucide="x" class="w-5 h-5 text-slate-400"></i>
+                            </button>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Current Password</label>
+                                <div class="relative">
+                                    <input :type="showCurrentPassword ? 'text' : 'password'" x-model="passwordForm.current" class="w-full px-4 py-2.5 pr-10 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none">
+                                    <button type="button" @click="showCurrentPassword = !showCurrentPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                        <i :data-lucide="showCurrentPassword ? 'eye-off' : 'eye'" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">New Password</label>
+                                <div class="relative">
+                                    <input :type="showNewPassword ? 'text' : 'password'" x-model="passwordForm.new" @input="checkPasswordStrength()" class="w-full px-4 py-2.5 pr-10 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none">
+                                    <button type="button" @click="showNewPassword = !showNewPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                        <i :data-lucide="showNewPassword ? 'eye-off' : 'eye'" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <div class="mt-2">
+                                    <div class="flex gap-1">
+                                        <div class="h-1 flex-1 rounded-full transition-colors" :class="passwordForm.strength >= 1 ? 'bg-red-500' : 'bg-slate-200'"></div>
+                                        <div class="h-1 flex-1 rounded-full transition-colors" :class="passwordForm.strength >= 2 ? 'bg-yellow-500' : 'bg-slate-200'"></div>
+                                        <div class="h-1 flex-1 rounded-full transition-colors" :class="passwordForm.strength >= 3 ? 'bg-green-500' : 'bg-slate-200'"></div>
+                                        <div class="h-1 flex-1 rounded-full transition-colors" :class="passwordForm.strength >= 4 ? 'bg-green-600' : 'bg-slate-200'"></div>
+                                    </div>
+                                    <p class="text-xs mt-1" :class="passwordForm.strength >= 4 ? 'text-green-600' : 'text-slate-500'" x-text="passwordForm.strengthMessage"></p>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Confirm New Password</label>
+                                <input :type="showConfirmPassword ? 'text' : 'password'" x-model="passwordForm.confirm" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none">
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+                            <button @click="showPasswordModal = false" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+                            <button @click="changePassword()" :disabled="passwordForm.loading" class="px-5 py-2.5 rounded-xl font-medium bg-trust text-white hover:bg-trust-dark disabled:opacity-50 flex items-center gap-2">
+                                <template x-if="passwordForm.loading">
+                                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                                </template>
+                                <span x-text="passwordForm.loading ? 'Saving...' : 'Update Password'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2FA Setup Modal -->
+                <div x-show="show2FASetupModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" x-transition>
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
+                        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 class="text-lg font-semibold text-slate-900">Enable Two-Factor Authentication</h3>
+                            <button @click="show2FASetupModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                                <i data-lucide="x" class="w-5 h-5 text-slate-400"></i>
+                            </button>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div x-show="!twoFASetup.verified">
+                                <p class="text-sm text-slate-600 mb-4">Scan this QR code with your authenticator app:</p>
+                                <div class="flex justify-center mb-4">
+                                    <img :src="twoFASetup.qrCodeImage" alt="2FA QR Code" class="w-48 h-48 border border-slate-200 rounded-xl">
+                                </div>
+                                <div class="bg-slate-50 rounded-xl p-3 mb-4">
+                                    <p class="text-xs text-slate-500 mb-1">Manual entry key:</p>
+                                    <p class="text-sm font-mono text-slate-700 break-all" x-text="twoFASetup.secret"></p>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">
+                                    <span x-show="!twoFASetup.verified">Enter the 6-digit code from your app:</span>
+                                    <span x-show="twoFASetup.verified">Save these backup codes in a secure place:</span>
+                                </label>
+                                <template x-if="!twoFASetup.verified">
+                                    <input type="text" x-model="twoFASetup.code" placeholder="000000" maxlength="6" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none text-center text-2xl tracking-widest">
+                                </template>
+                                <template x-if="twoFASetup.verified">
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <template x-for="code in twoFASetup.backupCodes" :key="code">
+                                            <div class="bg-slate-50 rounded-lg p-2 text-center font-mono text-sm" x-text="code"></div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+                            <button @click="show2FASetupModal = false" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100">
+                                <span x-show="twoFASetup.verified">Done</span>
+                                <span x-show="!twoFASetup.verified">Cancel</span>
+                            </button>
+                            <button x-show="!twoFASetup.verified" @click="verify2FA()" :disabled="twoFASetup.loading || twoFASetup.code.length < 6" class="px-5 py-2.5 rounded-xl font-medium bg-trust text-white hover:bg-trust-dark disabled:opacity-50 flex items-center gap-2">
+                                <template x-if="twoFASetup.loading">
+                                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                                </template>
+                                Verify & Enable
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Disable 2FA Modal -->
+                <div x-show="showDisable2FAModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" x-transition>
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
+                        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 class="text-lg font-semibold text-red-600">Disable Two-Factor Authentication</h3>
+                            <button @click="showDisable2FAModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                                <i data-lucide="x" class="w-5 h-5 text-slate-400"></i>
+                            </button>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div class="bg-red-50 rounded-xl p-4">
+                                <p class="text-sm text-red-700">Disabling 2FA will make your account less secure. Please confirm your identity below.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Your Password</label>
+                                <input type="password" x-model="disable2FAForm.password" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Verification Code</label>
+                                <input type="text" x-model="disable2FAForm.code" placeholder="000000" maxlength="6" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none text-center text-2xl tracking-widest">
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+                            <button @click="showDisable2FAModal = false" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+                            <button @click="disable2FA()" :disabled="disable2FAForm.loading || disable2FAForm.code.length < 6" class="px-5 py-2.5 rounded-xl font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+                                <template x-if="disable2FAForm.loading">
+                                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                                </template>
+                                Disable 2FA
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -533,38 +759,346 @@
                     </div>
                 </div>
 
-                <!-- Billing Settings -->
-                <div x-show="activeSection === 'billing'" class="space-y-6 animate-fade-in">
-                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
-                        <div class="flex items-center justify-between mb-6">
+                <!-- Invite Member Modal -->
+                <div x-show="inviteModal.show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" x-transition>
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" @click.stop>
+                        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                            <h3 class="text-lg font-semibold text-slate-900">Invite Team Member</h3>
+                            <button @click="inviteModal.close()" class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                                <i data-lucide="x" class="w-5 h-5 text-slate-400"></i>
+                            </button>
+                        </div>
+                        <div class="p-6 space-y-4">
                             <div>
-                                <p class="text-sm text-slate-500">Current Plan</p>
-                                <h3 class="text-2xl font-bold text-slate-900" x-text="billing.plan || 'Free Plan'">Free Plan</h3>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
+                                <input type="email" x-model="inviteModal.email" placeholder="colleague@company.com"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none transition-all"
+                                    @keyup.enter="inviteModal.send()">
                             </div>
-                            <span class="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-medium" x-text="billing.price || '$0/month'">$0/month</span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-4 mb-6">
-                            <div class="p-4 bg-slate-50 rounded-xl">
-                                <p class="text-sm text-slate-500">Invoices</p>
-                                <p class="text-xl font-bold text-slate-900" x-text="billing.invoicesUsed + ' / ' + billing.invoicesLimit">0 / Unlimited</p>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1.5">Role</label>
+                                <select x-model="inviteModal.role" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust focus:ring-2 focus:ring-trust/20 outline-none transition-all">
+                                    <option value="admin">Admin</option>
+                                    <option value="finance">Finance Manager</option>
+                                    <option value="staff">Staff</option>
+                                    <option value="viewer">Viewer</option>
+                                </select>
                             </div>
-                            <div class="p-4 bg-slate-50 rounded-xl">
-                                <p class="text-sm text-slate-500">Clients</p>
-                                <p class="text-xl font-bold text-slate-900" x-text="billing.clientsUsed + ' / ' + billing.clientsLimit">0 / Unlimited</p>
-                            </div>
-                            <div class="p-4 bg-slate-50 rounded-xl">
-                                <p class="text-sm text-slate-500">Team Members</p>
-                                <p class="text-xl font-bold text-slate-900" x-text="teamMembers.length + ' / ' + billing.teamLimit">0 / 1</p>
-                            </div>
-                            <div class="p-4 bg-slate-50 rounded-xl">
-                                <p class="text-sm text-slate-500">Storage</p>
-                                <p class="text-xl font-bold text-slate-900" x-text="billing.storageUsed + ' / ' + billing.storageLimit">0 / 1GB</p>
+                            <div class="bg-blue-50 rounded-xl p-4">
+                                <p class="text-sm text-blue-700">
+                                    <i data-lucide="info" class="w-4 h-4 inline-block mr-1"></i>
+                                    An invitation email will be sent to the address above. The invitee will be prompted to create an account if they don't have one.
+                                </p>
                             </div>
                         </div>
-                        <div class="flex gap-3">
-                            <button @click="upgradePlan()" class="px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Upgrade Plan</button>
-                            <button class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">View Plans</button>
+                        <div class="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+                            <button @click="inviteModal.close()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">
+                                Cancel
+                            </button>
+                            <button @click="inviteModal.send()" :disabled="inviteModal.loading"
+                                class="px-5 py-2.5 rounded-xl font-medium bg-trust text-white hover:bg-trust-dark disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors">
+                                <template x-if="inviteModal.loading">
+                                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                                </template>
+                                <span x-text="inviteModal.loading ? 'Sending...' : 'Send Invite'"></span>
+                            </button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Integrations Settings -->
+                <div x-show="activeSection === 'integrations'" class="space-y-6 animate-fade-in">
+                    <!-- WhatsApp -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-green-100">
+                                    <svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-900">WhatsApp</h3>
+                                    <p class="text-sm text-slate-500">Send invoices via WhatsApp</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-2 py-1 text-xs rounded-full" :class="integrationsData.whatsapp.configured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'" x-text="integrationsData.whatsapp.configured ? 'Configured' : 'Not Configured'"></span>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="integrationsData.whatsapp.enabled" class="w-5 h-5 rounded border-slate-300 text-trust focus:ring-trust">
+                                    <span class="text-sm font-medium text-slate-700">Enable</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Phone Number ID</label>
+                                <input type="text" x-model="integrationsData.whatsapp.phone_number_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Access Token</label>
+                                <input type="password" x-model="integrationsData.whatsapp.access_token" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Business ID</label>
+                                <input type="text" x-model="integrationsData.whatsapp.business_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SMS -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-blue-100">
+                                    <svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-900">SMS</h3>
+                                    <p class="text-sm text-slate-500">Send SMS notifications</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-2 py-1 text-xs rounded-full" :class="integrationsData.sms.configured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'" x-text="integrationsData.sms.configured ? 'Configured' : 'Not Configured'"></span>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="integrationsData.sms.enabled" class="w-5 h-5 rounded border-slate-300 text-trust focus:ring-trust">
+                                    <span class="text-sm font-medium text-slate-700">Enable</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Provider</label>
+                                <select x-model="integrationsData.sms.provider" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    <option value="africastalking">Africa's Talking</option>
+                                    <option value="twilio">Twilio</option>
+                                    <option value="nexmo">Nexmo (Vonage)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1" x-text="integrationsData.sms.provider === 'africastalking' ? 'API Key' : 'Account SID'">API Key</label>
+                                <input type="text" x-model="integrationsData.sms.api_key" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1" x-text="integrationsData.sms.provider === 'africastalking' ? 'API Secret' : 'Auth Token'">API Secret</label>
+                                <input type="password" x-model="integrationsData.sms.api_secret" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+                                <input type="text" x-model="integrationsData.sms.phone_number" placeholder="+254712345678" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Short Code</label>
+                                <input type="text" x-model="integrationsData.sms.short_code" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Email -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-purple-100">
+                                    <svg class="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-900">Email</h3>
+                                    <p class="text-sm text-slate-500">Send emails</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-2 py-1 text-xs rounded-full" :class="integrationsData.smtp.configured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'" x-text="integrationsData.smtp.configured ? 'Configured' : 'Not Configured'"></span>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="integrationsData.smtp.enabled" class="w-5 h-5 rounded border-slate-300 text-trust focus:ring-trust">
+                                    <span class="text-sm font-medium text-slate-700">Enable</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Provider</label>
+                            <select x-model="integrationsData.smtp.provider" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                <option value="smtp">SMTP (Custom)</option>
+                                <option value="sendgrid">SendGrid</option>
+                                <option value="mailgun">Mailgun</option>
+                                <option value="ses">AWS SES</option>
+                                <option value="postmark">Postmark</option>
+                            </select>
+                        </div>
+                        <!-- SMTP Fields -->
+                        <div x-show="integrationsData.smtp.provider === 'smtp'" class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">SMTP Host</label>
+                                <input type="text" x-model="integrationsData.smtp.host" placeholder="smtp.gmail.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">SMTP Port</label>
+                                <input type="number" x-model="integrationsData.smtp.port" placeholder="587" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                                <input type="text" x-model="integrationsData.smtp.username" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                                <input type="password" x-model="integrationsData.smtp.password" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Email</label>
+                                <input type="email" x-model="integrationsData.smtp.from_email" placeholder="noreply@company.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Name</label>
+                                <input type="text" x-model="integrationsData.smtp.from_name" placeholder="Company Name" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="integrationsData.smtp.use_tls" class="w-4 h-4 rounded border-slate-300 text-trust focus:ring-trust">
+                                    <span class="text-sm text-slate-700">Use TLS (Port 587)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <!-- SendGrid Fields -->
+                        <div x-show="integrationsData.smtp.provider === 'sendgrid'" class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+                                <input type="password" x-model="integrationsData.smtp.api_key" placeholder="SG.xxxxxxxx" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Email</label>
+                                <input type="email" x-model="integrationsData.smtp.from_email" placeholder="noreply@company.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Name</label>
+                                <input type="text" x-model="integrationsData.smtp.from_name" placeholder="Company Name" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                        <!-- Mailgun Fields -->
+                        <div x-show="integrationsData.smtp.provider === 'mailgun'" class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+                                <input type="password" x-model="integrationsData.smtp.api_key" placeholder="key-xxxxxx" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Domain</label>
+                                <input type="text" x-model="integrationsData.smtp.domain" placeholder="mg.company.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Email</label>
+                                <input type="email" x-model="integrationsData.smtp.from_email" placeholder="noreply@company.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Name</label>
+                                <input type="text" x-model="integrationsData.smtp.from_name" placeholder="Company Name" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                        <!-- AWS SES Fields -->
+                        <div x-show="integrationsData.smtp.provider === 'ses'" class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Access Key ID</label>
+                                <input type="text" x-model="integrationsData.smtp.access_key_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Secret Access Key</label>
+                                <input type="password" x-model="integrationsData.smtp.secret_access_key" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Region</label>
+                                <select x-model="integrationsData.smtp.region" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    <option value="us-east-1">US East (N. Virginia)</option>
+                                    <option value="us-west-2">US West (Oregon)</option>
+                                    <option value="eu-west-1">EU (Ireland)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Email</label>
+                                <input type="email" x-model="integrationsData.smtp.from_email" placeholder="noreply@company.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                        <!-- Postmark Fields -->
+                        <div x-show="integrationsData.smtp.provider === 'postmark'" class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Server API Token</label>
+                                <input type="password" x-model="integrationsData.smtp.api_token" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Email</label>
+                                <input type="email" x-model="integrationsData.smtp.from_email" placeholder="noreply@company.com" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">From Name</label>
+                                <input type="text" x-model="integrationsData.smtp.from_name" placeholder="Company Name" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Slack -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-orange-100">
+                                    <svg class="w-6 h-6 text-orange-600" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-900">Slack</h3>
+                                    <p class="text-sm text-slate-500">Send notifications to Slack</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-2 py-1 text-xs rounded-full" :class="integrationsData.slack.configured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'" x-text="integrationsData.slack.configured ? 'Configured' : 'Not Configured'"></span>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" x-model="integrationsData.slack.enabled" class="w-5 h-5 rounded border-slate-300 text-trust focus:ring-trust">
+                                    <span class="text-sm font-medium text-slate-700">Enable</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Webhook URL</label>
+                                <input type="url" x-model="integrationsData.slack.webhook_url" placeholder="https://hooks.slack.com/services/..." class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Channel</label>
+                                <input type="text" x-model="integrationsData.slack.channel" placeholder="#invoices" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3">
+                        <button @click="loadIntegrations()" class="px-6 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Reset</button>
+                        <button @click="saveIntegrations()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Integrations</button>
+                    </div>
+                </div>
+
+                <!-- KRA Settings -->
+                <div x-show="activeSection === 'kra'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <h3 class="font-semibold text-slate-900 mb-4">KRA eTIMS Configuration</h3>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Vendor ID</label>
+                                <input type="text" x-model="kra.vendor_id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+                                <input type="password" x-model="kra.api_key" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Mode</label>
+                                <select x-model="kra.live_mode" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+                                    <option :value="false">Sandbox (Test)</option>
+                                    <option :value="true">Live Production</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <div class="flex items-center gap-3">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" x-model="kra.enabled" class="w-5 h-5 rounded border-slate-300 text-trust focus:ring-trust">
+                                        <span class="text-sm font-medium text-slate-700">Enable KRA eTIMS</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-3">
+                        <button @click="saveKRA()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Changes</button>
                     </div>
                 </div>
             </div>
@@ -594,17 +1128,43 @@ function settingsContent() {
             { id: 'profile', label: 'Profile', icon: 'user', description: 'Account & security' },
             { id: 'invoice', label: 'Invoices', icon: 'file-text', description: 'Invoice settings' },
             { id: 'payment', label: 'Payments', icon: 'credit-card', description: 'M-Pesa & cards' },
+            { id: 'kra', label: 'KRA', icon: 'file-check', description: 'eTIMS Configuration' },
             { id: 'notifications', label: 'Notifications', icon: 'bell', description: 'Alert preferences' },
             { id: 'team', label: 'Team', icon: 'users', description: 'Manage users', badge: '0' },
-            { id: 'billing', label: 'Billing', icon: 'credit-card', description: 'Subscription' },
             { id: 'integrations', label: 'Integrations', icon: 'plug', description: 'Connect tools' },
         ],
         profile: { name: '', email: '', jobTitle: '', phone: '', twoFactorEnabled: false },
-        security: { loginAlerts: true },
+        security: { 
+            loginAlerts: true, 
+            twoFactorEnabled: false,
+            passwordStrength: 0,
+            lastPasswordChange: null,
+            activeSessions: 0 
+        },
+        showPasswordModal: false,
+        passwordForm: { current: '', new: '', confirm: '', loading: false, strength: 0, strengthMessage: 'Enter a password' },
+        showCurrentPassword: false,
+        showNewPassword: false,
+        showConfirmPassword: false,
+        
+        show2FASetupModal: false,
+        showDisable2FAModal: false,
+        twoFASetup: { qrCodeImage: '', secret: '', code: '', backupCodes: [], verified: false, loading: false },
+        disable2FAForm: { password: '', code: '', loading: false },
+        
+        sessions: [],
+        loginHistory: [],
         business: { name: '', email: '', phone: '', website: '', kra_pin: '', registrationNumber: '', industry: '', address: '', country: 'KE', timezone: 'Africa/Nairobi', logoUrl: '', brandColor: '#0277BD' },
         invoice: { prefix: 'INV', nextNumber: 1, currency: 'KES', defaultTaxRate: 16, paymentTerms: '30', allowPartialPayments: true, allowDiscounts: true, allowDeposits: false, autoNumber: true },
         notifications: { email: true, sms: false, whatsapp: false },
         payments: { mpesa: { enabled: true, consumerKey: '', consumerSecret: '', shortcode: '', businessShortcode: '' }, card: { enabled: false } },
+        kra: { vendor_id: '', api_key: '', live_mode: false, enabled: false },
+        integrationsData: {
+            whatsapp: { enabled: false, configured: false, phone_number_id: '', access_token: '', business_id: '' },
+            sms: { enabled: false, configured: false, provider: 'africastalking', api_key: '', api_secret: '', phone_number: '', short_code: '' },
+            smtp: { enabled: false, configured: false, provider: 'smtp', host: '', port: 587, username: '', password: '', from_email: '', from_name: '', use_tls: true, api_key: '', domain: '', access_key_id: '', secret_access_key: '', region: 'us-east-1', api_token: '' },
+            slack: { enabled: false, configured: false, webhook_url: '', channel: '' }
+        },
         teamMembers: [],
         billing: { plan: 'Free Plan', price: '$0/month', invoicesUsed: 0, invoicesLimit: 'Unlimited', clientsUsed: 0, clientsLimit: 'Unlimited', teamLimit: 1, storageUsed: '0', storageLimit: '1GB' },
         integrations: [],
@@ -635,20 +1195,90 @@ function settingsContent() {
                 if (data.invoice) this.invoice = { ...this.invoice, ...data.invoice };
                 if (data.notifications) this.notifications = { ...this.notifications, ...data.notifications };
                 if (data.payments) this.payments = { ...this.payments, ...data.payments };
+                if (data.kra) this.kra = { ...this.kra, ...data.kra };
                 this.teamMembers = data.team || [];
                 this.integrations = data.integrations || [];
-                this.billing = data.billing || this.billing;
+                this.billing = data.billing || this.calculateBillingStats();
+                await this.loadIntegrations();
+                await this.loadSecurityStatus();
+                await this.loadSessions();
+                this.calculateProfileComplete();
+                this.calculateSecurityScore();
             } catch(err) {
                 console.error('Failed to load settings:', err);
             }
         },
 
+        async loadIntegrations() {
+            try {
+                const integrations = await InvoiceFastAPI.integrations.getAll();
+                if (integrations && integrations.length > 0) {
+                    integrations.forEach(integration => {
+                        if (integration.provider === 'whatsapp') {
+                            this.integrationsData.whatsapp.enabled = integration.is_active;
+                            this.integrationsData.whatsapp.configured = integration.is_configured;
+                        } else if (integration.provider === 'sms') {
+                            this.integrationsData.sms.enabled = integration.is_active;
+                            this.integrationsData.sms.configured = integration.is_configured;
+                        } else if (integration.provider === 'smtp') {
+                            this.integrationsData.smtp.enabled = integration.is_active;
+                            this.integrationsData.smtp.configured = integration.is_configured;
+                        } else if (integration.provider === 'slack') {
+                            this.integrationsData.slack.enabled = integration.is_active;
+                            this.integrationsData.slack.configured = integration.is_configured;
+                        }
+                    });
+                }
+            } catch(err) {
+                console.error('Failed to load integrations:', err);
+            }
+        },
+
+        async saveIntegrations() {
+            try {
+                // Save WhatsApp
+                await InvoiceFastAPI.integrations.save('whatsapp', {
+                    name: 'WhatsApp',
+                    description: 'Send invoices via WhatsApp',
+                    config: this.integrationsData.whatsapp
+                });
+                // Save SMS
+                await InvoiceFastAPI.integrations.save('sms', {
+                    name: 'SMS',
+                    description: 'Send SMS notifications',
+                    config: this.integrationsData.sms
+                });
+                // Save SMTP
+                await InvoiceFastAPI.integrations.save('smtp', {
+                    name: 'Email SMTP',
+                    description: 'Send emails via SMTP',
+                    config: this.integrationsData.smtp
+                });
+                // Save Slack
+                await InvoiceFastAPI.integrations.save('slack', {
+                    name: 'Slack',
+                    description: 'Send notifications to Slack',
+                    config: this.integrationsData.slack
+                });
+                this.showToast('Integrations saved', 'success');
+            } catch(err) {
+                console.error('Failed to save integrations:', err);
+                this.showToast('Failed to save integrations: ' + err.message, 'error');
+            }
+        },
+
         async saveBusiness() {
             try {
-                await InvoiceFastAPI.settings.updateBusiness(this.business);
+                // Map frontend business fields to backend branding format
+                const branding = {
+                    company_name: this.business.name,
+                    logo_url: this.business.logoUrl,
+                    brand_color: this.business.brandColor
+                };
+                await InvoiceFastAPI.settings.updateBusiness(branding);
                 this.showToast('Business settings saved', 'success');
             } catch(err) {
-                this.showToast('Failed to save settings', 'error');
+                this.showToast('Failed to save settings: ' + err.message, 'error');
             }
         },
 
@@ -659,6 +1289,197 @@ function settingsContent() {
             } catch(err) {
                 this.showToast('Failed to save profile', 'error');
             }
+        },
+
+        async loadSecurityStatus() {
+            try {
+                const status = await InvoiceFastAPI.settings.getSecurityStatus();
+                this.security.twoFactorEnabled = status.two_factor_enabled;
+                this.security.loginAlerts = status.login_alert_enabled;
+                this.security.lastPasswordChange = status.password_changed_at ? this.timeAgo(status.password_changed_at) : null;
+                this.security.activeSessions = status.active_sessions || 0;
+                this.loginHistory = status.recent_logins || [];
+            } catch(err) {
+                console.error('Failed to load security status:', err);
+            }
+        },
+
+        async loadSessions() {
+            try {
+                this.sessions = await InvoiceFastAPI.settings.getSessions();
+            } catch(err) {
+                console.error('Failed to load sessions:', err);
+            }
+        },
+
+        async revokeSession(id) {
+            try {
+                await InvoiceFastAPI.settings.revokeSession(id);
+                this.sessions = this.sessions.filter(s => s.id !== id);
+                this.showToast('Session revoked', 'success');
+            } catch(err) {
+                this.showToast('Failed to revoke session', 'error');
+            }
+        },
+
+        async revokeAllSessions() {
+            try {
+                await InvoiceFastAPI.settings.revokeAllSessions();
+                this.sessions = this.sessions.filter(s => s.is_current);
+                this.showToast('All other sessions revoked', 'success');
+            } catch(err) {
+                this.showToast('Failed to revoke sessions', 'error');
+            }
+        },
+
+        async loadLoginHistory() {
+            try {
+                this.loginHistory = await InvoiceFastAPI.settings.getLoginHistory(20);
+            } catch(err) {
+                console.error('Failed to load login history:', err);
+            }
+        },
+
+        async toggleLoginAlerts() {
+            try {
+                this.security.loginAlerts = !this.security.loginAlerts;
+                await InvoiceFastAPI.settings.updateLoginAlerts(this.security.loginAlerts);
+                this.showToast('Login alerts ' + (this.security.loginAlerts ? 'enabled' : 'disabled'), 'success');
+            } catch(err) {
+                this.security.loginAlerts = !this.security.loginAlerts;
+                this.showToast('Failed to update login alerts', 'error');
+            }
+        },
+
+        async changePassword() {
+            if (this.passwordForm.new !== this.passwordForm.confirm) {
+                this.showToast('Passwords do not match', 'error');
+                return;
+            }
+            if (this.passwordForm.strength < 3) {
+                this.showToast('Please choose a stronger password', 'error');
+                return;
+            }
+            this.passwordForm.loading = true;
+            try {
+                await InvoiceFastAPI.settings.changePassword(this.passwordForm.current, this.passwordForm.new);
+                this.showPasswordModal = false;
+                this.passwordForm = { current: '', new: '', confirm: '', loading: false, strength: 0, strengthMessage: 'Enter a password' };
+                this.showToast('Password updated successfully', 'success');
+            } catch(err) {
+                this.showToast(err.message || 'Failed to change password', 'error');
+            } finally {
+                this.passwordForm.loading = false;
+            }
+        },
+
+        checkPasswordStrength() {
+            const pwd = this.passwordForm.new;
+            let score = 0;
+            if (pwd.length >= 8) score++;
+            if (pwd.length >= 12) score++;
+            if (/[A-Z]/.test(pwd)) score++;
+            if (/[0-9]/.test(pwd)) score++;
+            if (/[^A-Za-z0-9]/.test(pwd)) score++;
+            this.passwordForm.strength = Math.min(score, 4);
+            const messages = ['', 'Very Weak', 'Weak', 'Moderate', 'Strong', 'Very Strong'];
+            this.passwordForm.strengthMessage = messages[this.passwordForm.strength] || 'Very Strong';
+            this.security.passwordStrength = this.passwordForm.strength;
+        },
+
+        async init2FASetup() {
+            try {
+                const setup = await InvoiceFastAPI.settings.setup2FA();
+                this.twoFASetup = { qrCodeImage: setup.qr_code_image || setup.qr_code_url, secret: setup.secret, code: '', backupCodes: setup.backup_codes || [], verified: false, loading: false };
+                this.show2FASetupModal = true;
+            } catch(err) {
+                this.showToast('Failed to setup 2FA: ' + err.message, 'error');
+            }
+        },
+
+        async verify2FA() {
+            this.twoFASetup.loading = true;
+            try {
+                await InvoiceFastAPI.settings.verify2FA(this.twoFASetup.code);
+                this.twoFASetup.verified = true;
+                this.security.twoFactorEnabled = true;
+                this.showToast('Two-factor authentication enabled', 'success');
+            } catch(err) {
+                this.showToast('Invalid code: ' + err.message, 'error');
+            } finally {
+                this.twoFASetup.loading = false;
+            }
+        },
+
+        async disable2FA() {
+            this.disable2FAForm.loading = true;
+            try {
+                await InvoiceFastAPI.settings.disable2FA(this.disable2FAForm.password, this.disable2FAForm.code);
+                this.showDisable2FAModal = false;
+                this.security.twoFactorEnabled = false;
+                this.disable2FAForm = { password: '', code: '', loading: false };
+                this.showToast('Two-factor authentication disabled', 'success');
+            } catch(err) {
+                this.showToast('Failed to disable 2FA: ' + err.message, 'error');
+            } finally {
+                this.disable2FAForm.loading = false;
+            }
+        },
+
+        timeAgo(date) {
+            if (!date) return null;
+            const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+            const intervals = [
+                { label: 'year', seconds: 31536000 },
+                { label: 'month', seconds: 2592000 },
+                { label: 'week', seconds: 604800 },
+                { label: 'day', seconds: 86400 },
+                { label: 'hour', seconds: 3600 },
+                { label: 'minute', seconds: 60 },
+            ];
+            for (const i of intervals) {
+                const c = Math.floor(seconds / i.seconds);
+                if (c >= 1) return c + ' ' + i.label + (c !== 1 ? 's' : '') + ' ago';
+            }
+            return 'just now';
+        },
+
+        calculateProfileComplete() {
+            let score = 0;
+            const fields = [
+                this.business?.name,
+                this.business?.email,
+                this.business?.phone,
+                this.business?.address,
+                this.business?.kra_pin,
+                this.business?.registrationNumber,
+            ];
+            const filled = fields.filter(f => f && f.length > 0).length;
+            this.profileComplete = Math.round((filled / fields.length) * 100);
+        },
+
+        calculateSecurityScore() {
+            let score = 0;
+            if (this.profile?.twoFactorEnabled) score += 40;
+            if (this.security?.twoFactorEnabled) score += 40;
+            if (this.security?.loginAlerts) score += 20;
+            this.securityScore = score;
+        },
+
+        calculateBillingStats() {
+            const plan = this.billing?.plan || 'Free Plan';
+            const isFree = plan.toLowerCase().includes('free');
+            return {
+                plan: plan,
+                price: isFree ? '$0/month' : 'Custom',
+                invoicesUsed: this.billing?.invoicesUsed || 0,
+                invoicesLimit: isFree ? 'Unlimited' : 'Unlimited',
+                clientsUsed: this.billing?.clientsUsed || 0,
+                clientsLimit: isFree ? 'Unlimited' : 'Unlimited',
+                teamLimit: isFree ? 1 : 5,
+                storageUsed: '0',
+                storageLimit: isFree ? '1GB' : '10GB'
+            };
         },
 
         async saveInvoice() {
@@ -680,11 +1501,44 @@ function settingsContent() {
         },
 
         async saveNotifications() {
+            console.log('Saving notifications:', this.notifications);
+            const notificationsData = {
+                email: [
+                    { key: 'invoice_created', label: 'Invoice Created', enabled: Boolean(this.notifications.email) },
+                    { key: 'payment_received', label: 'Payment Received', enabled: Boolean(this.notifications.email) },
+                    { key: 'payment_due', label: 'Payment Due Reminder', enabled: Boolean(this.notifications.email) },
+                    { key: 'invoice_overdue', label: 'Invoice Overdue', enabled: Boolean(this.notifications.email) }
+                ],
+                sms: [
+                    { key: 'invoice_created', label: 'Invoice Created', enabled: Boolean(this.notifications.sms) },
+                    { key: 'payment_received', label: 'Payment Received', enabled: Boolean(this.notifications.sms) },
+                    { key: 'payment_due', label: 'Payment Due Reminder', enabled: Boolean(this.notifications.sms) }
+                ],
+                slack: [
+                    { key: 'invoice_created', label: 'Invoice Created', enabled: Boolean(this.notifications.whatsapp) },
+                    { key: 'payment_received', label: 'Payment Received', enabled: Boolean(this.notifications.whatsapp) }
+                ]
+            };
             try {
-                await InvoiceFastAPI.settings.updateNotifications(this.notifications);
+                await InvoiceFastAPI.settings.updateNotifications(notificationsData);
                 this.showToast('Notification settings saved', 'success');
             } catch(err) {
-                this.showToast('Failed to save settings', 'error');
+                console.error('Failed to save notifications:', err);
+                this.showToast('Failed to save settings: ' + err.message, 'error');
+            }
+        },
+
+        async saveKRA() {
+            try {
+                await InvoiceFastAPI.settings.saveKRA({
+                    vendor_id: this.kra.vendor_id,
+                    api_key: this.kra.api_key,
+                    live_mode: Boolean(this.kra.live_mode),
+                    enabled: Boolean(this.kra.enabled)
+                });
+                this.showToast('KRA settings saved', 'success');
+            } catch(err) {
+                this.showToast('Failed to save KRA settings: ' + err.message, 'error');
             }
         },
 
@@ -727,6 +1581,56 @@ function settingsContent() {
         showToast(message, type) {
             this.toast = { show: true, message, type };
             setTimeout(() => this.toast.show = false, 3000);
+        },
+
+        // Invite Modal
+        inviteModal: {
+            show: false,
+            email: '',
+            role: 'staff',
+            loading: false,
+
+            open() {
+                this.email = '';
+                this.role = 'staff';
+                this.show = true;
+            },
+
+            close() {
+                this.show = false;
+            },
+
+            async send() {
+                if (!this.email || !this.email.includes('@')) {
+                    this.$parent.showToast('Please enter a valid email', 'error');
+                    return;
+                }
+                this.loading = true;
+                try {
+                    await InvoiceFastAPI.team.invite({
+                        email: this.email,
+                        role: this.role
+                    });
+                    this.$parent.showToast('Invitation sent successfully', 'success');
+                    this.$parent.teamMembers.push({
+                        id: 'pending-' + Date.now(),
+                        email: this.email,
+                        name: this.email.split('@')[0],
+                        role: this.role,
+                        status: 'pending',
+                        lastActive: null
+                    });
+                    this.close();
+                } catch(err) {
+                    this.$parent.showToast('Failed to send invitation: ' + err.message, 'error');
+                } finally {
+                    this.loading = false;
+                }
+            }
+        },
+
+        openInviteModal() {
+            this.inviteModal.open();
         }
     };
 }
