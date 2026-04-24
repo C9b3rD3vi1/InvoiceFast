@@ -474,11 +474,23 @@ const InvoiceFastAPI = {
             if (endDate) params += '&end_date=' + endDate;
             return InvoiceFastAPI.request('/tenant/reports/client/' + clientID + '/statement' + params);
         },
-        
-        async export(format = 'csv', period = '30') {
+
+        async getClientRevenue(period = '30', limit = 10) {
+            return InvoiceFastAPI.request('/tenant/reports/clients/revenue?period=' + period + '&limit=' + limit);
+        },
+
+        async getFraudRisk(period = '30') {
+            return InvoiceFastAPI.request('/tenant/reports/fraud?period=' + period);
+        },
+
+        async getPaymentVerification(invoiceID) {
+            return InvoiceFastAPI.request('/tenant/reports/verification/' + invoiceID);
+        },
+
+        async exportData(format = 'csv', reportType = 'overview', period = '30') {
             const token = InvoiceFastAPI.getToken();
             if (token) {
-                window.location.href = '/api/v1/tenant/reports/export?format=' + format + '&period=' + period;
+                window.location.href = '/api/v1/tenant/reports/export?format=' + format + '&type=' + reportType + '&period=' + period;
             }
         },
     },
