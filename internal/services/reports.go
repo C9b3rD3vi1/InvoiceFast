@@ -86,9 +86,10 @@ func (s *ReportService) GetOverview(tenantID string, period string) (*ReportOver
 		result.RevenueChange = ((result.TotalRevenue - result.RevenueChange) / result.RevenueChange) * 100
 	}
 
-	// Pending (balance due on sent/viewed/partially_paid invoices)
+	// Pending (balance due on outstanding invoices - includes sent, viewed, partially_paid, overdue)
+	pendingStatuses := []string{"sent", "viewed", "partially_paid", "overdue"}
 	err = s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status IN ?", tenantID, []string{"sent", "viewed", "partially_paid"}).
+		Where("tenant_id = ? AND status IN ?", tenantID, pendingStatuses).
 		Select("COALESCE(SUM(balance_due), 0) as total").
 		Scan(&result.PendingAmount).Error
 	if err != nil {
@@ -96,7 +97,7 @@ func (s *ReportService) GetOverview(tenantID string, period string) (*ReportOver
 	}
 
 	err = s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status IN ?", tenantID, []string{"sent", "viewed", "partially_paid"}).
+		Where("tenant_id = ? AND status IN ?", tenantID, pendingStatuses).
 		Count(&result.PendingCount).Error
 	if err != nil {
 		return nil, err
@@ -990,8 +991,10 @@ func (s *ReportService) GetAdvancedDashboard(tenantID string, period string) (*A
 	}
 	report.CashFlow = report.NetProfit
 
+	// All outstanding invoices (sent, viewed, partially_paid, overdue)
+	pendingStatuses := []string{"sent", "viewed", "partially_paid", "overdue"}
 	s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status IN ('sent', 'viewed', 'partially_paid')", tenantID).
+		Where("tenant_id = ? AND status IN ?", tenantID, pendingStatuses).
 		Select("COALESCE(SUM(total - paid_amount), 0)").
 		Scan(&report.PendingAmount)
 
