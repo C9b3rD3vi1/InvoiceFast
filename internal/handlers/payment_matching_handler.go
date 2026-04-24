@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
@@ -266,7 +267,17 @@ func (h *PaymentMatchingHandler) GetStats(c *fiber.Ctx) error {
 		stats["pending_amount"] = pendingAmount
 	}
 
-	stats["fraud_alerts"] = 0
+	// Fraud alerts: count failed payments in last 30 days as potential fraud indicators
+	var fraudCount int64
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+	err = db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'failed' AND created_at > ?", tenantID, thirtyDaysAgo).
+		Count(&fraudCount).Error
+	if err == nil {
+		stats["fraud_alerts"] = fraudCount
+	} else {
+		stats["fraud_alerts"] = 0
+	}
 
 	return c.JSON(stats)
 }
