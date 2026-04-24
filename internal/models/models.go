@@ -486,12 +486,14 @@ func CalculateLineItemTax(quantity, unitPrice, discountRate, discountAmt, taxRat
 
 // InvoiceItem represents a line item in an invoice
 type InvoiceItem struct {
-	ID           string   `json:"id" gorm:"type:uuid;primaryKey"`
-	InvoiceID    string   `json:"invoice_id" gorm:"type:uuid;index;not null"`
-	Description  string   `json:"description" gorm:"not null"`
-	Quantity     float64  `json:"quantity" gorm:"default:1"`
-	UnitPrice    float64  `json:"unit_price" gorm:"not null"` // Unit price before tax/discount
-	Unit         string   `json:"unit"`                         // e.g., "hours", "items", "pieces"
+	ID             string   `json:"id" gorm:"type:uuid;primaryKey"`
+	InvoiceID      string   `json:"invoice_id" gorm:"type:uuid;index;not null"`
+	Description    string   `json:"description" gorm:"not null"`
+	ItemCode       string   `json:"item_code" gorm:"type:varchar(100)"`       // KRA item code
+	ItemDescription string `json:"item_description" gorm:"type:varchar(500)"` // KRA item description
+	Quantity      float64  `json:"quantity" gorm:"default:1"`
+	UnitPrice     float64  `json:"unit_price" gorm:"not null"` // Unit price before tax/discount
+	Unit          string   `json:"unit"`                     // e.g., "hours", "items", "pieces"
 
 	// Tax per line item
 	TaxType   TaxType  `json:"tax_type" gorm:"default:'standard'"`
