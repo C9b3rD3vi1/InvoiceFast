@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -371,6 +372,79 @@ func (s *ReportService) GetClients(tenantID string, period string) ([]RevenueDat
 	return results, nil
 }
 
+type TopClientRevenue struct {
+	ClientID   string  `json:"client_id"`
+	Name      string  `json:"name"`
+	Email     string  `json:"email"`
+	Revenue   float64 `json:"revenue"`
+	Invoices  int64   `json:"invoices"`
+	Outstanding float64 `json:"outstanding"`
+	TotalInvoices int64   `json:"total_invoices"`
+}
+
+func (s *ReportService) GetClientRevenueReport(tenantID string, period string, limit int) ([]TopClientRevenue, error) {
+	start, end := s.getDateRange(period)
+
+	if limit <= 0 {
+		limit = 10
+	}
+
+	var results []TopClientRevenue
+
+	err := s.db.Model(&models.Invoice{}).
+		Select("client_id, SUM(paid_amount) as revenue, COUNT(*) as invoices").
+		Where("tenant_id = ? AND created_at BETWEEN ? AND ? AND client_id != ''", tenantID, start, end).
+		Group("client_id").
+		Order("revenue DESC").
+		Limit(limit).
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range results {
+		var client models.Client
+		s.db.First(&client, "id = ?", results[i].ClientID)
+		results[i].Name = client.Name
+		results[i].Email = client.Email
+
+		var outstanding float64
+		s.db.Model(&models.Invoice{}).
+			Where("tenant_id = ? AND client_id = ? AND balance_due > 0", tenantID, results[i].ClientID).
+			Select("COALESCE(SUM(balance_due), 0)").
+			Scan(&outstanding)
+		results[i].Outstanding = outstanding
+	}
+
+	return results, nil
+}
+
+type ClientPaymentBehavior struct {
+	ClientID      string  `json:"client_id"`
+	Name         string  `json:"name"`
+	OnTimeCount  int64   `json:"on_time_count"`
+	LateCount    int64   `json:"late_count"`
+	AvgDaysLate  float64 `json:"avg_days_late"`
+	PaymentRate float64 `json:"payment_rate"`
+}
+
+func (s *ReportService) GetClientPaymentBehavior(tenantID string) ([]ClientPaymentBehavior, error) {
+	var results []ClientPaymentBehavior
+
+	err := s.db.Model(&models.Invoice{}).
+		Select("client_id, COUNT(*) as on_time_count").
+		Where("tenant_id = ? AND status = 'paid' AND paid_at <= due_date", tenantID).
+		Group("client_id").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
 func (s *ReportService) GetClientStats(tenantID string, period string) (map[string]interface{}, error) {
 	start, end := s.getDateRange(period)
 
@@ -493,22 +567,97 @@ func (s *ReportService) GetVATReport(tenantID, period string) (*VATReport, error
 	return report, nil
 }
 
-func (s *ReportService) ExportReport(tenantID, format, period string) ([]byte, error) {
-	overview, err := s.GetOverview(tenantID, period)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get overview: %w", err)
+func (s *ReportService) ExportReport(tenantID, format, reportType, period string) ([]byte, error) {
+	var data interface{}
+	var err error
+
+	switch reportType {
+	case "overview":
+		data, err = s.GetOverview(tenantID, period)
+	case "revenue":
+		data, err = s.GetRevenue(tenantID, period)
+	case "invoices":
+		data, err = s.GetInvoiceStats(tenantID, period)
+	case "payments":
+		data, err = s.GetPaymentStats(tenantID, period)
+	case "clients":
+		data, err = s.GetClientRevenueReport(tenantID, period, 50)
+	case "tax":
+		data, err = s.GetVATReport(tenantID, period)
+	case "aging":
+		data, err = s.GetAgingReport(tenantID)
+	case "fraud":
+		data, err = s.GetFraudRiskReport(tenantID, period)
+	default:
+		data, err = s.GetOverview(tenantID, period)
 	}
 
-	// Simple CSV export
-	csv := "Metric,Value\n"
-	csv += fmt.Sprintf("Total Revenue,%.2f\n", overview.TotalRevenue)
-	csv += fmt.Sprintf("Paid Invoices,%d\n", overview.PaidCount)
-	csv += fmt.Sprintf("Pending Invoices,%d\n", overview.PendingCount)
-	csv += fmt.Sprintf("Overdue Invoices,%d\n", overview.OverdueCount)
-	csv += fmt.Sprintf("Total Clients,%d\n", overview.TotalClients)
-	csv += fmt.Sprintf("Tax Collected,%.2f\n", overview.GSTCollected)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get %s report: %w", reportType, err)
+	}
 
-	return []byte(csv), nil
+	return s.formatExport(data, format, reportType)
+}
+
+func (s *ReportService) formatExport(data interface{}, format, reportType string) ([]byte, error) {
+	switch format {
+	case "csv":
+		return s.toCSV(data, reportType)
+	case "json":
+		return s.toJSON(data)
+	case "excel":
+		return s.toCSV(data, reportType) // Excel-compatible CSV
+	default:
+		return s.toJSON(data)
+	}
+}
+
+func (s *ReportService) toCSV(data interface{}, reportType string) ([]byte, error) {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Generated: %s", time.Now().Format("2006-01-02 15:04:05")))
+	lines = append(lines, fmt.Sprintf("Report: %s", reportType))
+	lines = append(lines, "")
+
+	switch v := data.(type) {
+	case *ReportOverview:
+		lines = append(lines, "Metric,Value")
+		lines = append(lines, fmt.Sprintf("Total Revenue,%.2f", v.TotalRevenue))
+		lines = append(lines, fmt.Sprintf("Revenue Change,%.2f%%", v.RevenueChange))
+		lines = append(lines, fmt.Sprintf("Paid Invoices,%d", v.PaidCount))
+		lines = append(lines, fmt.Sprintf("Pending Invoices,%d", v.PendingCount))
+		lines = append(lines, fmt.Sprintf("Pending Amount,%.2f", v.PendingAmount))
+		lines = append(lines, fmt.Sprintf("Overdue Invoices,%d", v.OverdueCount))
+		lines = append(lines, fmt.Sprintf("Overdue Amount,%.2f", v.OverdueAmount))
+		lines = append(lines, fmt.Sprintf("Total Clients,%d", v.TotalClients))
+
+	case []TopClientRevenue:
+		lines = append(lines, "Client,Email,Revenue,Invoices,Outstanding")
+		for _, c := range v {
+			lines = append(lines, fmt.Sprintf("%s,%s,%.2f,%d,%.2f", c.Name, c.Email, c.Revenue, c.Invoices, c.Outstanding))
+		}
+
+	case *FraudRiskReport:
+		lines = append(lines, "Metric,Value")
+		lines = append(lines, fmt.Sprintf("Failed Payments,%d", v.FailedPayments))
+		lines = append(lines, fmt.Sprintf("Failed Amount,%.2f", v.FailedAmount))
+		lines = append(lines, fmt.Sprintf("Flagged,%d", v.FlaggedCount))
+		for _, p := range v.SuspiciousPatterns {
+			lines = append(lines, fmt.Sprintf("Pattern,%s", p))
+		}
+
+	default:
+		lines = append(lines, "Use JSON format for full data export")
+	}
+
+	output := ""
+	for _, line := range lines {
+		output += line + "\n"
+	}
+	return []byte(output), nil
+}
+
+func (s *ReportService) toJSON(data interface{}) ([]byte, error) {
+	return json.MarshalIndent(data, "", "  ")
 }
 
 type AgingReport struct {
@@ -770,19 +919,19 @@ type AdvancedDashboard struct {
 	OverdueCount  int64          `json:"overdue_count"`
 	TotalClients   int64          `json:"total_clients"`
 	NewClients    int64          `json:"new_clients"`
-	TopClients    []TopClient    `json:"top_clients"`
+	TopClients    []ClientRevenueReport `json:"top_clients"`
 	Insights     []string       `json:"insights"`
 	Forecasts     Forecast       `json:"forecasts"`
 	MonthlyTrend  []MonthData    `json:"monthly_trend"`
 	ExpenseBreakdown []CategoryAmt `json:"expense_breakdown"`
 }
 
-type TopClient struct {
+type ClientRevenueReport struct {
 	ClientID   string  `json:"client_id"`
 	ClientName string  `json:"client_name"`
-	Revenue   float64 `json:"revenue"`
-	Percent  float64 `json:"percent"`
-	Invoices int64   `json:"invoices"`
+	Revenue    float64 `json:"revenue"`
+	Percent   float64 `json:"percent"`
+	Invoices  int64   `json:"invoices"`
 }
 
 type Forecast struct {
@@ -899,7 +1048,7 @@ func (s *ReportService) GetAdvancedDashboard(tenantID string, period string) (*A
 		if totalClientRevenue > 0 {
 			percent = math.Round((c.Revenue/totalClientRevenue)*10000) / 100
 		}
-		report.TopClients = append(report.TopClients, TopClient{
+		report.TopClients = append(report.TopClients, ClientRevenueReport{
 			ClientID: c.ClientID,
 			ClientName: name,
 			Revenue: c.Revenue,
@@ -1226,4 +1375,121 @@ func (s *ReportService) GetTaxSummaryDetailed(tenantID string, period string) (*
 	summary.TotalTaxDue = summary.VATLiability
 
 	return summary, nil
+}
+
+type FraudRiskReport struct {
+	FailedPayments   int64               `json:"failed_payments"`
+	FailedAmount  float64             `json:"failed_amount"`
+	FlaggedCount int64               `json:"flagged_count"`
+	RiskDistribution map[string]int64 `json:"risk_distribution"`
+	SuspectCount int64             `json:"suspect_count"`
+	SuspiciousPatterns []string      `json:"suspicious_patterns"`
+}
+
+func (s *ReportService) GetFraudRiskReport(tenantID string, period string) (*FraudRiskReport, error) {
+	start, end := s.getDateRange(period)
+
+	report := &FraudRiskReport{
+		RiskDistribution: make(map[string]int64),
+	}
+
+	// Failed payments
+	var failed struct {
+		Count  int64
+		Amount float64
+	}
+	err := s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'failed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Select("COUNT(*) as count, COALESCE(SUM(amount), 0) as amount").
+		Scan(&failed)
+	if err == nil {
+		report.FailedPayments = failed.Count
+		report.FailedAmount = failed.Amount
+	}
+
+	// Risk distribution by score buckets
+	riskBuckets := []struct {
+		Bucket string
+		Count int64
+	}{
+		{"low", 0},
+		{"medium", 0},
+		{"high", 0},
+		{"critical", 0},
+	}
+
+	for i := range riskBuckets {
+		var count int64
+		s.db.Model(&models.Payment{}).
+			Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, start, end).
+			Count(&count)
+		riskBuckets[i].Count = count
+		report.RiskDistribution[riskBuckets[i].Bucket] = count
+	}
+
+	// Failed payments (risk indicator)
+	err = s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'failed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Count(&report.FlaggedCount)
+
+	// Suspicious patterns detection
+	suspiciousPatterns := []string{}
+
+	var duplicateRefs int64
+	s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Select("reference, COUNT(*) as count").
+		Group("reference").
+		Having("count > 1").
+		Count(&duplicateRefs)
+	if duplicateRefs > 0 {
+		suspiciousPatterns = append(suspiciousPatterns, fmt.Sprintf("Duplicate reference numbers: %d", duplicateRefs))
+	}
+
+	var unusualAmounts int64
+	s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND amount > 1000000 AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Count(&unusualAmounts)
+	if unusualAmounts > 0 {
+		suspiciousPatterns = append(suspiciousPatterns, fmt.Sprintf("Unusual high amounts: %d", unusualAmounts))
+	}
+
+	report.SuspiciousPatterns = suspiciousPatterns
+	report.FlaggedCount = report.FailedPayments
+
+	return report, nil
+}
+
+func (s *ReportService) GetPaymentVerification(tenantID string, invoiceID string) (map[string]interface{}, error) {
+	verification := make(map[string]interface{})
+
+	var invoice models.Invoice
+	if err := s.db.First(&invoice, "id = ?", invoiceID).Error; err != nil {
+		return nil, err
+	}
+
+	verification["invoice_total"] = invoice.Total
+	verification["invoice_paid"] = invoice.PaidAmount
+	verification["invoice_balance"] = invoice.BalanceDue
+	verification["invoice_status"] = invoice.Status
+
+	var payments []models.Payment
+	s.db.Model(&models.Payment{}).
+		Where("invoice_id = ?", invoiceID).
+		Order("created_at DESC").
+		Find(&payments)
+
+	verification["payment_count"] = len(payments)
+	verification["payments"] = payments
+
+	var paidViaPayments float64
+	for _, p := range payments {
+		if p.Status == models.PaymentStatusCompleted {
+			paidViaPayments += p.Amount
+		}
+	}
+	verification["paid_via_payments"] = paidViaPayments
+	verification["reconciliation_match"] = math.Abs(invoice.PaidAmount-paidViaPayments) < 0.01
+
+	return verification, nil
 }

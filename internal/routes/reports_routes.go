@@ -29,6 +29,14 @@ func ReportRoutes(app *fiber.App, h *handlers.ReportHandler, authService *servic
 	group.Get("/clients", h.GetClients)
 	group.Get("/expenses", h.GetExpensesReport)
 
+	// Client Reports
+	group.Get("/clients/revenue", h.GetClientRevenue)
+	group.Get("/clients/:clientID/behavior", h.GetClientBehavior)
+
+	// Fraud & Risk
+	group.Get("/fraud", h.GetFraudRisk)
+	group.Get("/verification/:invoiceID", h.GetPaymentVerification)
+
 	// Aging & Tax
 	group.Get("/tax", h.GetTax)
 	group.Get("/vat", h.GetVATReport)
