@@ -100,34 +100,37 @@ func (s *PaymentMatchingService) GetPayments(tenantID string, filter PaymentFilt
 		var client models.Client
 		var clientName, invoiceNumber string
 
-		s.db.First(&invoice, "id = ?", p.InvoiceID)
-		if invoice.ClientID != "" {
-			s.db.First(&client, "id = ?", invoice.ClientID)
-			clientName = client.Name
-		}
-		if invoice.ID != "" {
-			invoiceNumber = invoice.InvoiceNumber
+		// Use tenant filter for tenant-scoped queries
+		if p.InvoiceID != "" {
+			s.db.First(&invoice, "id = ? AND tenant_id = ?", p.InvoiceID, tenantID)
+			if invoice.ID != "" && invoice.ClientID != "" {
+				s.db.First(&client, "id = ? AND tenant_id = ?", invoice.ClientID, tenantID)
+				if client.ID != "" {
+					clientName = client.Name
+				}
+				invoiceNumber = invoice.InvoiceNumber
+			}
 		}
 
 		reconciled := p.InvoiceID != "" && p.Status == models.PaymentStatusCompleted
 
 		result[i] = map[string]interface{}{
-			"id":             p.ID,
-			"tenant_id":      p.TenantID,
-			"invoice_id":     p.InvoiceID,
-			"client_id":      invoice.ClientID,
-			"client_name":    clientName,
-			"invoice_number": invoiceNumber,
-			"amount":         p.Amount,
-			"fee":            0.0,
-			"currency":       p.Currency,
-			"method":         p.Method,
-			"status":         p.Status,
-			"reference":      p.Reference,
-			"phone_number":   p.PhoneNumber,
-			"created_at":     p.CreatedAt,
-			"completed_at":   p.CompletedAt,
-			"reconciled":     reconciled,
+			"id":              p.ID,
+			"tenant_id":       p.TenantID,
+			"user_id":         p.UserID,
+			"invoice_id":      p.InvoiceID,
+			"client_id":       invoice.ClientID,
+			"client_name":      clientName,
+			"invoice_number":  invoiceNumber,
+			"amount":          p.Amount,
+			"currency":        p.Currency,
+			"method":          p.Method,
+			"status":          string(p.Status),
+			"reference":       p.Reference,
+			"phone_number":    p.PhoneNumber,
+			"created_at":      p.CreatedAt,
+			"completed_at":    p.CompletedAt,
+			"reconciled":      reconciled,
 		}
 	}
 
