@@ -98,9 +98,16 @@ func (s *PaymentMatchingService) GetPayments(tenantID string, filter PaymentFilt
 	for i, p := range payments {
 		var invoice models.Invoice
 		var client models.Client
+		var clientName, invoiceNumber string
 
-		s.db.First(&invoice, p.InvoiceID)
-		s.db.First(&client, invoice.ClientID)
+		s.db.First(&invoice, "id = ?", p.InvoiceID)
+		if invoice.ClientID != "" {
+			s.db.First(&client, "id = ?", invoice.ClientID)
+			clientName = client.Name
+		}
+		if invoice.ID != "" {
+			invoiceNumber = invoice.InvoiceNumber
+		}
 
 		reconciled := p.InvoiceID != "" && p.Status == models.PaymentStatusCompleted
 
@@ -109,8 +116,8 @@ func (s *PaymentMatchingService) GetPayments(tenantID string, filter PaymentFilt
 			"tenant_id":      p.TenantID,
 			"invoice_id":     p.InvoiceID,
 			"client_id":      invoice.ClientID,
-			"client_name":    client.Name,
-			"invoice_number": invoice.InvoiceNumber,
+			"client_name":    clientName,
+			"invoice_number": invoiceNumber,
 			"amount":         p.Amount,
 			"fee":            0.0,
 			"currency":       p.Currency,
