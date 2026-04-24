@@ -94,11 +94,11 @@
                     <template x-for="payment in payments" :key="payment.id">
                         <tr class="hover:bg-slate-50/50">
                             <td class="px-6 py-4">
-                                <p class="font-medium text-slate-900" x-text="payment.invoice?.invoice_number || '-'">-</p>
+                                <p class="font-medium text-slate-900" x-text="payment.invoice_number || '-'">-</p>
                                 <p class="text-xs text-slate-500" x-text="payment.reference || '-'">-</p>
                             </td>
                             <td class="px-6 py-4">
-                                <p class="text-sm text-slate-900" x-text="payment.invoice?.client?.name || payment.phone_number || '-'">-</p>
+                                <p class="text-sm text-slate-900" x-text="payment.client_name || payment.phone_number || '-'">-</p>
                             </td>
                             <td class="px-6 py-4 text-right font-medium" x-text="formatCurrency(payment.amount)">KES 0</td>
                             <td class="px-6 py-4">
@@ -106,21 +106,16 @@
                             </td>
                             <td class="px-6 py-4">
                                 <span class="px-2 py-1 rounded-full text-xs font-medium" :class="getStatusClass(payment.status)" x-text="payment.status">-</span>
-                                <template x-if="payment.fraud_score > 30">
-                                    <span class="ml-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">Fraud</span>
-                                </template>
                             </td>
                             <td class="px-6 py-4 text-sm text-slate-500" x-text="formatDate(payment.created_at)">-</td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-2">
-                                    <template x-if="payment.status === 'pending'">
-                                        <button @click="initiatePayment(payment)" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Retry Payment">
-                                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                                        </button>
+                                    <template x-if="payment.reconciled">
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Matched</span>
                                     </template>
-                                    <template x-if="payment.status === 'success'">
-                                        <button class="p-2 text-slate-600 hover:bg-slate-50 rounded-lg" title="View Details">
-                                            <i data-lucide="eye" class="w-4 h-4"></i>
+                                    <template x-if="!payment.reconciled && payment.status === 'completed'">
+                                        <button @click="viewPayment(payment)" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Match Payment">
+                                            <i data-lucide="link" class="w-4 h-4"></i>
                                         </button>
                                     </template>
                                 </div>
@@ -232,6 +227,12 @@ function paymentsDashboard() {
             }
         },
 
+        async viewPayment(payment) {
+            if (payment.invoice_id) {
+                window.location.href = '/invoices/' + payment.invoice_id;
+            }
+        },
+
         prevPage() {
             this.offset = Math.max(0, this.offset - this.limit);
             this.loadPayments();
@@ -285,6 +286,7 @@ function paymentsDashboard() {
         getStatusClass(status) {
             const classes = {
                 'success': 'bg-green-100 text-green-700',
+                'completed': 'bg-green-100 text-green-700',
                 'pending': 'bg-amber-100 text-amber-700',
                 'failed': 'bg-red-100 text-red-700'
             };
