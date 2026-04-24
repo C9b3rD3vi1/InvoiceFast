@@ -125,14 +125,15 @@ type KRABuyer struct {
 type KRAItem struct {
 	ItemCode               string  `json:"itemCode"`
 	ItemDescription        string  `json:"itemDescription"`
-	Quantity               float64 `json:"quantity"`
-	UnitOfMeasure          string  `json:"unitOfMeasure"`
-	UnitPrice              float64 `json:"unitPrice"`
-	Total                  float64 `json:"total"`
-	Discount               float64 `json:"discount"`
-	ExciseDuty             float64 `json:"exciseDuty"`
-	VATRate                float64 `json:"vatRate"`
-	VATAmount              float64 `json:"vatAmount"`
+	Quantity              float64 `json:"quantity"`
+	UnitOfMeasure         string  `json:"unitOfMeasure"`
+	UnitPrice             float64 `json:"unitPrice"`
+	Total                float64 `json:"total"`
+	Discount             float64 `json:"discount"`
+	DiscountRate         float64 `json:"discountRate"`
+	ExciseDuty            float64 `json:"exciseDuty"`
+	VATRate              float64 `json:"vatRate"`
+	VATAmount            float64 `json:"vatAmount"`
 	ItemClassificationCode string  `json:"itemClassificationCode"`
 }
 
