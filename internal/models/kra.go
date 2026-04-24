@@ -45,14 +45,16 @@ type KRABuyer struct {
 
 // KRAItem represents a line item
 type KRAItem struct {
-	ID            string  `json:"id" db:"id"`
-	InvoiceID     string  `json:"invoice_id" db:"invoice_id"`
-	ItemCode      string  `json:"item_code" db:"item_code"`
+	ID             string  `json:"id" db:"id"`
+	InvoiceID      string  `json:"invoice_id" db:"invoice_id"`
+	ItemCode       string  `json:"item_code" db:"item_code"`
 	Description   string  `json:"description" db:"description"`
+	ItemDescription string `json:"item_description" db:"item_description"`
 	Quantity      float64 `json:"quantity" db:"quantity"`
 	UnitOfMeasure string  `json:"unit_of_measure" db:"unit_of_measure"`
 	UnitPrice     float64 `json:"unit_price" db:"unit_price"`
 	Discount      float64 `json:"discount" db:"discount"`
+	DiscountRate  float64 `json:"discount_rate" db:"discount_rate"`
 	TaxRate       float64 `json:"tax_rate" db:"tax_rate"`
 	TaxAmount     float64 `json:"tax_amount" db:"tax_amount"`
 	TotalAmount   float64 `json:"total_amount" db:"total_amount"`

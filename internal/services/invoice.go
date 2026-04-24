@@ -93,7 +93,7 @@ func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateServ
 	}
 }
 
-// CreateInvoice creates a new invoice with items (tenant-scoped)
+// CreateInvoice creates a new invoice with kraPayloadItems (tenant-scoped)
 func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *CreateInvoiceRequest) (*models.Invoice, error) {
 	// Validate tenant
 	if tenantID == "" {
@@ -114,14 +114,14 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		return nil, fmt.Errorf("failed to find client: %w", err)
 	}
 
-	// Validate items
+	// Validate kraPayloadItems
 	if len(req.Items) == 0 {
 		return nil, ErrEmptyItems
 	}
 
 	// Calculate totals
 	var subtotal float64
-	var items []models.InvoiceItem
+	var kraPayloadItems []models.InvoiceItem
 	for i, item := range req.Items {
 		// Validate individual item
 		if item.Quantity < 0 {
@@ -158,7 +158,7 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		lineTotal := lineSubtotalAfterDiscount + itemTaxAmt
 
 		subtotal += lineTotal
-		items = append(items, models.InvoiceItem{
+		kraPayloadItems = append(kraPayloadItems, models.InvoiceItem{
 			ID:           uuid.New().String(),
 			Description:  strings.TrimSpace(item.Description),
 			Quantity:     item.Quantity,
@@ -268,16 +268,16 @@ magicTokenExpires := time.Now().AddDate(0, 3, 0)
 			return fmt.Errorf("failed to create invoice: %w", err)
 		}
 
-		// Add items
-		for i := range items {
-			items[i].InvoiceID = invoice.ID
+		// Add kraPayloadItems
+		for i := range kraPayloadItems {
+			kraPayloadItems[i].InvoiceID = invoice.ID
 		}
-		if err := tx.Create(&items).Error; err != nil {
-			return fmt.Errorf("failed to create invoice items: %w", err)
+		if err := tx.Create(&kraPayloadItems).Error; err != nil {
+			return fmt.Errorf("failed to create invoice kraPayloadItems: %w", err)
 		}
 
 		// Validate totals before committing
-		if err := models.ValidateInvoiceTotals(invoice, items); err != nil {
+		if err := models.ValidateInvoiceTotals(invoice, kraPayloadItems); err != nil {
 			return fmt.Errorf("invoice totals validation failed: %w", err)
 		}
 
@@ -288,7 +288,7 @@ magicTokenExpires := time.Now().AddDate(0, 3, 0)
 		return nil, err
 	}
 
-	invoice.Items = items
+	invoice.Items = kraPayloadItems
 	invoice.Client = *client
 
 	return invoice, nil
@@ -570,8 +570,8 @@ func (s *InvoiceService) UpdateInvoice(tenantID, invoiceID string, req *UpdateIn
 	return invoice, nil
 }
 
-// UpdateInvoiceItems updates invoice items (tenant-scoped)
-func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, items []InvoiceItemRequest) (*models.Invoice, error) {
+// UpdateInvoiceItems updates invoice kraPayloadItems (tenant-scoped)
+func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, kraPayloadItems []InvoiceItemRequest) (*models.Invoice, error) {
 	if tenantID == "" {
 		return nil, ErrTenantRequired
 	}
@@ -586,22 +586,22 @@ func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, items []
 		return nil, ErrCannotEditPaid
 	}
 
-	// Validate items
-	if len(items) == 0 {
+	// Validate kraPayloadItems
+	if len(kraPayloadItems) == 0 {
 		return nil, ErrEmptyItems
 	}
 
 	// Use transaction
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// Delete existing items
+		// Delete existing kraPayloadItems
 		if err := tx.Where("invoice_id = ?", invoiceID).Delete(&models.InvoiceItem{}).Error; err != nil {
-			return fmt.Errorf("failed to delete items: %w", err)
+			return fmt.Errorf("failed to delete kraPayloadItems: %w", err)
 		}
 
-		// Create new items
+		// Create new kraPayloadItems
 		var newItems []models.InvoiceItem
 		var subtotal float64
-		for i, item := range items {
+		for i, item := range kraPayloadItems {
 			if item.Quantity < 0 {
 				return ErrInvalidQuantity
 			}
@@ -646,7 +646,7 @@ func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, items []
 		}
 
 		if err := tx.Create(&newItems).Error; err != nil {
-			return fmt.Errorf("failed to create items: %w", err)
+			return fmt.Errorf("failed to create kraPayloadItems: %w", err)
 		}
 
 		// Update invoice totals
@@ -734,8 +734,25 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 			s.db.Scopes(database.TenantFilter(tenantID)).First(&usr, "id = ?", userID)
 
 			// Build KRA data using the service's format
-			items := make([]KRAItem, 0)
-			s.db.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items)
+			dbItems := make([]models.InvoiceItem, 0)
+			s.db.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&dbItems)
+
+			// Convert to KRAItem format
+			kraPayloadItems := make([]KRAItem, len(dbItems))
+			for i, item := range dbItems {
+				kraPayloadItems[i] = KRAItem{
+					ItemCode:        item.ItemCode,
+					ItemDescription: item.Description,
+					Quantity:      item.Quantity,
+					UnitOfMeasure:  item.Unit,
+					UnitPrice:    item.UnitPrice,
+					Discount:     item.DiscountAmt,
+					DiscountRate: item.DiscountRate,
+					VATRate:      item.TaxRate,
+					VATAmount:    item.TaxAmount,
+					Total:       item.Total,
+				}
+			}
 
 			kraData := &KRAInvoiceData{
 				InvoiceNumber: invoiceNum,
@@ -753,7 +770,7 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 					ContactEmail:       cli.Email,
 					RegistrationNumber: cli.KRAPIN,
 				},
-				Items:             items,
+				Items:             kraPayloadItems,
 				SubTotal:          subtotal,
 				TotalExcludingVAT: subtotal - discount,
 				VATRate:           taxRate,
@@ -1450,7 +1467,7 @@ func generateDebitNoteNumber(userID string) string {
 }
 
 // CreateCreditNote creates a credit note from an original invoice
-func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID string, items []CreateCreditNoteItem) (*models.Invoice, error) {
+func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID string, kraPayloadItems []CreateCreditNoteItem) (*models.Invoice, error) {
 	original, err := s.GetInvoiceByID(tenantID, originalInvoiceID)
 	if err != nil {
 		return nil, fmt.Errorf("original invoice not found: %w", err)
@@ -1458,7 +1475,7 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 
 	var creditItems []models.InvoiceItem
 	var subtotal float64
-	for i, item := range items {
+	for i, item := range kraPayloadItems {
 		lineTotal := item.Quantity * item.UnitPrice
 		subtotal += lineTotal
 		creditItems = append(creditItems, models.InvoiceItem{
@@ -1518,7 +1535,7 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 			creditItems[i].InvoiceID = creditNote.ID
 		}
 		if err := tx.Create(&creditItems).Error; err != nil {
-			return fmt.Errorf("failed to create credit note items: %w", err)
+			return fmt.Errorf("failed to create credit note kraPayloadItems: %w", err)
 		}
 		return nil
 	})
@@ -1547,7 +1564,7 @@ type CreateDebitNoteItem struct {
 
 // CreateDebitNote creates a debit note from an original invoice
 // Debit notes are used when additional charges need to be billed (e.g., extra services)
-func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID string, items []CreateDebitNoteItem) (*models.Invoice, error) {
+func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID string, kraPayloadItems []CreateDebitNoteItem) (*models.Invoice, error) {
 	original, err := s.GetInvoiceByID(tenantID, originalInvoiceID)
 	if err != nil {
 		return nil, fmt.Errorf("original invoice not found: %w", err)
@@ -1555,7 +1572,7 @@ func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID str
 
 	var debitItems []models.InvoiceItem
 	var subtotal float64
-	for i, item := range items {
+	for i, item := range kraPayloadItems {
 		lineTotal := item.Quantity * item.UnitPrice
 		subtotal += lineTotal
 		debitItems = append(debitItems, models.InvoiceItem{
@@ -1615,7 +1632,7 @@ func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID str
 			debitItems[i].InvoiceID = debitNote.ID
 		}
 		if err := tx.Create(&debitItems).Error; err != nil {
-			return fmt.Errorf("failed to create debit note items: %w", err)
+			return fmt.Errorf("failed to create debit note kraPayloadItems: %w", err)
 		}
 		return nil
 	})
@@ -1644,7 +1661,7 @@ type CreateInvoiceRequest struct {
 	BuyerType         string               `json:"buyer_type"` // B2B, B2C, B2E, EXPORT
 	ExchangeRate      *float64             `json:"exchange_rate"`  // Manual override for exchange rate
 	KESEquivalent     *float64             `json:"kes_equivalent"` // Manual override for KES equivalent
-	Items            []InvoiceItemRequest `json:"items" binding:"required,min=1"`
+	Items            []InvoiceItemRequest `json:"kraPayloadItems" binding:"required,min=1"`
 }
 
 // InvoiceItemRequest with extended fields for frontend compatibility
@@ -1805,9 +1822,9 @@ type kraClient struct {
 }
 
 func internalInvoiceToKRA(invoice *models.Invoice) *kraInvoice {
-	items := make([]kraInvoiceItem, len(invoice.Items))
+	invItems := make([]kraInvoiceItem, len(invoice.Items))
 	for i, item := range invoice.Items {
-		items[i] = kraInvoiceItem{
+		invItems[i] = kraInvoiceItem{
 			ID:          item.ID,
 			Description: item.Description,
 			Quantity:    item.Quantity,
@@ -1829,7 +1846,7 @@ func internalInvoiceToKRA(invoice *models.Invoice) *kraInvoice {
 		CreatedAt:     invoice.CreatedAt,
 		DueDate:       invoice.DueDate,
 		Status:        string(invoice.Status),
-		Items:         items,
+		Items:         invItems,
 	}
 }
 
@@ -1914,9 +1931,43 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 			return fmt.Errorf("failed to fetch user: %w", err)
 		}
 
-		items := make([]KRAItem, 0)
-		if err := tx.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&items).Error; err != nil {
+dbItems := make([]models.InvoiceItem, 0)
+		if err := tx.Model(&models.InvoiceItem{}).Where("invoice_id = ?", invoiceID).Find(&dbItems).Error; err != nil {
 			return fmt.Errorf("failed to fetch invoice items: %w", err)
+		}
+
+		// Convert to KRAItem format inline
+		kraPayloadItems := make([]KRAItem, len(dbItems))
+		for i, item := range dbItems {
+			kraPayloadItems[i] = KRAItem{
+				ItemCode:        item.ItemCode,
+				ItemDescription: item.Description,
+				Quantity:      item.Quantity,
+				UnitOfMeasure:  item.Unit,
+				UnitPrice:    item.UnitPrice,
+				Discount:     item.DiscountAmt,
+				DiscountRate: item.DiscountRate,
+				VATRate:      item.TaxRate,
+				VATAmount:    item.TaxAmount,
+				Total:       item.Total,
+			}
+		}
+
+		// Convert to KRAItem format for KRA payload
+		kraPayloadItems = make([]KRAItem, len(dbItems))
+		for i, item := range dbItems {
+			kraPayloadItems[i] = KRAItem{
+				ItemCode:        item.ItemCode,
+				ItemDescription: item.Description,
+				Quantity:      item.Quantity,
+				UnitOfMeasure:  item.Unit,
+				UnitPrice:    item.UnitPrice,
+				Discount:     item.DiscountAmt,
+				DiscountRate: item.DiscountRate,
+				VATRate:      item.TaxRate,
+				VATAmount:    item.TaxAmount,
+				Total:       item.Total,
+			}
 		}
 
 		// Determine buyer classification based on client
@@ -1955,7 +2006,7 @@ func (s *InvoiceService) SubmitInvoiceToKRA(tenantID, invoiceID string) (*KRARes
 				ContactEmail:       cli.Email,
 				RegistrationNumber: cli.KRAPIN,
 			},
-			Items:              items,
+			Items:              kraPayloadItems,
 			SubTotal:          invoice.Subtotal,
 			TotalExcludingVAT: invoice.Subtotal - invoice.Discount,
 			VATRate:           invoice.TaxRate,
