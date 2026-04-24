@@ -2,6 +2,10 @@
 ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS item_code VARCHAR(100) DEFAULT '';
 ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS item_description VARCHAR(500) DEFAULT '';
 ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS unit_of_measure VARCHAR(50) DEFAULT '';
+ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount REAL DEFAULT 0;
+
+-- Add kra_icn column to invoices for KRA compliance
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS kra_icn TEXT;
 
 -- KRA activity events table for tracking KRA submissions
 CREATE TABLE IF NOT EXISTS kra_activity_events (
