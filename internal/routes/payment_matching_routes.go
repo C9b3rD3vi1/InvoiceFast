@@ -16,6 +16,7 @@ func PaymentMatchingRoutes(app *fiber.App, h *handlers.PaymentMatchingHandler, a
 	group.Post("/request", h.RequestPayment)
 	group.Post("/manual-match", h.ManualMatch)
 	group.Get("/unallocated", h.GetUnallocated)
+	group.Get("/stats", h.GetStats)
 	group.Get("/", h.GetPayments)
 	group.Get("/:id/receipt", h.GetReceipt)
 	group.Post("/:id/match", h.MatchPayment)
