@@ -144,7 +144,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        <template x-for="row in revenueTableData" :key="row.period">
+                        <template x-for="row in revenueBreakdown" :key="row.period">
                             <tr class="hover:bg-slate-50">
                                 <td class="px-6 py-4 font-medium" x-text="row.period"></td>
                                 <td class="px-6 py-4 text-right" x-text="row.count"></td>
@@ -444,19 +444,17 @@ function reportsManager() {
         insights: [],
         invoiceStats: { total: '0', paid: '0', pending: '0', overdue: '0' },
         paymentStats: { collected: 'KES 0', successRate: '0%', avgTime: '0 days', refunds: 'KES 0', methods: [] },
-        taxSummary: { totalSales: 'KES 0', vatCollected: 'KES 0', exemptSales: 'KES 0', zeroRatedSales: 'KES 0' },
+        taxSummary: { sales: 'KES 0', vat: 'KES 0', withholding: 'KES 0', owed: 'KES 0' },
         agingBuckets: [],
         revenueBreakdown: [],
         topClients: [],
-        clientRevenueData: [],
         taxBreakdown: [],
         monthlyTrend: [],
         expenseBreakdown: [],
         revenueBreakdown: { labels: [], values: [] },
-        revenueTableData: [],
         allInvoiceStatuses: [],
         agingReport: [],
-        incomeStatement: { revenue: 0, costOfSales: 0, grossProfit: 0, expenses: 0, netProfit: 0 },
+        incomeStatement: { revenue: 0, prevRevenue: 0, cogs: 0, prevCogs: 0, expenses: 0, prevExpenses: 0, grossProfit: 0, prevGrossProfit: 0, netProfit: 0, prevNetProfit: 0, revenueChange: 0, grossProfitChange: 0, netProfitChange: 0 },
         toast: { show: false, message: '', type: 'success' },
 
         async init() {
@@ -468,24 +466,12 @@ function reportsManager() {
         async loadData() {
             this.loading = true;
             try {
-                const [
-                    dashboardData,
-                    agingData,
-                    revenueData,
-                    invoiceData,
-                    paymentData,
-                    clientRevenueData,
-                    taxData,
-                    incomeData
-                ] = await Promise.all([
+                const [dashboardData, agingData, revenueData, invoiceData, paymentData] = await Promise.all([
                     InvoiceFastAPI.reports.getDashboard(this.period).catch(() => ({})),
                     InvoiceFastAPI.reports.getAgingDetailed().catch(() => ({})),
                     InvoiceFastAPI.reports.getRevenue(this.period).catch(() => []),
                     InvoiceFastAPI.reports.getInvoices(this.period).catch(() => ({})),
-                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => ({})),
-                    InvoiceFastAPI.reports.getClientRevenue(this.period, 10).catch(() => []),
-                    InvoiceFastAPI.reports.getVAT(this.period).catch(() => ({})),
-                    InvoiceFastAPI.reports.getIncomeStatement(this.period).catch(() => ({}))
+                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => [])
                 ]);
                 
                 // Dashboard provides core KPIs
@@ -533,16 +519,16 @@ function reportsManager() {
                         { label: 'Overdue', value: overdue, color: '#ef4444' },
                         { label: 'Draft', value: notPaid > 0 ? notPaid : 0, color: '#94a3b8' }
                     ];
-                // Invoice data - use from API response
-                if (invoiceData) {
+                } else if (invoiceData) {
+                    // Fallback to API response
+                    const totalInv = invoiceData.total || invoiceData.Total || 0;
                     const byStatus = invoiceData.by_status || invoiceData.By_status || {};
-                    const totalInv = invoiceData.total || 0;
                     const paid = byStatus.paid || 0;
                     const sent = byStatus.sent || 0;
                     const viewed = byStatus.viewed || 0;
                     const draft = byStatus.draft || 0;
-                    const overdue = byStatus.overdue || 0;
                     const cancelled = byStatus.cancelled || 0;
+                    const overdue = byStatus.overdue || 0;
                     
                     this.invoiceStats = {
                         total: totalInv.toString(),
@@ -553,40 +539,40 @@ function reportsManager() {
                     
                     this.allInvoiceStatuses = [
                         { label: 'Paid', value: paid, color: '#22c55e' },
-                        { label: 'Pending', value: sent + viewed, color: '#f59e0b' },
-                        { label: 'Overdue', value: overdue, color: '#ef4444' },
+                        { label: 'Sent', value: sent, color: '#f59e0b' },
                         { label: 'Draft', value: draft, color: '#94a3b8' },
+                        { label: 'Overdue', value: overdue, color: '#ef4444' },
                         { label: 'Cancelled', value: cancelled, color: '#6b7280' }
                     ];
                 }
                 
-                // Payment data for chart - use from payment API
-                if (paymentData) {
-                    const methods = paymentData.by_method || {};
-                    const methodEntries = Object.entries(methods).map(([method, data]) => ({ 
+                // Payment data for chart - use revenue data or payment data or by_method
+                const allRevenue = revenueData || paymentData || [];
+                if (paymentData && paymentData.by_method) {
+                    // Format: {by_method: {cash: 2, mpesa: 1}, total: 3}
+                    const methods = Object.entries(paymentData.by_method || {});
+                    this.paymentStats.methods = methods.map(([method, count]) => ({ 
                         method: method, 
-                        amount: data?.amount || data
+                        amount: count 
                     }));
-                    this.paymentStats.methods = methodEntries;
-                    this.paymentStats.collected = this.formatCurrency(paymentData.total_amount || dashboardData?.total_revenue || 0);
-                    this.paymentStats.successRate = (paymentData.success_rate || 0) + '%';
+                    this.paymentStats.collected = this.formatCurrency(paymentData.total || dashboardData?.total_revenue || 0);
+                } else if (allRevenue.length > 0) {
+                    const totalCollected = allRevenue.reduce((sum, p) => sum + (p.Value || p.value || 0), 0);
+                    this.paymentStats.collected = this.formatCurrency(totalCollected);
+                    this.paymentStats.methods = allRevenue.slice(0, 5).map(p => ({ 
+                        method: p.Date || p.date || 'Other', 
+                        amount: p.Value || p.value || 0 
+                    }));
+                } else {
+                    this.paymentStats.collected = this.formatCurrency(dashboardData?.total_revenue || 0);
                 }
                 
                 // Revenue chart from daily revenue data
-                const revenueArray = revenueData?.data || revenueData || [];
-                if (revenueArray.length > 0) {
-                    const labels = revenueArray.map(r => r.date || r.Date || '');
-                    const values = revenueArray.map(r => r.value || r.Value || 0);
+                const revData = revenueData?.data || revenueData || [];
+                if (revData.length > 0) {
+                    const labels = revData.map(r => r.date || r.Date || '');
+                    const values = revData.map(r => r.value || r.Value || 0);
                     this.revenueBreakdown = { labels, values };
-                    
-                    // Map API response to table format (date,value -> period,revenue,count,avg,growth)
-                    this.revenueTableData = revenueArray.map(r => ({
-                        period: r.date || r.Date || '',
-                        revenue: r.value || r.Value || 0,
-                        count: 1,
-                        avg: r.value || r.Value || 0,
-                        growth: 0
-                    }));
                 }
                 
                 // Top clients from dashboard or use default
@@ -603,38 +589,6 @@ function reportsManager() {
                         { label: '61-90 Days', value: agingData.days_90 || 0, color: '#f97316' },
                         { label: 'Over 90', value: agingData.over_90 || 0, color: '#ef4444' }
                     ];
-                }
-
-                // Client Revenue data
-                if (clientRevenueData && clientRevenueData.length > 0) {
-                    this.clientRevenueData = clientRevenueData;
-                    this.topClients = clientRevenueData.slice(0, 10).map(c => ({
-                        client_name: c.name || c.ClientName,
-                        revenue: c.revenue || c.Revenue,
-                        invoices: c.invoices || c.Invoices,
-                        outstanding: c.outstanding || c.Outstanding
-                    }));
-                }
-
-                // VAT/Tax data
-                if (taxData) {
-                    this.taxSummary = {
-                        totalSales: this.formatCurrency(taxData.taxable_sales || taxData.TotalSales || 0),
-                        vatCollected: this.formatCurrency(taxData.output_tax || taxData.VATCollected || 0),
-                        exemptSales: this.formatCurrency(taxData.exempt_sales || 0),
-                        zeroRatedSales: this.formatCurrency(taxData.zero_rated_sales || 0)
-                    };
-                }
-
-                // Income Statement data
-                if (incomeData) {
-                    this.incomeStatement = {
-                        revenue: incomeData.gross_revenue || incomeData.Revenue || 0,
-                        costOfSales: incomeData.cost_of_sales || 0,
-                        grossProfit: incomeData.gross_profit || 0,
-                        expenses: incomeData.operating_expenses || 0,
-                        netProfit: incomeData.net_profit || 0
-                    };
                 }
             } catch(err) {
                 console.error('Failed to load reports:', err);
@@ -893,9 +847,8 @@ renderCharts() {
             return gradients[id?.charCodeAt(0) % gradients.length] || gradients[0];
         },
 
-        async exportData(format, reportType) {
-            const type = reportType || this.activeTab || 'overview';
-            await InvoiceFastAPI.reports.exportData(format, type, this.period);
+        async exportData(format) {
+            await InvoiceFastAPI.reports.export(format, this.period);
             this.showToast('Export started', 'success');
         },
 
