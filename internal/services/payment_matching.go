@@ -96,19 +96,22 @@ func (s *PaymentMatchingService) GetPayments(tenantID string, filter PaymentFilt
 	// Get invoice and client info for each payment
 	result := make([]map[string]interface{}, len(payments))
 	for i, p := range payments {
-		var invoice models.Invoice
-		var client models.Client
-		var clientName, invoiceNumber string
+		var clientName, invoiceNumber, clientID string
 
 		// Use tenant filter for tenant-scoped queries
 		if p.InvoiceID != "" {
-			s.db.First(&invoice, "id = ? AND tenant_id = ?", p.InvoiceID, tenantID)
-			if invoice.ID != "" && invoice.ClientID != "" {
-				s.db.First(&client, "id = ? AND tenant_id = ?", invoice.ClientID, tenantID)
-				if client.ID != "" {
-					clientName = client.Name
-				}
+			var invoice models.Invoice
+			err := s.db.First(&invoice, "id = ?", p.InvoiceID).Error
+			if err == nil && invoice.ID != "" {
 				invoiceNumber = invoice.InvoiceNumber
+				clientID = invoice.ClientID
+				if clientID != "" {
+					var client models.Client
+					err := s.db.First(&client, "id = ?", clientID).Error
+					if err == nil && client.ID != "" {
+						clientName = client.Name
+					}
+				}
 			}
 		}
 
@@ -119,18 +122,18 @@ func (s *PaymentMatchingService) GetPayments(tenantID string, filter PaymentFilt
 			"tenant_id":       p.TenantID,
 			"user_id":         p.UserID,
 			"invoice_id":      p.InvoiceID,
-			"client_id":       invoice.ClientID,
-			"client_name":      clientName,
-			"invoice_number":  invoiceNumber,
+			"client_id":       clientID,
+			"client_name":     clientName,
+			"invoice_number": invoiceNumber,
 			"amount":          p.Amount,
-			"currency":        p.Currency,
-			"method":          p.Method,
-			"status":          string(p.Status),
-			"reference":       p.Reference,
-			"phone_number":    p.PhoneNumber,
-			"created_at":      p.CreatedAt,
-			"completed_at":    p.CompletedAt,
-			"reconciled":      reconciled,
+			"currency":       p.Currency,
+			"method":         string(p.Method),
+			"status":         string(p.Status),
+			"reference":      p.Reference,
+			"phone_number":   p.PhoneNumber,
+			"created_at":     p.CreatedAt,
+			"completed_at":   p.CompletedAt,
+			"reconciled":     reconciled,
 		}
 	}
 
