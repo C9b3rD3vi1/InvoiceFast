@@ -144,13 +144,13 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        <template x-for="row in revenueTableData" :key="row.date">
+                        <template x-for="row in revenueTableData" :key="row.period">
                             <tr class="hover:bg-slate-50">
-                                <td class="px-6 py-4 font-medium" x-text="row.date"></td>
+                                <td class="px-6 py-4 font-medium" x-text="row.period"></td>
                                 <td class="px-6 py-4 text-right" x-text="row.count"></td>
-                                <td class="px-6 py-4 text-right font-semibold" x-text="formatCurrency(row.value)"></td>
-                                <td class="px-6 py-4 text-right">-</td>
-                                <td class="px-6 py-4 text-right">-</td>
+                                <td class="px-6 py-4 text-right font-semibold" x-text="formatCurrency(row.revenue)"></td>
+                                <td class="px-6 py-4 text-right" x-text="formatCurrency(row.avg)"></td>
+                                <td class="px-6 py-4 text-right" :class="row.growth > 0 ? 'text-green-600' : 'text-red-600'" x-text="(row.growth > 0 ? '+' : '') + row.growth + '%'"></td>
                             </tr>
                         </template>
                     </tbody>
@@ -579,11 +579,13 @@ function reportsManager() {
                     const values = revenueArray.map(r => r.value || r.Value || 0);
                     this.revenueBreakdown = { labels, values };
                     
-                    // Build table data
+                    // Map API response to table format (date,value -> period,revenue,count,avg,growth)
                     this.revenueTableData = revenueArray.map(r => ({
-                        date: r.date || r.Date || '',
-                        value: r.value || r.Value || 0,
-                        count: 1
+                        period: r.date || r.Date || '',
+                        revenue: r.value || r.Value || 0,
+                        count: 1,
+                        avg: r.value || r.Value || 0,
+                        growth: 0
                     }));
                 }
                 
