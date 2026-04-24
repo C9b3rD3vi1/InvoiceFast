@@ -65,10 +65,10 @@ func (s *ReportService) GetOverview(tenantID string, period string) (*ReportOver
 
 	var result ReportOverview
 
-	// Get revenue from payments
-	err := s.db.Model(&models.Payment{}).
-		Where("tenant_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
-		Select("COALESCE(SUM(amount), 0) as total").
+	// SOURCE OF TRUTH: Use invoice paid_amount for revenue (not payments table)
+	err := s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND paid_at IS NOT NULL AND paid_at BETWEEN ? AND ?", tenantID, start, end).
+		Select("COALESCE(SUM(paid_amount), 0) as total").
 		Scan(&result.TotalRevenue).Error
 	if err != nil {
 		return nil, err
@@ -76,19 +76,19 @@ func (s *ReportService) GetOverview(tenantID string, period string) (*ReportOver
 
 	// Get previous period for comparison
 	prevStart := start.AddDate(0, 0, -int(end.Sub(start).Hours()/24))
-	err = s.db.Model(&models.Payment{}).
-		Where("tenant_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", tenantID, prevStart, start).
-		Select("COALESCE(SUM(amount), 0) as total").
+	err = s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND paid_at IS NOT NULL AND paid_at BETWEEN ? AND ?", tenantID, prevStart, start).
+		Select("COALESCE(SUM(paid_amount), 0) as total").
 		Scan(&result.RevenueChange).Error
 
 	if result.RevenueChange > 0 {
 		result.RevenueChange = ((result.TotalRevenue - result.RevenueChange) / result.RevenueChange) * 100
 	}
 
-	// Pending invoices (sent but not paid)
+	// Pending (balance due on sent/viewed/partially_paid invoices)
 	err = s.db.Model(&models.Invoice{}).
 		Where("tenant_id = ? AND status IN ?", tenantID, []string{"sent", "viewed", "partially_paid"}).
-		Select("COALESCE(SUM(total - paid_amount), 0) as total").
+		Select("COALESCE(SUM(balance_due), 0) as total").
 		Scan(&result.PendingAmount).Error
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (s *ReportService) GetOverview(tenantID string, period string) (*ReportOver
 	// Overdue
 	err = s.db.Model(&models.Invoice{}).
 		Where("tenant_id = ? AND status = 'overdue'", tenantID).
-		Select("COALESCE(SUM(total - paid_amount), 0) as total").
+		Select("COALESCE(SUM(balance_due), 0) as total").
 		Scan(&result.OverdueAmount).Error
 	if err != nil {
 		return nil, err
@@ -165,11 +165,11 @@ func (s *ReportService) GetRevenue(tenantID string, period string) ([]RevenueDat
 
 	var results []RevenueDataPoint
 
-	// Group by date
-	err := s.db.Model(&models.Payment{}).
-		Where("tenant_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
-		Select("DATE(created_at) as date, COALESCE(SUM(amount), 0) as value").
-		Group("DATE(created_at)").
+	// SOURCE OF TRUTH: Use invoice paid_at for revenue recognition (aligns with accounting)
+	err := s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND paid_at IS NOT NULL AND paid_at BETWEEN ? AND ?", tenantID, start, end).
+		Select("DATE(paid_at) as date, COALESCE(SUM(paid_amount), 0) as value").
+		Group("DATE(paid_at)").
 		Order("date").
 		Scan(&results).Error
 
@@ -280,6 +280,7 @@ func (s *ReportService) GetPaymentStats(tenantID string, period string) (map[str
 
 	stats := make(map[string]interface{})
 
+	// Total payments
 	var total int64
 	err := s.db.Model(&models.Payment{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, start, end).
@@ -289,26 +290,60 @@ func (s *ReportService) GetPaymentStats(tenantID string, period string) (map[str
 	}
 	stats["total"] = total
 
-	// By method
-	type methodCount struct {
+	// By method breakdown with amounts
+	type methodStats struct {
 		Method string
 		Count  int64
+		Amount float64
 	}
-	var methodCounts []methodCount
+	var methodCounts []methodStats
 	err = s.db.Model(&models.Payment{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, start, end).
-		Select("method, COUNT(*) as count").
+		Select("method, COUNT(*) as count, COALESCE(SUM(amount), 0) as amount").
 		Group("method").
 		Scan(&methodCounts).Error
 	if err != nil {
 		return nil, err
 	}
 
-	methodMap := make(map[string]int64)
+	methodMap := make(map[string]interface{})
+	var totalAmount float64
 	for _, mc := range methodCounts {
-		methodMap[mc.Method] = mc.Count
+		methodMap[mc.Method] = map[string]interface{}{
+			"count":  mc.Count,
+			"amount": mc.Amount,
+		}
+		totalAmount += mc.Amount
 	}
 	stats["by_method"] = methodMap
+	stats["total_amount"] = totalAmount
+
+	// Success rate
+	var successCount int64
+	err = s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'completed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Count(&successCount).Error
+	if err == nil && total > 0 {
+		stats["success_rate"] = float64(successCount) / float64(total) * 100
+	}
+
+	// Failed payments
+	var failedCount int64
+	err = s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'failed' AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Count(&failedCount).Error
+	if err == nil {
+		stats["failed"] = failedCount
+	}
+
+	// Refunds
+	var refundedCount int64
+	err = s.db.Model(&models.Payment{}).
+		Where("tenant_id = ? AND status = 'refunded' AND created_at BETWEEN ? AND ?", tenantID, start, end).
+		Count(&refundedCount).Error
+	if err == nil {
+		stats["refunded"] = refundedCount
+	}
 
 	return stats, nil
 }
@@ -489,26 +524,33 @@ func (s *ReportService) GetAgingReport(tenantID string) (*AgingReport, error) {
 	report := &AgingReport{}
 	now := time.Now()
 
-	// Current (0-30 days overdue)
+	// Current (0-30 days past due)
 	s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status = 'overdue'", tenantID).
+		Where("tenant_id = ? AND balance_due > 0", tenantID).
 		Where("due_date >= ?", now.AddDate(0, 0, -30)).
-		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Select("COALESCE(SUM(balance_due), 0)").
 		Scan(&report.Current)
 
 	// Overdue 31-60 days
 	s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status = 'overdue'", tenantID).
-		Where("due_date < ? AND due_date >= ?", now.AddDate(0, 0, -60), now.AddDate(0, 0, -90)).
-		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Where("tenant_id = ? AND balance_due > 0", tenantID).
+		Where("due_date < ? AND due_date >= ?", now.AddDate(0, 0, -30), now.AddDate(0, 0, -60)).
+		Select("COALESCE(SUM(balance_due), 0)").
 		Scan(&report.Overdue30)
 
 	// Overdue 61-90 days
 	s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status = 'overdue'", tenantID).
-		Where("due_date < ? AND due_date >= ?", now.AddDate(0, 0, -90), now.AddDate(0, 0, -120)).
-		Select("COALESCE(SUM(total - paid_amount), 0)").
+		Where("tenant_id = ? AND balance_due > 0", tenantID).
+		Where("due_date < ? AND due_date >= ?", now.AddDate(0, 0, -60), now.AddDate(0, 0, -90)).
+		Select("COALESCE(SUM(balance_due), 0)").
 		Scan(&report.Overdue60)
+
+	// Overdue 90+ days
+	s.db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND balance_due > 0", tenantID).
+		Where("due_date < ?", now.AddDate(0, 0, -90)).
+		Select("COALESCE(SUM(balance_due), 0)").
+		Scan(&report.Overdue90)
 
 	// Overdue 90+ days
 	s.db.Model(&models.Invoice{}).
