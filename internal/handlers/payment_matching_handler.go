@@ -237,3 +237,36 @@ func (h *PaymentMatchingHandler) RequestPayment(c *fiber.Ctx) error {
 		"email_sent":   req.SendEmail,
 	})
 }
+
+func (h *PaymentMatchingHandler) GetStats(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	stats := make(map[string]interface{})
+
+	db := h.invoiceService.GetDB()
+
+	var totalRevenue, pendingAmount float64
+	err := db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status IN ('paid', 'partially_paid')", tenantID).
+		Select("COALESCE(SUM(paid_amount), 0)").
+		Scan(&totalRevenue).Error
+	if err == nil {
+		stats["total_revenue"] = totalRevenue
+		stats["paid_amount"] = totalRevenue
+	}
+
+	err = db.Model(&models.Invoice{}).
+		Where("tenant_id = ? AND status IN ('sent', 'viewed', 'overdue', 'partially_paid')", tenantID).
+		Select("COALESCE(SUM(balance_due), 0)").
+		Scan(&pendingAmount).Error
+	if err == nil {
+		stats["pending_amount"] = pendingAmount
+	}
+
+	stats["fraud_alerts"] = 0
+
+	return c.JSON(stats)
+}
