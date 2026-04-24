@@ -444,17 +444,18 @@ function reportsManager() {
         insights: [],
         invoiceStats: { total: '0', paid: '0', pending: '0', overdue: '0' },
         paymentStats: { collected: 'KES 0', successRate: '0%', avgTime: '0 days', refunds: 'KES 0', methods: [] },
-        taxSummary: { sales: 'KES 0', vat: 'KES 0', withholding: 'KES 0', owed: 'KES 0' },
+        taxSummary: { totalSales: 'KES 0', vatCollected: 'KES 0', exemptSales: 'KES 0', zeroRatedSales: 'KES 0' },
         agingBuckets: [],
         revenueBreakdown: [],
         topClients: [],
+        clientRevenueData: [],
         taxBreakdown: [],
         monthlyTrend: [],
         expenseBreakdown: [],
         revenueBreakdown: { labels: [], values: [] },
         allInvoiceStatuses: [],
         agingReport: [],
-        incomeStatement: { revenue: 0, prevRevenue: 0, cogs: 0, prevCogs: 0, expenses: 0, prevExpenses: 0, grossProfit: 0, prevGrossProfit: 0, netProfit: 0, prevNetProfit: 0, revenueChange: 0, grossProfitChange: 0, netProfitChange: 0 },
+        incomeStatement: { revenue: 0, costOfSales: 0, grossProfit: 0, expenses: 0, netProfit: 0 },
         toast: { show: false, message: '', type: 'success' },
 
         async init() {
@@ -466,12 +467,24 @@ function reportsManager() {
         async loadData() {
             this.loading = true;
             try {
-                const [dashboardData, agingData, revenueData, invoiceData, paymentData] = await Promise.all([
+                const [
+                    dashboardData,
+                    agingData,
+                    revenueData,
+                    invoiceData,
+                    paymentData,
+                    clientRevenueData,
+                    taxData,
+                    incomeData
+                ] = await Promise.all([
                     InvoiceFastAPI.reports.getDashboard(this.period).catch(() => ({})),
                     InvoiceFastAPI.reports.getAgingDetailed().catch(() => ({})),
                     InvoiceFastAPI.reports.getRevenue(this.period).catch(() => []),
                     InvoiceFastAPI.reports.getInvoices(this.period).catch(() => ({})),
-                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => [])
+                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => ({})),
+                    InvoiceFastAPI.reports.getClientRevenue(this.period, 10).catch(() => []),
+                    InvoiceFastAPI.reports.getVAT(this.period).catch(() => ({})),
+                    InvoiceFastAPI.reports.getIncomeStatement(this.period).catch(() => ({}))
                 ]);
                 
                 // Dashboard provides core KPIs
@@ -588,6 +601,38 @@ function reportsManager() {
                         { label: '61-90 Days', value: agingData.days_90 || 0, color: '#f97316' },
                         { label: 'Over 90', value: agingData.over_90 || 0, color: '#ef4444' }
                     ];
+                }
+
+                // Client Revenue data
+                if (clientRevenueData && clientRevenueData.length > 0) {
+                    this.clientRevenueData = clientRevenueData;
+                    this.topClients = clientRevenueData.slice(0, 10).map(c => ({
+                        client_name: c.name || c.ClientName,
+                        revenue: c.revenue || c.Revenue,
+                        invoices: c.invoices || c.Invoices,
+                        outstanding: c.outstanding || c.Outstanding
+                    }));
+                }
+
+                // VAT/Tax data
+                if (taxData) {
+                    this.taxSummary = {
+                        totalSales: this.formatCurrency(taxData.taxable_sales || taxData.TotalSales || 0),
+                        vatCollected: this.formatCurrency(taxData.output_tax || taxData.VATCollected || 0),
+                        exemptSales: this.formatCurrency(taxData.exempt_sales || 0),
+                        zeroRatedSales: this.formatCurrency(taxData.zero_rated_sales || 0)
+                    };
+                }
+
+                // Income Statement data
+                if (incomeData) {
+                    this.incomeStatement = {
+                        revenue: incomeData.gross_revenue || incomeData.Revenue || 0,
+                        costOfSales: incomeData.cost_of_sales || 0,
+                        grossProfit: incomeData.gross_profit || 0,
+                        expenses: incomeData.operating_expenses || 0,
+                        netProfit: incomeData.net_profit || 0
+                    };
                 }
             } catch(err) {
                 console.error('Failed to load reports:', err);
@@ -846,8 +891,9 @@ renderCharts() {
             return gradients[id?.charCodeAt(0) % gradients.length] || gradients[0];
         },
 
-        async exportData(format) {
-            await InvoiceFastAPI.reports.export(format, this.period);
+        async exportData(format, reportType) {
+            const type = reportType || this.activeTab || 'overview';
+            await InvoiceFastAPI.reports.exportData(format, type, this.period);
             this.showToast('Export started', 'success');
         },
 
