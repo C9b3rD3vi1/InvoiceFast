@@ -919,24 +919,23 @@ const InvoiceFastAPI = {
         },
     },
 
-        // Notification Preferences
-        notifications: {
-            async getPreferences() {
-                return InvoiceFastAPI.request('/tenant/notifications/preferences');
-            },
-            async updatePreferences(data) {
-                return InvoiceFastAPI.request('/tenant/notifications/preferences', {
-                    method: 'PUT',
-                    body: JSON.stringify(data),
-                });
-            },
-            async getTemplates() {
-                return InvoiceFastAPI.request('/tenant/notifications/templates');
-            },
-            async getLogs(status) {
-                const params = status ? '?status=' + status : '';
-                return InvoiceFastAPI.request('/tenant/notifications/logs' + params);
-            },
+    // Notification Preferences
+    notifications: {
+        async getPreferences() {
+            return InvoiceFastAPI.request('/tenant/notifications/preferences');
+        },
+        async updatePreferences(data) {
+            return InvoiceFastAPI.request('/tenant/notifications/preferences', {
+                method: 'PUT',
+                body: JSON.stringify(data),
+            });
+        },
+        async getTemplates() {
+            return InvoiceFastAPI.request('/tenant/notifications/templates');
+        },
+        async getLogs(status) {
+            const params = status ? '?status=' + status : '';
+            return InvoiceFastAPI.request('/tenant/notifications/logs' + params);
         },
     },
 
