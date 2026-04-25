@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -10,412 +11,598 @@ import (
 	"github.com/google/uuid"
 )
 
-// AutomationService handles workflow automation functionality
-type AutomationService struct {
-	db             *database.DB
-	emailService   *EmailService
-	invoiceService *InvoiceService
-	clientService  *ClientService
+// ============================================================================
+// JOB QUEUE SERVICE - Persistent, DB-backed job processing
+// ============================================================================
+
+// JobQueueService handles persistent job queue operations
+type JobQueueService struct {
+	db *database.DB
 }
 
-// NewAutomationService creates a new automation service
-func NewAutomationService(db *database.DB, emailSvc *EmailService, invoiceSvc *InvoiceService, clientSvc *ClientService) *AutomationService {
-	return &AutomationService{
-		db:             db,
-		emailService:   emailSvc,
-		invoiceService: invoiceSvc,
-		clientService:  clientSvc,
-	}
+// NewJobQueueService creates a new job queue service
+func NewJobQueueService(db *database.DB) *JobQueueService {
+	return &JobQueueService{db: db}
 }
 
-// SimpleAutomationService creates automation service with just database
-type SimpleAutomationService struct {
-	db           *database.DB
-	emailService *EmailService
+// EnqueueJob adds a job to the queue (DB-backed, survives restarts)
+func (s *JobQueueService) EnqueueJob(job *models.AutomationJob) error {
+	if job.ID == "" {
+		job.ID = uuid.New().String()
+	}
+	if job.Status == "" {
+		job.Status = models.JobStatusPending
+	}
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = time.Now()
+	}
+	if job.UpdatedAt.IsZero() {
+		job.UpdatedAt = time.Now()
+	}
+	return s.db.Create(job).Error
 }
 
-// NewSimpleAutomationService creates a simplified automation service
-func NewSimpleAutomationService(db *database.DB) *AutomationService {
-	return &AutomationService{
-		db: db,
+// EnqueueJobWithIdempotency ensures no duplicate jobs (idempotent enqueue)
+func (s *JobQueueService) EnqueueJobWithIdempotency(key string, job *models.AutomationJob) error {
+	if key == "" {
+		return fmt.Errorf("idempotency key required")
 	}
+	
+	// Check for existing job with same idempotency key
+	var existing models.AutomationJob
+	err := s.db.Where("idempotency_key = ? AND status NOT IN ?", key, []string{models.JobStatusFailed, models.JobStatusDeadLetter}).First(&existing).Error
+	if err == nil {
+		return nil // Job already exists, skip
+	}
+	
+	// Create new job
+	return s.EnqueueJob(job)
 }
 
-// GetAutomations returns all automations for a tenant
-func (s *AutomationService) GetAutomations(tenantID string) ([]models.Automation, error) {
-	var automations []models.Automation
-	if err := s.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&automations).Error; err != nil {
-		return nil, err
-	}
-	return automations, nil
+// GetPendingJobs retrieves jobs ready to be processed
+func (s *JobQueueService) GetPendingJobs(limit int) ([]models.AutomationJob, error) {
+	var jobs []models.AutomationJob
+	now := time.Now()
+	err := s.db.Where("status = ? AND run_at <= ?", models.JobStatusPending, now).
+		Order("priority DESC, run_at ASC").
+		Limit(limit).
+		Find(&jobs).Error
+	return jobs, err
 }
 
-// GetAutomation returns a single automation
-func (s *AutomationService) GetAutomation(tenantID, id string) (*models.Automation, error) {
-	var automation models.Automation
-	if err := s.db.Where("id = ? AND tenant_id = ?", id, tenantID).First(&automation).Error; err != nil {
-		return nil, err
+// GetJobsByTenant retrieves jobs for a specific tenant
+func (s *JobQueueService) GetJobsByTenant(tenantID string, status string, limit, offset int) ([]models.AutomationJob, int64, error) {
+	var jobs []models.AutomationJob
+	var total int64
+	
+	query := s.db.Model(&models.AutomationJob{}).Where("tenant_id = ?", tenantID)
+	if status != "" {
+		query = query.Where("status = ?", status)
 	}
-	return &automation, nil
+	
+	query.Count(&total)
+	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&jobs).Error
+	return jobs, total, err
 }
 
-// GetActiveAutomations returns all active (enabled) automations
-func (s *AutomationService) GetActiveAutomations() ([]models.Automation, error) {
-	var automations []models.Automation
-	if err := s.db.Where("is_active = ?", true).Find(&automations).Error; err != nil {
-		return nil, err
+// ClaimJob marks a job as processing (prevents double execution)
+func (s *JobQueueService) ClaimJob(jobID string) error {
+	now := time.Now()
+	result := s.db.Model(&models.AutomationJob{}).
+		Where("id = ? AND status = ?", jobID, models.JobStatusPending).
+		Updates(map[string]interface{}{
+			"status":      models.JobStatusProcessing,
+			"started_at":  now,
+			"updated_at":  now,
+		})
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("job already claimed or not found")
 	}
-	return automations, nil
+	return result.Error
 }
 
-// CreateAutomationRequest for creating new automations
-type CreateAutomationRequest struct {
-	Name          string                `json:"name"`
-	Description   string                `json:"description"`
-	TriggerType   string                `json:"trigger_type"`
-	TriggerConfig interface{}           `json:"trigger_config"`
-	Conditions    []AutomationCondition `json:"conditions"`
-	Actions       []AutomationAction    `json:"actions"`
-	IsActive      bool                  `json:"is_active"`
+// CompleteJob marks a job as completed
+func (s *JobQueueService) CompleteJob(jobID string, result string) error {
+	now := time.Now()
+	metadata, _ := json.Marshal(map[string]interface{}{"result": result})
+	return s.db.Model(&models.AutomationJob{}).
+		Where("id = ?", jobID).
+		Updates(map[string]interface{}{
+			"status":       models.JobStatusCompleted,
+			"completed_at": now,
+			"metadata":    string(metadata),
+			"updated_at":  now,
+		}).Error
 }
 
-// UpdateAutomationRequest for updating automations
-type UpdateAutomationRequest struct {
-	Name          *string                `json:"name,omitempty"`
-	Description   *string                `json:"description,omitempty"`
-	TriggerType   *string                `json:"trigger_type,omitempty"`
-	TriggerConfig interface{}            `json:"trigger_config,omitempty"`
-	Conditions    *[]AutomationCondition `json:"conditions,omitempty"`
-	Actions       *[]AutomationAction    `json:"actions,omitempty"`
-	IsActive      *bool                  `json:"is_active,omitempty"`
+// FailJob handles job failure with retry logic
+func (s *JobQueueService) FailJob(jobID string, errMsg string) error {
+	var job models.AutomationJob
+	if err := s.db.Where("id = ?", jobID).First(&job).Error; err != nil {
+		return err
+	}
+	
+	job.RetryCount++
+	job.LastError = errMsg
+	job.UpdatedAt = time.Now()
+	
+	// Check if can retry
+	if job.RetryCount < job.MaxRetries {
+		// Exponential backoff: 1min, 5min, 15min, 1hr
+		backoffMinutes := []int{1, 5, 15, 60}
+		idx := job.RetryCount - 1
+		if idx >= len(backoffMinutes) {
+			idx = len(backoffMinutes) - 1
+		}
+		nextRetry := time.Now().Add(time.Duration(backoffMinutes[idx]) * time.Minute)
+		job.NextRetryAt = &nextRetry
+		job.Status = models.JobStatusPending
+		job.RunAt = nextRetry
+		
+		if err := s.db.Save(&job).Error; err != nil {
+			return err
+		}
+		
+		return fmt.Errorf("job failed, scheduled for retry")
+	}
+	
+	// Move to dead letter queue
+	job.Status = models.JobStatusDeadLetter
+	return s.db.Save(&job).Error
 }
 
-// AutomationCondition for filtering when automation runs
-type AutomationCondition struct {
-	Field    string      `json:"field"`
-	Operator string      `json:"operator"`
-	Value    interface{} `json:"value"`
+// MoveToDeadLetter marks a job as permanently failed
+func (s *JobQueueService) MoveToDeadLetter(jobID string, reason string) error {
+	return s.db.Model(&models.AutomationJob{}).
+		Where("id = ?", jobID).
+		Updates(map[string]interface{}{
+			"status":     models.JobStatusDeadLetter,
+			"last_error": reason,
+			"updated_at": time.Now(),
+		}).Error
 }
 
-// AutomationAction defines what to do when automation triggers
-type AutomationAction struct {
-	ActionType string      `json:"action_type"`
-	Config     interface{} `json:"config"`
-	Order      int         `json:"order"`
-}
-
-// CreateAutomation creates a new automation
-func (s *AutomationService) CreateAutomation(tenantID, userID string, req *CreateAutomationRequest) (*models.Automation, error) {
-	if req.Name == "" {
-		return nil, fmt.Errorf("name is required")
-	}
-	if req.TriggerType == "" {
-		return nil, fmt.Errorf("trigger type is required")
-	}
-
-	automation := &models.Automation{
-		ID:          uuid.New().String(),
-		TenantID:    tenantID,
-		UserID:      userID,
-		Name:        req.Name,
-		Description: req.Description,
-		TriggerType: req.TriggerType,
-		IsActive:    req.IsActive,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-
-	if err := s.db.Create(automation).Error; err != nil {
-		return nil, err
-	}
-
-	return automation, nil
-}
-
-// UpdateAutomation updates an existing automation
-func (s *AutomationService) UpdateAutomation(tenantID, id string, req *UpdateAutomationRequest) (*models.Automation, error) {
-	automation, err := s.GetAutomation(tenantID, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if req.Name != nil {
-		automation.Name = *req.Name
-	}
-	if req.Description != nil {
-		automation.Description = *req.Description
-	}
-	if req.IsActive != nil {
-		automation.IsActive = *req.IsActive
-	}
-	automation.UpdatedAt = time.Now()
-
-	if err := s.db.Save(automation).Error; err != nil {
-		return nil, err
-	}
-
-	return automation, nil
-}
-
-// DeleteAutomation removes an automation
-func (s *AutomationService) DeleteAutomation(tenantID, id string) error {
-	automation, err := s.GetAutomation(tenantID, id)
+// RetryDeadLetter retries a dead letter job
+func (s *JobQueueService) RetryDeadLetter(jobID string) error {
+	job, err := s.GetJob(jobID)
 	if err != nil {
 		return err
 	}
-
-	return s.db.Delete(automation).Error
+	
+	job.Status = models.JobStatusPending
+	job.RetryCount = 0
+	job.MaxRetries = 3
+	job.RunAt = time.Now().Add(1 * time.Minute)
+	return s.db.Save(job).Error
 }
 
-// RunAutomation executes an automation
-func (s *AutomationService) RunAutomation(tenantID, id string) (map[string]interface{}, error) {
-	automation, err := s.GetAutomation(tenantID, id)
+// GetJob retrieves a single job
+func (s *JobQueueService) GetJob(id string) (*models.AutomationJob, error) {
+	var job models.AutomationJob
+	if err := s.db.Where("id = ?", id).First(&job).Error; err != nil {
+		return nil, err
+	}
+	return &job, nil
+}
+
+// GetJobStats returns job statistics
+func (s *JobQueueService) GetJobStats(tenantID string) (map[string]interface{}, error) {
+	stats := make(map[string]interface{})
+	
+	type StatusCount struct {
+		Status string
+		Count  int64
+	}
+	var counts []StatusCount
+	s.db.Model(&models.AutomationJob{}).Where("tenant_id = ?", tenantID).
+		Select("status, COUNT(*) as count").
+		Group("status").Scan(&counts)
+	
+	statusMap := make(map[string]int64)
+	for _, c := range counts {
+		statusMap[c.Status] = c.Count
+	}
+	
+	stats["pending"] = statusMap["pending"]
+	stats["processing"] = statusMap["processing"]
+	stats["completed"] = statusMap["completed"]
+	stats["failed"] = statusMap["failed"]
+	stats["dead_letter"] = statusMap["dead_letter"]
+	stats["total"] = statusMap["pending"] + statusMap["processing"] + statusMap["completed"] + statusMap["failed"] + statusMap["dead_letter"]
+	
+	return stats, nil
+}
+
+// ============================================================================
+// RECURRING INVOICE SERVICE - Handles recurring invoice automation
+// ============================================================================
+
+var autoInvoiceCounter int64
+
+func autoGenerateInvoiceNumber() string {
+	autoInvoiceCounter++
+	timestamp := time.Now().UnixNano() / 1000000
+	return fmt.Sprintf("INV-%d-%d", timestamp, autoInvoiceCounter)
+}
+
+func getFloat(m map[string]interface{}, key string, def float64) float64 {
+	if v, ok := m[key].(float64); ok {
+		return v
+	}
+	if v, ok := m[key].(int); ok {
+		return float64(v)
+	}
+	return def
+}
+
+func getString(m map[string]interface{}, key string, def string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return def
+}
+
+// AutoRecurringInvoiceService handles recurring invoice automation
+type AutoRecurringInvoiceService struct {
+	db        *database.DB
+	jobQueue *JobQueueService
+}
+
+// NewAutoRecurringInvoiceService creates a new recurring invoice service
+func NewAutoRecurringInvoiceService(db *database.DB, jobQueue *JobQueueService) *AutoRecurringInvoiceService {
+	return &AutoRecurringInvoiceService{
+		db:        db,
+		jobQueue: jobQueue,
+	}
+}
+
+// CreateRecurringInvoiceRequest defines request for creating recurring invoice
+type CreateRecurringInvoiceRequest struct {
+	Name           string                  `json:"name"`
+	Description   string                  `json:"description"`
+	ClientID      string                  `json:"client_id"`
+	Frequency     string                  `json:"frequency"` // daily, weekly, monthly, custom
+	IntervalDays  int                     `json:"interval_days"`
+	StartDate     time.Time                `json:"start_date"`
+	EndDate       *time.Time              `json:"end_date"`
+	MaxCycles     *int                   `json:"max_cycles"`
+	InvoiceTemplate map[string]interface{}    `json:"invoice_template"`
+	AutoSend      bool                    `json:"auto_send"`
+	AutoSubmitKRA bool                    `json:"auto_submit_kra"`
+}
+
+// GetRecurringInvoices returns all recurring invoices for a tenant
+func (s *AutoRecurringInvoiceService) GetRecurringInvoices(tenantID, status string) ([]models.RecurringInvoice, error) {
+	var recurring []models.RecurringInvoice
+	query := s.db.Where("tenant_id = ?", tenantID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	err := query.Order("created_at DESC").Find(&recurring).Error
+	return recurring, err
+}
+
+// GetRecurringInvoice returns a single recurring invoice
+func (s *AutoRecurringInvoiceService) GetRecurringInvoice(tenantID, id string) (*models.RecurringInvoice, error) {
+	var recurring models.RecurringInvoice
+	err := s.db.Where("id = ? AND tenant_id = ?", id, tenantID).First(&recurring).Error
+	return &recurring, err
+}
+
+// CreateRecurringInvoice creates a new recurring invoice template
+func (s *AutoRecurringInvoiceService) CreateRecurringInvoice(tenantID, userID string, req *CreateRecurringInvoiceRequest) (*models.RecurringInvoice, error) {
+	if req.ClientID == "" {
+		return nil, fmt.Errorf("client is required")
+	}
+	
+	// Validate client exists
+	var client models.Client
+	if err := s.db.Where("id = ? AND tenant_id = ?", req.ClientID, tenantID).First(&client).Error; err != nil {
+		return nil, fmt.Errorf("client not found")
+	}
+	
+	// Calculate next run date
+	nextRun := calculateNextRunDate(req.StartDate, req.Frequency, req.IntervalDays)
+	
+	templateJSON, _ := json.Marshal(req.InvoiceTemplate)
+	
+	recurring := &models.RecurringInvoice{
+		ID:               uuid.New().String(),
+		TenantID:         tenantID,
+		UserID:           userID,
+		ClientID:         req.ClientID,
+		Name:            req.Name,
+		Description:     req.Description,
+		Frequency:       req.Frequency,
+		IntervalDays:    req.IntervalDays,
+		StartDate:       req.StartDate,
+		EndDate:        req.EndDate,
+		NextRunDate:     nextRun,
+		MaxCycles:       req.MaxCycles,
+		CurrentCycle:    0,
+		InvoiceTemplate: string(templateJSON),
+		AutoSend:        req.AutoSend,
+		AutoSubmitKRA:   req.AutoSubmitKRA,
+		IsActive:        true,
+		Status:         "active",
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
+	
+	if err := s.db.Create(recurring).Error; err != nil {
+		return nil, err
+	}
+	
+	// Schedule first job
+	s.ScheduleJob(recurring)
+	
+	return recurring, nil
+}
+
+// PauseRecurringInvoice pauses a recurring invoice
+func (s *AutoRecurringInvoiceService) PauseRecurringInvoice(tenantID, id string) error {
+	recurring, err := s.GetRecurringInvoice(tenantID, id)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
+	
 	now := time.Now()
+	recurring.Status = "paused"
+	recurring.IsActive = false
+	recurring.PausedAt = &now
+	recurring.UpdatedAt = now
+	
+	return s.db.Save(recurring).Error
+}
 
-	// Create execution log
-	log := &models.AutomationLog{
-		ID:           uuid.New().String(),
-		TenantID:     tenantID,
-		AutomationID: id,
-		Status:       "running",
-		StartedAt:    now,
+// ResumeRecurringInvoice resumes a paused recurring invoice
+func (s *AutoRecurringInvoiceService) ResumeRecurringInvoice(tenantID, id string) error {
+	recurring, err := s.GetRecurringInvoice(tenantID, id)
+	if err != nil {
+		return err
 	}
-
-	if err := s.db.Create(log).Error; err != nil {
-		return nil, err
+	
+	recurring.Status = "active"
+	recurring.IsActive = true
+	recurring.PausedAt = nil
+	recurring.NextRunDate = calculateNextRunDate(recurring.StartDate, recurring.Frequency, recurring.IntervalDays)
+	recurring.UpdatedAt = time.Now()
+	
+	if err := s.db.Save(recurring).Error; err != nil {
+		return err
 	}
+	
+	return s.ScheduleJob(recurring)
+}
 
-	// Execute the automation actions
-	actionsRun := 0
-	errors := []string{}
+// DeleteRecurringInvoice deletes a recurring invoice
+func (s *AutoRecurringInvoiceService) DeleteRecurringInvoice(tenantID, id string) error {
+	recurring, err := s.GetRecurringInvoice(tenantID, id)
+	if err != nil {
+		return err
+	}
+	
+	s.db.Where("automation_id = ? AND status = ?", id, models.JobStatusPending).
+		Delete(&models.AutomationJob{})
+	
+	return s.db.Delete(recurring).Error
+}
 
-	// Example: Send email action
-	if s.emailService != nil {
-		switch automation.TriggerType {
-		case "invoice_due":
-			// Get overdue invoices and send reminders
-			actionsRun++
-		case "payment_received":
-			// Send thank you email
-			actionsRun++
-		case "payment_failed":
-			// Notify admin
-			actionsRun++
-		case "invoice_created":
-			// Log creation
-			actionsRun++
+// ScheduleJob schedules a job for recurring invoice execution
+func (s *AutoRecurringInvoiceService) ScheduleJob(recurring *models.RecurringInvoice) error {
+	if s.jobQueue == nil {
+		return nil
+	}
+	
+	payload, _ := json.Marshal(map[string]interface{}{
+		"recurring_id":  recurring.ID,
+		"tenant_id":   recurring.TenantID,
+		"client_id":   recurring.ClientID,
+		"template":    recurring.InvoiceTemplate,
+		"auto_send":   recurring.AutoSend,
+		"auto_submit_kra": recurring.AutoSubmitKRA,
+	})
+	
+	job := &models.AutomationJob{
+		ID:            uuid.New().String(),
+		TenantID:       recurring.TenantID,
+		JobType:       models.JobTypeRecurringInvoice,
+		Priority:     1,
+		Payload:      string(payload),
+		Status:       models.JobStatusPending,
+		RunAt:        recurring.NextRunDate,
+		MaxRetries:    3,
+		AutomationID:  &recurring.ID,
+		ClientID:     &recurring.ClientID,
+		IdempotencyKey: fmt.Sprintf("recurring_%s_%d", recurring.ID, recurring.CurrentCycle+1),
+	}
+	
+	return s.jobQueue.EnqueueJob(job)
+}
+
+// ProcessRecurringInvoice executes a recurring invoice generation
+func (s *AutoRecurringInvoiceService) ProcessRecurringInvoice(job *models.AutomationJob) error {
+	if s.jobQueue == nil {
+		return fmt.Errorf("job queue not configured")
+	}
+	
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(job.Payload), &payload); err != nil {
+		return s.jobQueue.FailJob(job.ID, fmt.Sprintf("invalid payload: %v", err))
+	}
+	
+	recurringID, _ := payload["recurring_id"].(string)
+	if recurringID == "" {
+		return s.jobQueue.FailJob(job.ID, "missing recurring_id")
+	}
+	
+	recurring, err := s.GetRecurringInvoice(job.TenantID, recurringID)
+	if err != nil {
+		return s.jobQueue.FailJob(job.ID, "recurring not found")
+	}
+	
+	if recurring.Status != "active" || !recurring.IsActive {
+		return s.jobQueue.CompleteJob(job.ID, "skipped: not active")
+	}
+	
+	// Validate client still exists
+	var client models.Client
+	if err := s.db.Where("id = ? AND tenant_id = ?", recurring.ClientID, job.TenantID).First(&client).Error; err != nil {
+		return s.jobQueue.FailJob(job.ID, "client not found")
+	}
+	
+	// Check for duplicate
+	if recurring.LastInvoiceID != nil {
+		var lastInvoice models.Invoice
+		if err := s.db.Where("id = ?", *recurring.LastInvoiceID).First(&lastInvoice).Error; err == nil {
+			if lastInvoice.CreatedAt.Format("2006-01-02") == time.Now().Format("2006-01-02") {
+				return s.jobQueue.CompleteJob(job.ID, "already generated today")
+			}
 		}
 	}
-
-	// Update log with results
-	status := "completed"
-	if len(errors) > 0 {
-		status = "completed_with_errors"
+	
+	// Generate invoice
+	templateData := make(map[string]interface{})
+	json.Unmarshal([]byte(recurring.InvoiceTemplate), &templateData)
+	
+	taxRate := 0.0
+	if tr, ok := templateData["tax_rate"].(float64); ok {
+		taxRate = tr
 	}
-
-	log.Status = status
-	log.CompletedAt = &now
-	s.db.Save(log)
-
-	result := map[string]interface{}{
-		"automation_id": id,
-		"status":        status,
-		"log_id":        log.ID,
-		"actions_run":   actionsRun,
-		"errors":        errors,
-		"executed_at":   now,
+	
+	dueDate := time.Now().AddDate(0, 0, 30)
+	if dd, ok := templateData["due_date"].(string); ok {
+		if parsed, err := time.Parse("2006-01-02", dd); err == nil {
+			dueDate = parsed
+		}
 	}
-
-	return result, nil
-}
-
-// ProcessAutomationTrigger checks if any automations should fire for a trigger
-type AutomationTriggerContext struct {
-	TenantID    string
-	UserID      string
-	InvoiceID   *string
-	ClientID    *string
-	PaymentID   *string
-	TriggerType string
-	Data        map[string]interface{}
-}
-
-// ProcessTrigger processes a trigger event and runs matching automations
-func (s *AutomationService) ProcessTrigger(ctx *AutomationTriggerContext) error {
-	// Find matching active automations
-	automations, err := s.findMatchingAutomations(ctx.TenantID, ctx.TriggerType, ctx.Data)
-	if err != nil {
-		return err
-	}
-
-	// Run each matching automation
-	for _, automation := range automations {
-		// Run in goroutine for async processing
-		go func(automationID string) {
-			_, err := s.RunAutomation(ctx.TenantID, automationID)
-			if err != nil {
-				// Log error but don't fail
-				fmt.Printf("[Automation] Error running %s: %v\n", automationID, err)
+	
+	// Parse line items from template
+	lineItems := templateData["line_items"]
+	var items []models.InvoiceItem
+	if lis, ok := lineItems.([]interface{}); ok {
+		for _, li := range lis {
+			if m, ok := li.(map[string]interface{}); ok {
+				item := models.InvoiceItem{
+					ID:          uuid.New().String(),
+					Description: getString(m, "description", "Item"),
+					Quantity:    getFloat(m, "quantity", 1),
+					UnitPrice:   getFloat(m, "rate", 0),
+					Total:      getFloat(m, "quantity", 1) * getFloat(m, "rate", 0),
+				}
+				items = append(items, item)
 			}
-		}(automation.ID)
+		}
 	}
-
+	
+	// Calculate subtotal
+	subtotal := 0.0
+	for _, item := range items {
+		subtotal += item.Total
+	}
+	taxAmount := subtotal * (taxRate / 100)
+	totalAmount := subtotal + taxAmount
+	
+	invoice := &models.Invoice{
+		ID:             uuid.New().String(),
+		TenantID:       job.TenantID,
+		UserID:         recurring.UserID,
+		ClientID:       recurring.ClientID,
+		InvoiceNumber: autoGenerateInvoiceNumber(),
+		Status:        models.InvoiceStatusDraft,
+		Subtotal:      subtotal,
+		TaxRate:       taxRate,
+		TotalTax:      taxAmount,
+		Total:         totalAmount,
+		PaidAmount:   0,
+		BalanceDue:    totalAmount,
+		DueDate:      dueDate,
+		IsRecurring:  true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	
+	// Calculate totals
+	if items, ok := lineItems.([]interface{}); ok {
+		for _, item := range items {
+			if m, ok := item.(map[string]interface{}); ok {
+				if qty, ok := m["quantity"].(float64); ok {
+					if rate, ok := m["rate"].(float64); ok {
+						invoice.Subtotal += qty * rate
+					}
+				}
+			}
+		}
+	}
+	invoice.TotalTax = invoice.Subtotal * (invoice.TaxRate / 100)
+	invoice.Total = invoice.Subtotal + invoice.TotalTax
+	invoice.BalanceDue = invoice.Total
+	
+	if err := s.db.Create(invoice).Error; err != nil {
+		return s.jobQueue.FailJob(job.ID, fmt.Sprintf("failed to create invoice: %v", err))
+	}
+	
+	// Save line items
+	for i := range items {
+		items[i].InvoiceID = invoice.ID
+	}
+	if len(items) > 0 {
+		s.db.Create(&items)
+	}
+	
+	// Update recurring
+	recurring.CurrentCycle++
+	now := time.Now()
+	recurring.LastInvoiceID = &invoice.ID
+	recurring.LastRunAt = &now
+	recurring.NextRunDate = calculateNextRunDateFromLast(recurring.LastRunAt, recurring.Frequency, recurring.IntervalDays)
+	s.db.Save(recurring)
+	
+	// Schedule next job
+	s.ScheduleJob(recurring)
+	
+	// Complete
+	s.jobQueue.CompleteJob(job.ID, fmt.Sprintf("generated invoice %s", invoice.InvoiceNumber))
+	
 	return nil
 }
 
-// findMatchingAutomations finds automations that match trigger criteria
-func (s *AutomationService) findMatchingAutomations(tenantID, triggerType string, data map[string]interface{}) ([]models.Automation, error) {
-	var automations []models.Automation
-
-	// Find active automations for this tenant with this trigger type
-	if err := s.db.Where(
-		"tenant_id = ? AND is_active = ? AND trigger_type = ?",
-		tenantID, true, triggerType,
-	).Find(&automations).Error; err != nil {
-		return nil, err
+func calculateNextRunDate(startDate time.Time, frequency string, intervalDays int) time.Time {
+	now := time.Now()
+	if startDate.After(now) {
+		return startDate
 	}
-
-	return automations, nil
-}
-
-// GetLogs returns execution logs for an automation
-func (s *AutomationService) GetLogs(tenantID, automationID string, limit int) ([]models.AutomationLog, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 100
+	
+	switch frequency {
+	case models.FrequencyDaily:
+		return now.AddDate(0, 0, 1)
+	case models.FrequencyWeekly:
+		return now.AddDate(0, 0, 7)
+	case models.FrequencyMonthly:
+		return now.AddDate(0, 1, 0)
+	case models.FrequencyCustom:
+		return now.AddDate(0, 0, intervalDays)
+	default:
+		return now.AddDate(0, 1, 0)
 	}
+}
 
-	var logs []models.AutomationLog
-	if err := s.db.Where("tenant_id = ? AND automation_id = ?", tenantID, automationID).
-		Order("started_at DESC").
-		Limit(limit).
-		Find(&logs).Error; err != nil {
-		return nil, err
+func calculateNextRunDateFromLast(lastRun *time.Time, frequency string, intervalDays int) time.Time {
+	base := time.Now()
+	if lastRun != nil {
+		base = *lastRun
 	}
-	return logs, nil
-}
-
-// GetAutomationStats returns statistics for an automation
-func (s *AutomationService) GetAutomationStats(tenantID, automationID string) (map[string]interface{}, error) {
-	var totalRuns int64
-	var successRuns int64
-	var failedRuns int64
-
-	s.db.Model(&models.AutomationLog{}).
-		Where("tenant_id = ? AND automation_id = ?", tenantID, automationID).
-		Count(&totalRuns)
-
-	s.db.Model(&models.AutomationLog{}).
-		Where("tenant_id = ? AND automation_id = ? AND status = ?", tenantID, automationID, "completed").
-		Count(&successRuns)
-
-	s.db.Model(&models.AutomationLog{}).
-		Where("tenant_id = ? AND automation_id = ? AND status = ?", tenantID, automationID, "failed").
-		Count(&failedRuns)
-
-	var avgDuration float64
-	s.db.Raw(
-		"SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at - started_at))), 0) FROM automation_logs WHERE tenant_id = ? AND automation_id = ?",
-		tenantID, automationID,
-	).Scan(&avgDuration)
-
-	return map[string]interface{}{
-		"total_runs":   totalRuns,
-		"success_runs": successRuns,
-		"failed_runs":  failedRuns,
-		"success_rate": func() float64 {
-			if totalRuns == 0 {
-				return 100
-			}
-			return float64(successRuns) / float64(totalRuns) * 100
-		}(),
-		"avg_duration": avgDuration,
-	}, nil
-}
-
-// TriggerInvoiceCreated fires when an invoice is created
-func (s *AutomationService) TriggerInvoiceCreated(tenantID, userID, invoiceID string, invoiceTotal float64) error {
-	return s.ProcessTrigger(&AutomationTriggerContext{
-		TenantID:    tenantID,
-		UserID:      userID,
-		InvoiceID:   &invoiceID,
-		TriggerType: "invoice_created",
-		Data: map[string]interface{}{
-			"invoice_id": invoiceID,
-			"total":      invoiceTotal,
-		},
-	})
-}
-
-// TriggerInvoiceSent fires when an invoice is sent
-func (s *AutomationService) TriggerInvoiceSent(tenantID, userID, invoiceID string) error {
-	return s.ProcessTrigger(&AutomationTriggerContext{
-		TenantID:    tenantID,
-		UserID:      userID,
-		InvoiceID:   &invoiceID,
-		TriggerType: "invoice_sent",
-		Data: map[string]interface{}{
-			"invoice_id": invoiceID,
-		},
-	})
-}
-
-// TriggerInvoicePaid fires when an invoice is paid
-func (s *AutomationService) TriggerInvoicePaid(tenantID, userID, invoiceID, paymentID string, amount float64) error {
-	return s.ProcessTrigger(&AutomationTriggerContext{
-		TenantID:    tenantID,
-		UserID:      userID,
-		InvoiceID:   &invoiceID,
-		PaymentID:   &paymentID,
-		TriggerType: "invoice_paid",
-		Data: map[string]interface{}{
-			"invoice_id": invoiceID,
-			"payment_id": paymentID,
-			"amount":     amount,
-		},
-	})
-}
-
-// TriggerInvoiceOverdue fires when an invoice becomes overdue
-func (s *AutomationService) TriggerInvoiceOverdue(tenantID, userID, invoiceID string, daysOverdue int) error {
-	return s.ProcessTrigger(&AutomationTriggerContext{
-		TenantID:    tenantID,
-		UserID:      userID,
-		InvoiceID:   &invoiceID,
-		TriggerType: "invoice_overdue",
-		Data: map[string]interface{}{
-			"invoice_id":   invoiceID,
-			"days_overdue": daysOverdue,
-		},
-	})
-}
-
-// TriggerPaymentFailed fires when a payment attempt fails
-func (s *AutomationService) TriggerPaymentFailed(tenantID, userID, invoiceID string, reason string) error {
-	return s.ProcessTrigger(&AutomationTriggerContext{
-		TenantID:    tenantID,
-		UserID:      userID,
-		InvoiceID:   &invoiceID,
-		TriggerType: "payment_failed",
-		Data: map[string]interface{}{
-			"invoice_id": invoiceID,
-			"reason":     reason,
-		},
-	})
-}
-
-// TriggerClientAdded fires when a new client is added
-func (s *AutomationService) TriggerClientAdded(tenantID, userID, clientID string) error {
-	return s.ProcessTrigger(&AutomationTriggerContext{
-		TenantID:    tenantID,
-		UserID:      userID,
-		ClientID:    &clientID,
-		TriggerType: "client_added",
-		Data: map[string]interface{}{
-			"client_id": clientID,
-		},
-	})
+	
+	switch frequency {
+	case models.FrequencyDaily:
+		return base.AddDate(0, 0, 1)
+	case models.FrequencyWeekly:
+		return base.AddDate(0, 0, 7)
+	case models.FrequencyMonthly:
+		return base.AddDate(0, 1, 0)
+	case models.FrequencyCustom:
+		return base.AddDate(0, 0, intervalDays)
+	default:
+		return base.AddDate(0, 1, 0)
+	}
 }

@@ -240,6 +240,13 @@ func (db *DB) Migrate() error {
 		&models.Integration{},
 		// Security models
 		&models.UserSession{},
+		// Automation Module Models - Enterprise Edition
+		&models.AutomationJob{},
+		&models.RecurringInvoice{},
+		&models.ReminderRule{},
+		&models.ReminderStatus{},
+		&models.AutomationWorkflow{},
+		&models.AutomationAuditLog{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)

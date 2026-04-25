@@ -1,197 +1,913 @@
-<!-- Automations Content -->
-<div class="p-6" x-data="automationsContent()" x-init="init()">
+<!-- Automations Dashboard - Enterprise Edition -->
+<div class="p-6" x-data="automationDashboard()" x-init="init()">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Automations</h1>
-            <p class="text-slate-500 text-sm mt-1">Automate your invoicing workflows</p>
+            <h1 class="text-2xl font-bold text-slate-900">Automation Center</h1>
+            <p class="text-slate-500 text-sm mt-1">Manage recurring invoices, reminders, and workflows</p>
         </div>
-        <a href="/automations/new" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2">
-            <i data-lucide="plus" class="w-4 h-4"></i>
-            Create Automation
-        </a>
-    </div>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="p-2 bg-trust/10 rounded-lg mb-2">
-                <i data-lucide="zap" class="w-5 h-5 text-trust"></i>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded-full">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span class="text-xs font-medium text-green-700">Workers Active</span>
             </div>
-            <p class="text-xs text-slate-500">Total Automations</p>
-            <p class="text-xl font-bold text-slate-900" x-text="stats.total">0</p>
-        </div>
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="p-2 bg-green-100 rounded-lg mb-2">
-                <i data-lucide="play" class="w-5 h-5 text-green-600"></i>
-            </div>
-            <p class="text-xs text-slate-500">Active</p>
-            <p class="text-xl font-bold text-green-600" x-text="stats.active">0</p>
-        </div>
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="p-2 bg-blue-100 rounded-lg mb-2">
-                <i data-lucide="clock" class="w-5 h-5 text-blue-600"></i>
-            </div>
-            <p class="text-xs text-slate-500">Scheduled</p>
-            <p class="text-xl font-bold text-blue-600" x-text="stats.scheduled">0</p>
-        </div>
-        <div class="bg-white rounded-xl p-5 border border-slate-200">
-            <div class="p-2 bg-slate-100 rounded-lg mb-2">
-                <i data-lucide="pause" class="w-5 h-5 text-slate-600"></i>
-            </div>
-            <p class="text-xs text-slate-500">Paused</p>
-            <p class="text-xl font-bold text-slate-600" x-text="stats.paused">0</p>
         </div>
     </div>
 
-    <!-- Automation Types -->
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        <template x-for="type in automationTypes" :key="type.id">
-            <button @click="filterByType(type.id)" 
-                class="bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-lg transition-all text-left"
-                :class="filterType === type.id ? 'ring-2 ring-trust' : ''">
-                <div class="p-2 rounded-xl w-fit mb-3" :class="type.bg">
-                    <i :data-lucide="type.icon" class="w-5 h-5" :class="type.color"></i>
+    <!-- Tabs -->
+    <div class="flex border-b border-slate-200 mb-6 overflow-x-auto">
+        <button @click="activeTab = 'overview'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'overview' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Overview
+        </button>
+        <button @click="activeTab = 'recurring'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'recurring' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Recurring Invoices
+        </button>
+        <button @click="activeTab = 'reminders'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'reminders' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Reminders
+        </button>
+        <button @click="activeTab = 'workflows'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'workflows' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Workflows
+        </button>
+        <button @click="activeTab = 'jobs'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'jobs' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Job Queue
+            <span x-show="overviewData.jobs?.pending > 0" class="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full" x-text="overviewData.jobs?.pending || 0"></span>
+        </button>
+    </div>
+
+    <!-- TAB: OVERVIEW -->
+    <div x-show="activeTab === 'overview'" x-cloak>
+        <!-- Job Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-blue-100 rounded-lg mb-2">
+                    <i data-lucide="clock" class="w-5 h-5 text-blue-600"></i>
                 </div>
-                <p class="font-medium text-slate-900" x-text="type.label"></p>
-                <p class="text-xs text-slate-500 mt-1" x-text="type.description"></p>
-            </button>
-        </template>
+                <p class="text-xs text-slate-500">Pending</p>
+                <p class="text-xl font-bold text-blue-600" x-text="overviewData.jobs?.pending || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-purple-100 rounded-lg mb-2">
+                    <i data-lucide="loader" class="w-5 h-5 text-purple-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Processing</p>
+                <p class="text-xl font-bold text-purple-600" x-text="overviewData.jobs?.processing || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-green-100 rounded-lg mb-2">
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Completed</p>
+                <p class="text-xl font-bold text-green-600" x-text="overviewData.jobs?.completed || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-red-100 rounded-lg mb-2">
+                    <i data-lucide="x-circle" class="w-5 h-5 text-red-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Failed</p>
+                <p class="text-xl font-bold text-red-600" x-text="overviewData.jobs?.failed || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-slate-100 rounded-lg mb-2">
+                    <i data-lucide="archive" class="w-5 h-5 text-slate-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Dead Letter</p>
+                <p class="text-xl font-bold text-slate-600" x-text="overviewData.jobs?.dead_letter || 0">0</p>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gradient-to-br from-trust to-trust-dark rounded-xl p-5 text-white">
+                <i data-lucide="repeat" class="w-6 h-6 mb-2 opacity-80"></i>
+                <p class="text-xs opacity-80">Recurring Invoices</p>
+                <p class="text-2xl font-bold" x-text="overviewData.counts?.recurring_invoices || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-amber-100 rounded-lg mb-2">
+                    <i data-lucide="bell" class="w-5 h-5 text-amber-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Reminder Rules</p>
+                <p class="text-xl font-bold text-slate-900" x-text="overviewData.counts?.reminder_rules || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-cyan-100 rounded-lg mb-2">
+                    <i data-lucide="workflow" class="w-5 h-5 text-cyan-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Workflows</p>
+                <p class="text-xl font-bold text-slate-900" x-text="overviewData.counts?.workflows || 0">0</p>
+            </div>
+            <div class="bg-white rounded-xl p-5 border border-slate-200">
+                <div class="p-2 bg-green-100 rounded-lg mb-2">
+                    <i data-lucide="send" class="w-5 h-5 text-green-600"></i>
+                </div>
+                <p class="text-xs text-slate-500">Reminders Sent</p>
+                <p class="text-xl font-bold text-slate-900" x-text="overviewData.reminders?.reminders_sent || 0">0</p>
+            </div>
+        </div>
     </div>
 
-    <!-- Automations List -->
-    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <table class="w-full">
-            <thead class="bg-slate-50 border-b border-slate-200">
-                <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Automation</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Trigger</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Runs</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                <template x-if="loading">
-                    <tr><td colspan="5" class="px-4 py-12 text-center text-slate-500">Loading...</td></tr>
-                </template>
-                <template x-for="automation in automations" :key="automation.id">
-                    <tr class="hover:bg-slate-50/50">
-                        <td class="px-4 py-4">
-                            <div class="flex items-center gap-3">
-                                <div class="p-2 rounded-lg" :class="getTypeClass(automation.type)">
-                                    <i :data-lucide="getTypeIcon(automation.type)" class="w-4 h-4"></i>
+    <!-- TAB: RECURRING INVOICES -->
+    <div x-show="activeTab === 'recurring'" x-cloak>
+        <div class="flex justify-end mb-4">
+            <button @click="window.location.href = '/invoices/new?recurring=true'" class="bg-trust text-white px-4 py-2 rounded-lg font-medium hover:bg-trust-dark flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                New Recurring Invoice
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Name</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Client</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Frequency</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Next Run</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Cycle</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-if="loadingRecurring">
+                        <tr><td colspan="7" class="px-4 py-12 text-center text-slate-500">Loading...</td></tr>
+                    </template>
+                    <template x-for="item in recurringInvoices" :key="item.id">
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="px-4 py-4">
+                                <p class="font-medium text-slate-900" x-text="item.name"></p>
+                                <p class="text-xs text-slate-500" x-text="item.description"></p>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600" x-text="item.client_id"></td>
+                            <td class="px-4 py-4">
+                                <span class="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded" x-text="item.frequency"></span>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600" x-text="formatDate(item.next_run_date)"></td>
+                            <td class="px-4 py-4 text-sm text-slate-600">
+                                <span x-text="item.current_cycle || 0"></span>/<span x-text="item.max_cycles || '∞'"></span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                    :class="item.status === 'active' ? 'bg-green-100 text-green-700' : item.status === 'paused' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700'"
+                                    x-text="item.status"></span>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    <button @click="pauseResumeRecurring(item)" class="p-2 hover:bg-slate-100 rounded-lg" :title="item.is_active ? 'Pause' : 'Resume'">
+                                        <i :data-lucide="item.is_active ? 'pause' : 'play'" class="w-4 h-4"></i>
+                                    </button>
+                                    <button @click="deleteRecurring(item)" class="p-2 hover:bg-red-50 rounded-lg text-red-500" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
                                 </div>
-                                <div>
-                                    <p class="font-medium text-slate-900" x-text="automation.name">Automation</p>
-                                    <p class="text-xs text-slate-500" x-text="automation.description"></p>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="!loadingRecurring && recurringInvoices.length === 0">
+                        <tr><td colspan="7" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="repeat" class="w-8 h-8 text-slate-400"></i>
                                 </div>
+                                <h3 class="text-lg font-semibold text-slate-900 mb-2">No recurring invoices</h3>
+                                <p class="text-slate-500 mb-4">Set up automatic invoice generation</p>
+                                <button @click="window.location.href = '/invoices/new?recurring=true'" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Create Recurring Invoice
+                                </button>
                             </div>
-                        </td>
-                        <td class="px-4 py-4">
-                            <span class="text-sm text-slate-600" x-text="automation.trigger || '-'">On invoice created</span>
-                        </td>
-                        <td class="px-4 py-4">
-                            <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" :class="getStatusClass(automation.status)" x-text="automation.status"></span>
-                        </td>
-                        <td class="px-4 py-4">
-                            <span class="text-sm text-slate-600" x-text="automation.run_count || 0">0</span>
-                        </td>
-                        <td class="px-4 py-4 text-right">
-                            <div class="flex items-center justify-end gap-2">
-                                <button @click="toggleAutomation(automation)" class="p-2 hover:bg-slate-100 rounded-lg" title="Toggle">
-                                    <i :data-lucide="automation.status === 'active' ? 'pause' : 'play'" class="w-4 h-4"></i>
-                                </button>
-                                <a :href="'/automations/' + automation.id + '/edit'" class="p-2 hover:bg-slate-100 rounded-lg" title="Edit">
-                                    <i data-lucide="edit-2" class="w-4 h-4"></i>
-                                </button>
-                                <button @click="deleteAutomation(automation)" class="p-2 hover:bg-red-50 rounded-lg text-red-500" title="Delete">
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB: REMINDERS -->
+    <div x-show="activeTab === 'reminders'" x-cloak>
+        <div class="flex justify-end mb-4">
+            <button @click="showReminderModal = true" class="bg-trust text-white px-4 py-2 rounded-lg font-medium hover:bg-trust-dark flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                New Reminder Rule
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Name</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Type</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Timing</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Channels</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Max Reminders</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-for="rule in reminderRules" :key="rule.id">
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="px-4 py-4">
+                                <p class="font-medium text-slate-900" x-text="rule.name"></p>
+                                <p class="text-xs text-slate-500" x-text="rule.description"></p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded" x-text="rule.reminder_type"></span>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600">
+                                <span x-text="rule.reminder_type === 'before_due' ? rule.days_before_due + ' days before' : rule.reminder_type === 'after_due' ? rule.days_after_due + ' days after' : 'On due date'"></span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex gap-1">
+                                    <template x-for="ch in parseChannels(rule.channels)" :key="ch">
+                                        <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded" x-text="ch"></span>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600" x-text="rule.max_reminders"></td>
+                            <td class="px-4 py-4">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                    :class="rule.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'"
+                                    x-text="rule.is_active ? 'Active' : 'Inactive'"></span>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    <button @click="toggleReminder(rule)" class="p-2 hover:bg-slate-100 rounded-lg">
+                                        <i :data-lucide="rule.is_active ? 'pause' : 'play'" class="w-4 h-4"></i>
+                                    </button>
+                                    <button @click="deleteReminderRule(rule)" class="p-2 hover:bg-red-50 rounded-lg text-red-500">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="reminderRules.length === 0">
+                        <tr><td colspan="7" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="bell" class="w-8 h-8 text-amber-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-slate-900 mb-2">No reminder rules</h3>
+                                <p class="text-slate-500 mb-4">Automate payment reminders</p>
+                            </div>
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB: WORKFLOWS -->
+    <div x-show="activeTab === 'workflows'" x-cloak>
+        <div class="flex justify-end mb-4">
+            <button @click="showWorkflowModal = true" class="bg-trust text-white px-4 py-2 rounded-lg font-medium hover:bg-trust-dark flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                New Workflow
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Name</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Trigger Event</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Runs</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-for="wf in workflows" :key="wf.id">
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="px-4 py-4">
+                                <p class="font-medium text-slate-900" x-text="wf.name"></p>
+                                <p class="text-xs text-slate-500" x-text="wf.description"></p>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2 py-1 bg-cyan-100 text-cyan-700 text-xs rounded" x-text="wf.trigger_event"></span>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600">
+                                <span x-text="countActions(wf.actions) + ' actions'"></span>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600">
+                                <span x-text="wf.total_runs || 0"></span> runs, 
+                                <span x-text="wf.success_runs || 0"></span> success
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                    :class="wf.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'"
+                                    x-text="wf.is_active ? 'Active' : 'Inactive'"></span>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <button @click="deleteWorkflow(wf)" class="p-2 hover:bg-red-50 rounded-lg text-red-500">
                                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                                 </button>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="workflows.length === 0">
+                        <tr><td colspan="6" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-cyan-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="workflow" class="w-8 h-8 text-cyan-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-slate-900 mb-2">No workflows</h3>
+                                <p class="text-slate-500 mb-4">Create event-driven automation workflows</p>
                             </div>
-                        </td>
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB: JOB QUEUE -->
+    <div x-show="activeTab === 'jobs'" x-cloak>
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex gap-2">
+                <button @click="jobFilter = ''" class="px-3 py-1.5 text-sm rounded-lg" :class="jobFilter === '' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">All</button>
+                <button @click="jobFilter = 'pending'" class="px-3 py-1.5 text-sm rounded-lg" :class="jobFilter === 'pending' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">Pending</button>
+                <button @click="jobFilter = 'failed'" class="px-3 py-1.5 text-sm rounded-lg" :class="jobFilter === 'failed' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">Failed</button>
+                <button @click="jobFilter = 'dead_letter'" class="px-3 py-1.5 text-sm rounded-lg" :class="jobFilter === 'dead_letter' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">Dead Letter</button>
+            </div>
+            <button @click="loadJobs()" class="px-3 py-1.5 text-sm bg-slate-100 rounded-lg flex items-center gap-1">
+                <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">ID</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Type</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Run At</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Retries</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Error</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
                     </tr>
-                </template>
-                <template x-if="!loading && automations.length === 0">
-                    <tr><td colspan="5" class="px-4 py-16">
-                        <div class="text-center">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <i data-lucide="zap" class="w-8 h-8 text-slate-400"></i>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-for="job in jobs" :key="job.id">
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="px-4 py-3 font-mono text-xs text-slate-600" x-text="job.id.slice(0,8)"></td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded" x-text="job.job_type"></span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                    :class="getJobStatusClass(job.status)" x-text="job.status"></span>
+                            </td>
+                            <td class="px-4 py-3 text-xs text-slate-600" x-text="formatDateTime(job.run_at)"></td>
+                            <td class="px-4 py-3 text-xs text-slate-600" x-text="job.retry_count + '/' + job.max_retries"></td>
+                            <td class="px-4 py-3 text-xs text-red-600 max-w-xs truncate" x-text="job.last_error || '-'"></td>
+                            <td class="px-4 py-3 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    <template x-if="job.status === 'failed' || job.status === 'dead_letter'">
+                                        <button @click="retryJob(job)" class="p-1.5 hover:bg-green-50 rounded-lg text-green-600" title="Retry">
+                                            <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                                        </button>
+                                    </template>
+                                    <template x-if="job.status === 'pending' || job.status === 'processing'">
+                                        <button @click="cancelJob(job)" class="p-1.5 hover:bg-red-50 rounded-lg text-red-500" title="Cancel">
+                                            <i data-lucide="x" class="w-3 h-3"></i>
+                                        </button>
+                                    </template>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="jobs.length === 0">
+                        <tr><td colspan="7" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="inbox" class="w-8 h-8 text-slate-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-slate-900">No jobs</h3>
+                                <p class="text-slate-500">All jobs processed successfully</p>
                             </div>
-                            <h3 class="text-lg font-semibold text-slate-900 mb-2">No automations yet</h3>
-                            <p class="text-slate-500 mb-4">Create your first automation to automate workflows</p>
-                            <a href="/automations/new" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
-                                <i data-lucide="plus" class="w-4 h-4"></i> Create Automation
-                            </a>
-                        </div>
-                    </td></tr>
-                </template>
-            </tbody>
-        </table>
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- RECURRING INVOICE MODAL -->
+    <div x-show="showRecurringModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="showRecurringModal = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 class="text-xl font-bold text-slate-900">New Recurring Invoice</h2>
+                <button @click="showRecurringModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form @submit.prevent="createRecurring()" class="p-6 space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                    <input type="text" x-model="recurringForm.name" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                    <input type="text" x-model="recurringForm.description" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Client *</label>
+                    <select x-model="recurringForm.client_id" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        <option value="">Select client</option>
+                        <template x-for="c in clients" :key="c.id">
+                            <option :value="c.id" x-text="c.name"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Frequency *</label>
+                        <select x-model="recurringForm.frequency" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                            <option value="weekly">Weekly</option>
+                            <option value="biweekly">Bi-weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Start Date *</label>
+                        <input type="date" x-model="recurringForm.start_date" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Max Cycles</label>
+                        <input type="number" x-model="recurringForm.max_cycles" min="0" placeholder="0 = unlimited" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Send Immediately</label>
+                        <label class="flex items-center gap-2 mt-2">
+                            <input type="checkbox" x-model="recurringForm.send_immediately" class="w-4 h-4 text-trust rounded">
+                            <span class="text-sm text-slate-600">Send first invoice immediately</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                    <button type="button" @click="showRecurringModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- REMINDER RULE MODAL -->
+    <div x-show="showReminderModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="showReminderModal = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 class="text-xl font-bold text-slate-900">New Reminder Rule</h2>
+                <button @click="showReminderModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form @submit.prevent="createReminderRule()" class="p-6 space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                    <input type="text" x-model="reminderForm.name" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                    <input type="text" x-model="reminderForm.description" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reminder Type *</label>
+                        <select x-model="reminderForm.reminder_type" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust" @change="reminderForm.days_before_due = reminderForm.reminder_type === 'before_due' ? 3 : ''; reminderForm.days_after_due = reminderForm.reminder_type === 'after_due' ? 3 : ''">
+                            <option value="before_due">Before Due Date</option>
+                            <option value="on_due">On Due Date</option>
+                            <option value="after_due">After Due Date</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Max Reminders</label>
+                        <input type="number" x-model="reminderForm.max_reminders" min="1" max="10" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div x-show="reminderForm.reminder_type === 'before_due'">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Days Before Due</label>
+                        <input type="number" x-model="reminderForm.days_before_due" min="1" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                    </div>
+                    <div x-show="reminderForm.reminder_type === 'after_due'">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Days After Due</label>
+                        <input type="number" x-model="reminderForm.days_after_due" min="1" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Channels</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" x-model="reminderForm.channels" value="email" class="w-4 h-4 text-trust rounded">
+                            <span class="text-sm">Email</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" x-model="reminderForm.channels" value="sms" class="w-4 h-4 text-trust rounded">
+                            <span class="text-sm">SMS</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" x-model="reminderForm.channels" value="whatsapp" class="w-4 h-4 text-trust rounded">
+                            <span class="text-sm">WhatsApp</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Active</label>
+                    <label class="flex items-center gap-2 mt-2">
+                        <input type="checkbox" x-model="reminderForm.is_active" class="w-4 h-4 text-trust rounded">
+                        <span class="text-sm text-slate-600">Enable this reminder rule</span>
+                    </label>
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                    <button type="button" @click="showReminderModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- WORKFLOW MODAL -->
+    <div x-show="showWorkflowModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="showWorkflowModal = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 class="text-xl font-bold text-slate-900">New Workflow</h2>
+                <button @click="showWorkflowModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form @submit.prevent="createWorkflow()" class="p-6 space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                    <input type="text" x-model="workflowForm.name" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                    <input type="text" x-model="workflowForm.description" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Trigger Event *</label>
+                    <select x-model="workflowForm.trigger_event" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                        <option value="invoice_created">Invoice Created</option>
+                        <option value="invoice_sent">Invoice Sent</option>
+                        <option value="invoice_paid">Invoice Paid</option>
+                        <option value="invoice_overdue">Invoice Overdue</option>
+                        <option value="payment_received">Payment Received</option>
+                        <option value="client_created">Client Created</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Actions (JSON)</label>
+                    <textarea x-model="workflowForm.actions" rows="4" placeholder='[{"type": "send_email", "template": "invoice_reminder"}]' class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust font-mono text-sm"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Active</label>
+                    <label class="flex items-center gap-2 mt-2">
+                        <input type="checkbox" x-model="workflowForm.is_active" class="w-4 h-4 text-trust rounded">
+                        <span class="text-sm text-slate-600">Enable this workflow</span>
+                    </label>
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                    <button type="button" @click="showWorkflowModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark">Create</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
 <script>
-function automationsContent() {
+function automationDashboard() {
     return {
-        loading: true,
-        automations: [],
-        filterType: '',
-        stats: { total: 0, active: 0, scheduled: 0, paused: 0 },
-        automationTypes: [
-            { id: 'reminder', label: 'Payment Reminders', description: 'Send due date reminders', icon: 'bell', color: 'text-amber-600', bg: 'bg-amber-100' },
-            { id: 'followup', label: 'Follow-ups', description: 'Follow up on unpaid', icon: 'message-circle', color: 'text-blue-600', bg: 'bg-blue-100' },
-            { id: 'latefee', label: 'Late Fees', description: 'Apply late payment fees', icon: 'alert-circle', color: 'text-red-600', bg: 'bg-red-100' },
-            { id: 'recurring', label: 'Recurring', description: 'Repeat invoices', icon: 'repeat', color: 'text-purple-600', bg: 'bg-purple-100' },
-            { id: 'approval', label: 'Approvals', description: 'Invoice approvals', icon: 'check-circle', color: 'text-green-600', bg: 'bg-green-100' },
-            { id: 'webhook', label: 'Webhooks', description: 'External triggers', icon: 'webhook', color: 'text-cyan-600', bg: 'bg-cyan-100' },
-        ],
-
+        activeTab: 'overview',
+        loadingRecurring: false,
+        showRecurringModal: false,
+        showReminderModal: false,
+        showWorkflowModal: false,
+        jobFilter: '',
+        clients: [],
+        
+        overviewData: {
+            jobs: {},
+            counts: {},
+            reminders: {},
+            workflows: {}
+        },
+        recurringInvoices: [],
+        reminderRules: [],
+        workflows: [],
+        jobs: [],
+        
+        recurringForm: {
+            name: '',
+            description: '',
+            client_id: '',
+            frequency: 'monthly',
+            start_date: new Date().toISOString().split('T')[0],
+            max_cycles: 0,
+            send_immediately: false
+        },
+        
+        reminderForm: {
+            name: '',
+            description: '',
+            reminder_type: 'before_due',
+            days_before_due: 3,
+            days_after_due: 3,
+            max_reminders: 3,
+            channels: ['email'],
+            is_active: true
+        },
+        
+        workflowForm: {
+            name: '',
+            description: '',
+            trigger_event: 'invoice_created',
+            actions: '[]',
+            is_active: true
+        },
+        
+        getToken() {
+            return localStorage.getItem('accessToken') || localStorage.getItem('token') || '';
+        },
+        
+        getAuthHeaders() {
+            const token = this.getToken();
+            return token ? {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            } : { 'Content-Type': 'application/json' };
+        },
+        
+        async handleAuthError() {
+            const token = this.getToken();
+            if (!token) {
+                window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+                return true;
+            }
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (refreshToken) {
+                try {
+                    const res = await fetch('/api/v1/auth/refresh', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: refreshToken })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        localStorage.setItem('accessToken', data.access_token);
+                        localStorage.setItem('token', data.access_token);
+                        localStorage.setItem('refreshToken', data.refresh_token);
+                        return false;
+                    }
+                } catch(e) {}
+            }
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+            return true;
+        },
+        
+        async apiCall(url, options = {}) {
+            const res = await fetch(url, { ...options, headers: { ...this.getAuthHeaders(), ...options.headers } });
+            if (res.status === 401) {
+                const retry = await this.handleAuthError();
+                if (!retry) {
+                    return fetch(url, { ...options, headers: { ...this.getAuthHeaders(), ...options.headers } });
+                }
+            }
+            return res;
+        },
+        
         async init() {
+            const token = this.getToken();
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
             lucide.createIcons();
-            await this.loadAutomations();
+            await this.loadClients();
+            await this.loadOverview();
+            await this.loadRecurring();
+            await this.loadReminders();
+            await this.loadWorkflows();
+            await this.loadJobs();
         },
-
-        async loadAutomations() {
-            this.loading = true;
+        
+        async loadClients() {
             try {
-                const data = await InvoiceFastAPI.automations.list();
-                this.automations = data.automations || [];
-                this.stats = data.stats || this.stats;
-            } catch(err) {
-                console.error('Failed to load automations:', err);
-            } finally {
-                this.loading = false;
-                lucide.createIcons();
+                const res = await this.apiCall('/api/v1/tenant/clients');
+                if (res.status === 401) return;
+                const data = await res.json();
+                this.clients = data.clients || [];
+            } catch(e) { console.error(e); }
+        },
+        
+        async loadOverview() {
+            try {
+                const res = await this.apiCall('/api/v1/tenant/automations/');
+                if (res.status === 401) return;
+                const data = await res.json();
+                this.overviewData = data;
+            } catch(e) { console.error(e); }
+        },
+        
+        async loadRecurring() {
+            this.loadingRecurring = true;
+            try {
+                const res = await this.apiCall('/api/v1/tenant/automations/recurring/');
+                if (res.status === 401) { this.loadingRecurring = false; return; }
+                const data = await res.json();
+                this.recurringInvoices = data.recurring_invoices || [];
+            } catch(e) { console.error(e); }
+            this.loadingRecurring = false;
+            lucide.createIcons();
+        },
+        
+        async loadReminders() {
+            try {
+                const res = await this.apiCall('/api/v1/tenant/automations/reminders/');
+                if (res.status === 401) return;
+                const data = await res.json();
+                this.reminderRules = data.reminder_rules || [];
+            } catch(e) { console.error(e); }
+            lucide.createIcons();
+        },
+        
+        async loadWorkflows() {
+            try {
+                const res = await this.apiCall('/api/v1/tenant/automations/workflows/');
+                if (res.status === 401) return;
+                const data = await res.json();
+                this.workflows = data.workflows || [];
+            } catch(e) { console.error(e); }
+            lucide.createIcons();
+        },
+        
+        async loadJobs() {
+            const url = this.jobFilter 
+                ? `/api/v1/tenant/automations/jobs/?status=${this.jobFilter}&limit=50`
+                : '/api/v1/tenant/automations/jobs/?limit=50';
+            try {
+                const res = await this.apiCall(url);
+                if (res.status === 401) return;
+                const data = await res.json();
+                this.jobs = data.jobs || [];
+            } catch(e) { console.error(e); }
+        },
+        
+        async pauseResumeRecurring(item) {
+            const action = item.is_active ? 'pause' : 'resume';
+            await this.apiCall(`/api/v1/tenant/automations/recurring/${item.id}/${action}`, { method: 'POST' });
+            await this.loadRecurring();
+        },
+        
+        async deleteRecurring(item) {
+            if(!confirm('Delete this recurring invoice?')) return;
+            await this.apiCall(`/api/v1/tenant/automations/recurring/${item.id}`, { method: 'DELETE' });
+            await this.loadRecurring();
+        },
+        
+        async toggleReminder(rule) {
+            await this.apiCall(`/api/v1/tenant/automations/reminders/${rule.id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({is_active: !rule.is_active})
+            });
+            await this.loadReminders();
+        },
+        
+        async deleteReminderRule(rule) {
+            if(!confirm('Delete this reminder rule?')) return;
+            await this.apiCall(`/api/v1/tenant/automations/reminders/${rule.id}`, { method: 'DELETE' });
+            await this.loadReminders();
+        },
+        
+        async deleteWorkflow(wf) {
+            if(!confirm('Delete this workflow?')) return;
+            await this.apiCall(`/api/v1/tenant/automations/workflows/${wf.id}`, { method: 'DELETE' });
+            await this.loadWorkflows();
+        },
+        
+        async retryJob(job) {
+            await this.apiCall(`/api/v1/tenant/automations/jobs/${job.id}/retry`, { method: 'POST' });
+            await this.loadJobs();
+        },
+        
+        async cancelJob(job) {
+            await this.apiCall(`/api/v1/tenant/automations/jobs/${job.id}/cancel`, { method: 'POST' });
+            await this.loadJobs();
+        },
+        
+        async createRecurring() {
+            const data = { ...this.recurringForm };
+            if (data.max_cycles === '') data.max_cycles = 0;
+            try {
+                await this.apiCall('/api/v1/tenant/automations/recurring/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                this.showRecurringModal = false;
+                this.recurringForm = { name: '', description: '', client_id: '', frequency: 'monthly', start_date: new Date().toISOString().split('T')[0], max_cycles: 0, send_immediately: false };
+                await this.loadRecurring();
+                await this.loadOverview();
+            } catch(e) { console.error(e); }
+        },
+        
+        async createReminderRule() {
+            const data = { ...this.reminderForm };
+            data.channels = JSON.stringify(data.channels);
+            try {
+                await this.apiCall('/api/v1/tenant/automations/reminders/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                this.showReminderModal = false;
+                this.reminderForm = { name: '', description: '', reminder_type: 'before_due', days_before_due: 3, days_after_due: 3, max_reminders: 3, channels: ['email'], is_active: true };
+                await this.loadReminders();
+                await this.loadOverview();
+            } catch(e) { console.error(e); }
+        },
+        
+        async createWorkflow() {
+            let actions = [];
+            try {
+                actions = JSON.parse(this.workflowForm.actions);
+            } catch(e) {
+                alert('Invalid JSON in actions field');
+                return;
             }
+            const data = {
+                name: this.workflowForm.name,
+                description: this.workflowForm.description,
+                trigger_event: this.workflowForm.trigger_event,
+                actions: JSON.stringify(actions),
+                is_active: this.workflowForm.is_active
+            };
+            try {
+                await this.apiCall('/api/v1/tenant/automations/workflows/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                this.showWorkflowModal = false;
+                this.workflowForm = { name: '', description: '', trigger_event: 'invoice_created', actions: '[]', is_active: true };
+                await this.loadWorkflows();
+                await this.loadOverview();
+            } catch(e) { console.error(e); }
         },
-
-        filterByType(type) {
-            this.filterType = this.filterType === type ? '' : type;
+        
+        formatDate(dateStr) {
+            if(!dateStr) return '-';
+            return new Date(dateStr).toLocaleDateString();
         },
-
-        getTypeIcon(type) {
-            const icons = { reminder: 'bell', followup: 'message-circle', latefee: 'alert-circle', recurring: 'repeat', approval: 'check-circle', webhook: 'webhook' };
-            return icons[type] || 'zap';
+        
+        formatDateTime(dateStr) {
+            if(!dateStr) return '-';
+            return new Date(dateStr).toLocaleString();
         },
-
-        getTypeClass(type) {
-            const classes = { reminder: 'bg-amber-100 text-amber-600', followup: 'bg-blue-100 text-blue-600', latefee: 'bg-red-100 text-red-600', recurring: 'bg-purple-100 text-purple-600', approval: 'bg-green-100 text-green-600', webhook: 'bg-cyan-100 text-cyan-600' };
-            return classes[type] || 'bg-slate-100 text-slate-600';
+        
+        parseChannels(ch) {
+            if(!ch) return [];
+            try { return JSON.parse(ch); } catch { return []; }
         },
-
-        getStatusClass(status) {
-            return status === 'active' ? 'bg-green-100 text-green-700' : status === 'paused' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-700';
+        
+        countActions(actions) {
+            if(!actions) return 0;
+            try { return JSON.parse(actions).length; } catch { return 0; }
         },
-
-        async toggleAutomation(automation) {
-            await this.loadAutomations();
-        },
-
-        deleteAutomation(automation) {
-            if (confirm('Delete ' + automation.name + '?')) {
-                this.loadAutomations();
-            }
+        
+        getJobStatusClass(status) {
+            return status === 'pending' ? 'bg-blue-100 text-blue-700' 
+                : status === 'processing' ? 'bg-purple-100 text-purple-700'
+                : status === 'completed' ? 'bg-green-100 text-green-700'
+                : status === 'failed' ? 'bg-red-100 text-red-700'
+                : 'bg-slate-100 text-slate-700';
         }
     };
 }

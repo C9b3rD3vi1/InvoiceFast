@@ -429,6 +429,9 @@ invoice: {
             if (params.get('client')) {
                 this.invoice.client_id = params.get('client');
             }
+            if (params.get('recurring') === 'true') {
+                this.invoice.recurring = true;
+            }
         },
 
         async loadClients() {
@@ -454,7 +457,7 @@ invoice: {
             if (!this.invoice.client_id) return;
             try {
                 const res = await fetch(`/api/v1/tenant/clients/${this.invoice.client_id}/buyer-type`, {
-                    headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+                    headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('accessToken') || localStorage.getItem('token')) }
                 });
                 if (res.ok) {
                     const data = await res.json();

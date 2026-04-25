@@ -159,7 +159,12 @@ func main() {
 	clientService := services.NewClientService(db)
 	reportService := services.NewReportService(db)
 	settingsService := services.NewSettingsService(db)
-	automationService := services.NewSimpleAutomationService(db)
+	
+	// Automation services - Enterprise Edition
+	jobQueue := services.NewJobQueueService(db)
+	recurringInvoice := services.NewAutoRecurringInvoiceService(db, jobQueue)
+	reminderService := services.NewAutoReminderService(db, jobQueue)
+	workflowService := services.NewAutoWorkflowService(db, jobQueue)
 
 	// Payment service for M-Pesa integration
 	paymentService := services.NewPaymentService(db, cfg)
@@ -189,15 +194,15 @@ func main() {
 		intasendService = services.NewIntasendService(&cfg.Intasend)
 	}
 
-	// Reminder service
-	reminderService := services.NewReminderService(db, emailService, nil)
+	// Reminder service - Legacy service with cron scheduler
+	legacyReminderService := services.NewReminderService(db, emailService, nil)
 
 	// Start reminder cron job
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		// Run immediately on startup
-		if err := reminderService.RunReminders(); err != nil {
+		if err := legacyReminderService.RunReminders(); err != nil {
 			log.Printf("Initial reminder error: %v", err)
 		}
 		for {
@@ -206,7 +211,7 @@ func main() {
 				log.Println("Stopping reminder cron...")
 				return
 			case <-ticker.C:
-				if err := reminderService.RunReminders(); err != nil {
+				if err := legacyReminderService.RunReminders(); err != nil {
 					log.Printf("Reminder error: %v", err)
 				}
 			}
@@ -241,10 +246,10 @@ func main() {
 				log.Println("Stopping automation scheduler...")
 				return
 			case <-ticker.C:
-				// Run active automations
-				if err := runActiveAutomations(automationService); err != nil {
-					log.Printf("Automation scheduler error: %v", err)
-				}
+				// Run active automations (legacy)
+				// if err := runActiveAutomations(nil); err != nil {
+				// 	log.Printf("Automation scheduler error: %v", err)
+				// }
 				// Process recurring invoices
 				if err := recurringInvoiceService.ProcessRecurringInvoices(); err != nil {
 					log.Printf("Recurring invoice scheduler error: %v", err)
@@ -312,7 +317,7 @@ func main() {
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db)
 	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService)
 	reportHandler := handlers.NewReportHandler(reportService)
-	automationHandler := handlers.NewAutomationHandler(automationService)
+	automationHandler := handlers.NewAutomationHandler(jobQueue, recurringInvoice, reminderService, workflowService)
 	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService)
 	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService)
 	notificationHandler := handlers.NewNotificationHandler(db)
@@ -359,7 +364,7 @@ func main() {
 	routes.ExpenseRoutes(app, expenseHandler, authService, db)
 
 	// Bulk action routes
-	bulkActionHandler := handlers.NewBulkActionHandler(reminderService)
+	bulkActionHandler := handlers.NewBulkActionHandler(legacyReminderService)
 	routes.BulkActionRoutes(app, bulkActionHandler, authService, db)
 
 	// Activity feed routes
@@ -482,20 +487,8 @@ func main() {
 }
 
 // runActiveAutomations executes all active automations with triggers
-func runActiveAutomations(automationService *services.AutomationService) error {
-	// Query for active automations using the service method
-	automations, err := automationService.GetActiveAutomations()
-	if err != nil {
-		return fmt.Errorf("failed to query automations: %w", err)
-	}
-
-	// For each active automation, process triggers
-	for _, automation := range automations {
-		// Trigger checking is handled by ProcessTrigger when events occur
-		// Time-based triggers are checked by the automation scheduler
-		_ = automation
-	}
-
+func runActiveAutomations() error {
+	// Legacy automation - now handled by new automation engine
 	return nil
 }
 
@@ -563,7 +556,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.TenantPaymentRoutes(app, paymentHandler, authService, db)
 	routes.ReportRoutes(app, reportHandler, authService, db)
 	routes.TeamRoutes(app, teamHandler, authService, db)
-	routes.AutomationRoutes(app, automationHandler, authService, db)
+	routes.AutomationRoutes(app, db, authService)
 	routes.NotificationRoutes(app, notificationHandler, authService, db)
 	routes.BillingRoutes(app, billingHandler, authService, db)
 
