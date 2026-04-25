@@ -693,20 +693,77 @@ type NotificationLog struct {
 	ID          string    `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID    string    `json:"tenant_id" gorm:"type:uuid;index"`
 	UserID      string    `json:"user_id" gorm:"type:uuid;index"`
-	InvoiceID   string    `json:"invoice_id" gorm:"type:uuid;index"`
-	ClientID    string    `json:"client_id" gorm:"type:uuid;index"`
-	Type        string    `json:"type"`     // email, whatsapp, sms
-	Provider    string    `json:"provider"` // twilio, metas
-	To          string    `json:"to"`       // phone or email
-	Status      string    `json:"status"`   // pending, sent, delivered, failed
-	ErrorCode   string    `json:"error_code"`
-	ErrorMsg    string    `json:"error_msg"`
-	ExternalID  string    `json:"external_id"` // provider message ID
-	RetryCount  int       `json:"retry_count" gorm:"default:0"`
+	InvoiceID  string    `json:"invoice_id" gorm:"type:uuid;index"`
+	ClientID   string    `json:"client_id" gorm:"type:uuid;index"`
+	Type       string    `json:"type"`     // email, whatsapp, sms
+	Provider   string    `json:"provider"` // twilio, metas
+	To         string    `json:"to"`       // phone or email
+	Status     string    `json:"status"`   // pending, sent, delivered, failed
+	ErrorCode  string    `json:"error_code"`
+	ErrorMsg   string    `json:"error_msg"`
+	ExternalID string   `json:"external_id"` // provider message ID
+	RetryCount int     `json:"retry_count" gorm:"default:0"`
 	SentAt      time.Time `json:"sent_at"`
 	DeliveredAt time.Time `json:"delivered_at"`
 	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// NotificationQueueItem represents a queued notification for async processing
+type NotificationQueueItem struct {
+	ID            string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID       string    `json:"user_id" gorm:"type:uuid;index"`
+	EventType    string    `json:"event_type" gorm:"index"` // invoice.created, payment.received, etc.
+	Channel     string    `json:"channel"`                // email, sms, whatsapp
+	Recipient   string    `json:"recipient"`             // phone or email
+	Subject     string    `json:"subject"`              // for email
+	Body        string    `json:"body"`               // message body
+	Variables   string    `json:"variables" gorm:"type:jsonb"` // template variables
+	TemplateID  string    `json:"template_id" gorm:"type:uuid;index"`
+	Reference   string    `json:"reference"`  // invoice_id, payment_id, etc.
+	Priority   int       `json:"priority"` // higher = more urgent
+	Status     string    `json:"status"`  // pending, processing, sent, failed, dead_letter
+	RetryCount  int      `json:"retry_count" gorm:"default:0"`
+	MaxRetries  int      `json:"max_retries" gorm:"default:3"`
+	ErrorMsg   string    `json:"error_msg"`
+	ExternalID string   `json:"external_id"`  // provider message ID
+	ScheduledAt time.Time `json:"scheduled_at"`
+	SentAt      time.Time `json:"sent_at"`
+	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// NotificationTemplate represents a notification template
+type NotificationTemplate struct {
+	ID         string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID   string    `json:"tenant_id" gorm:"type:uuid;index"`
+	Name      string    `json:"name"`
+	EventType string    `json:"event_type" gorm:"index"` // invoice.created, payment.received, etc.
+	Channel  string    `json:"channel"`                // email, sms, whatsapp
+	Subject  string    `json:"subject"`              // for email (optional)
+	Body     string    `json:"body"`                 // template body with {{vars}}
+	IsActive  bool      `json:"is_active" gorm:"default:true"`
+	Version  int       `json:"version" gorm:"default:1"`
+	CreatedBy string    `json:"created_by" gorm:"type:uuid"`
+	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NotificationPreference stores per-user notification settings
+type NotificationPreference struct {
+	ID               string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID          string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID           string    `json:"user_id" gorm:"type:uuid;index;not null"`
+	EventType        string    `json:"event_type" gorm:"index"` // invoice.created, payment.received
+	ChannelEmail    bool      `json:"channel_email" gorm:"default:true"`
+	ChannelSMS      bool      `json:"channel_sms" gorm:"default:false"`
+	ChannelWhatsApp bool      `json:"channel_whatsapp" gorm:"default:false"`
+	IsEnabled       bool      `json:"is_enabled" gorm:"default:true"`
+	QuietHoursStart string    `json:"quiet_hours_start"` // "22:00"
+	QuietHoursEnd   string    `json:"quiet_hours_end"`   // "08:00"
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // TeamInvite represents a team member invitation

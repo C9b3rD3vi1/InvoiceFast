@@ -153,8 +153,23 @@ func main() {
 	// KRA service
 	kraService := services.NewKRAServiceWithDB(cfg, db)
 
-	// Build invoice service with all features
-	invoiceService := services.NewInvoiceServiceWithKRAService(db, exchangeRateService, emailService, nil, kraService, cfg)
+	// Initialize WhatsApp service (used by notification service)
+	whatsappService := services.NewWhatsAppService()
+
+	// Notification service (for all modules)
+	notificationService := services.NewNotificationService(db, emailService, smsService, whatsappService, cfg)
+	_ = notificationService
+
+	// Build invoice service with all dependencies
+	invoiceService := services.NewInvoiceServiceWithDeps(db, &services.ServiceDependencies{
+		DB:            db,
+		Email:         emailService,
+		WhatsApp:      whatsappService,
+		Notification: notificationService,
+		Exchange:     exchangeRateService,
+		KRA:           kraService,
+		Config:        cfg,
+	})
 
 	clientService := services.NewClientService(db)
 	reportService := services.NewReportService(db)
@@ -185,7 +200,11 @@ func main() {
 	lateFeeService := services.NewLateFeeService(db)
 
 	// Thank you message service
-	thankYouService := services.NewThankYouMessageService(db, emailService)
+	thankYouService := services.NewThankYouMessageService(db, &services.ServiceDependencies{
+		DB:            db,
+		Email:         emailService,
+		Notification: notificationService,
+	})
 	_ = thankYouService // Used by payment handlers to send thank you on payment completion
 
 	// Intasend service for STK Push
@@ -194,8 +213,12 @@ func main() {
 		intasendService = services.NewIntasendService(&cfg.Intasend)
 	}
 
-	// Reminder service - Legacy service with cron scheduler
-	legacyReminderService := services.NewReminderService(db, emailService, nil)
+	// Reminder service - uses notification service
+	legacyReminderService := services.NewReminderService(db, &services.ServiceDependencies{
+		DB:            db,
+		Email:         emailService,
+		Notification: notificationService,
+	})
 
 	// Start reminder cron job
 	go func() {
@@ -308,8 +331,7 @@ func main() {
 	// Initialize PDF generator
 	pdfGenerator := pdf.NewPDFGenerator("./templates", "./data/pdfs")
 
-	// Initialize WhatsApp service
-	whatsappService := services.NewWhatsAppService()
+	// Reuse whatsappService created earlier
 
 	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)

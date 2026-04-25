@@ -1,0 +1,454 @@
+<!-- Notification Settings -->
+<div class="p-6" x-data="notificationSettings()" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Notification Settings</h1>
+            <p class="text-slate-500 text-sm mt-1">Manage your notification preferences and templates</p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b border-slate-200 mb-6 overflow-x-auto">
+        <button @click="activeTab = 'preferences'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'preferences' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Preferences
+        </button>
+        <button @click="activeTab = 'templates'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'templates' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Templates
+        </button>
+        <button @click="activeTab = 'logs'" 
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+            :class="activeTab === 'logs' ? 'border-trust text-trust' : 'border-transparent text-slate-500 hover:text-slate-700'">
+            Delivery Logs
+        </button>
+    </div>
+
+    <!-- TAB: PREFERENCES -->
+    <div x-show="activeTab === 'preferences'" x-cloak>
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 bg-slate-50 border-b border-slate-200">
+                <h2 class="font-semibold text-slate-900">Event Notifications</h2>
+                <p class="text-sm text-slate-500">Choose how you want to be notified for each event type</p>
+            </div>
+            
+            <div class="divide-y divide-slate-100">
+                <template x-for="event in events" :key="event.id">
+                    <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50">
+                        <div>
+                            <p class="font-medium text-slate-900" x-text="event.label"></p>
+                            <p class="text-sm text-slate-500" x-text="event.description"></p>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="event.email" @change="savePreference(event)" class="w-4 h-4 text-trust rounded">
+                                <span class="text-sm text-slate-600">Email</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="event.sms" @change="savePreference(event)" class="w-4 h-4 text-trust rounded">
+                                <span class="text-sm text-slate-600">SMS</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" x-model="event.whatsapp" @change="savePreference(event)" class="w-4 h-4 text-trust rounded">
+                                <span class="text-sm text-slate-600">WhatsApp</span>
+                            </label>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Quiet Hours -->
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200">
+                <h3 class="font-semibold text-slate-900 mb-4">Quiet Hours</h3>
+                <div class="flex items-center gap-4">
+                    <div>
+                        <label class="block text-sm text-slate-600 mb-1">Start</label>
+                        <input type="time" x-model="quietHoursStart" class="px-3 py-2 border border-slate-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-600 mb-1">End</label>
+                        <input type="time" x-model="quietHoursEnd" class="px-3 py-2 border border-slate-200 rounded-lg">
+                    </div>
+                    <button @click="saveQuietHours()" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark self-end">
+                        Save
+                    </button>
+                </div>
+                <p class="text-xs text-slate-500 mt-2">No notifications will be sent during quiet hours</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: TEMPLATES -->
+    <div x-show="activeTab === 'templates'" x-cloak>
+        <div class="flex justify-end mb-4">
+            <button @click="showTemplateModal = true" class="bg-trust text-white px-4 py-2 rounded-lg font-medium hover:bg-trust-dark flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                New Template
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Name</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Event</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Channel</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-for="tpl in templates" :key="tpl.id">
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-4 py-4">
+                                <p class="font-medium text-slate-900" x-text="tpl.name"></p>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-slate-600" x-text="tpl.event_type"></td>
+                            <td class="px-4 py-4">
+                                <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded" x-text="tpl.channel"></span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                    :class="tpl.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'"
+                                    x-text="tpl.is_active ? 'Active' : 'Inactive'"></span>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                    <button @click="editTemplate(tpl)" class="p-2 hover:bg-slate-100 rounded-lg">
+                                        <i data-lucide="edit-2" class="w-4 h-4"></i>
+                                    </button>
+                                    <button @click="deleteTemplate(tpl)" class="p-2 hover:bg-red-50 rounded-lg text-red-500">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="templates.length === 0">
+                        <tr><td colspan="5" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="mail" class="w-8 h-8 text-slate-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-slate-900 mb-2">No templates</h3>
+                                <p class="text-slate-500 mb-4">Create custom notification templates</p>
+                                <button @click="showTemplateModal = true" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark inline-flex items-center gap-2">
+                                    <i data-lucide="plus" class="w-4 h-4"></i> Create Template
+                                </button>
+                            </div>
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB: LOGS -->
+    <div x-show="activeTab === 'logs'" x-cloak>
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex gap-2">
+                <select x-model="logFilter" @change="loadLogs()" class="px-3 py-2 border border-slate-200 rounded-lg">
+                    <option value="">All Status</option>
+                    <option value="sent">Sent</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+            <button @click="loadLogs()" class="px-3 py-2 bg-slate-100 rounded-lg flex items-center gap-1">
+                <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Time</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Channel</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">To</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Error</th>
+                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <template x-for="log in logs" :key="log.id">
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-4 py-3 text-sm text-slate-600" x-text="formatTime(log.sent_at)"></td>
+                            <td class="px-4 py-3">
+                                <span class="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded" x-text="log.type"></span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-slate-600" x-text="log.to"></td>
+                            <td class="px-4 py-3">
+                                <span class="px-2.5 py-1.5 rounded-full text-xs font-medium" 
+                                    :class="log.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                                    x-text="log.status"></span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-red-600 max-w-xs truncate" x-text="log.error_msg || '-'"></td>
+                            <td class="px-4 py-3 text-right">
+                                <template x-if="log.status === 'failed'">
+                                    <button @click="retryLog(log)" class="p-2 hover:bg-green-50 rounded-lg text-green-600">
+                                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                                    </button>
+                                </template>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-if="logs.length === 0">
+                        <tr><td colspan="6" class="px-4 py-16">
+                            <div class="text-center">
+                                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="inbox" class="w-8 h-8 text-slate-400"></i>
+                                </div>
+                                <h3 class="text-lg font-semibold text-slate-900">No delivery logs</h3>
+                                <p class="text-slate-500">Your notification delivery history will appear here</p>
+                            </div>
+                        </td></tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TEMPLATE MODAL -->
+    <div x-show="showTemplateModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="showTemplateModal = false">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in">
+            <div class="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                <h2 class="text-xl font-bold text-slate-900" x-text="editingTemplate ? 'Edit Template' : 'New Template'"></h2>
+                <button @click="showTemplateModal = false" class="p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form @submit.prevent="saveTemplate()" class="p-6 space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                    <input type="text" x-model="templateForm.name" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Event Type *</label>
+                        <select x-model="templateForm.event_type" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                            <option value="invoice.created">Invoice Created</option>
+                            <option value="invoice.sent">Invoice Sent</option>
+                            <option value="invoice.paid">Invoice Paid</option>
+                            <option value="invoice.overdue">Invoice Overdue</option>
+                            <option value="payment.received">Payment Received</option>
+                            <option value="payment.failed">Payment Failed</option>
+                            <option value="password.reset">Password Reset</option>
+                            <option value="login.alert">Login Alert</option>
+                            <option value="fraud.alert">Fraud Alert</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Channel *</label>
+                        <select x-model="templateForm.channel" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                            <option value="email">Email</option>
+                            <option value="sms">SMS</option>
+                            <option value="whatsapp">WhatsApp</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Subject (Email only)</label>
+                    <input type="text" x-model="templateForm.subject" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Body *</label>
+                    <textarea x-model="templateForm.body" rows="4" required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-trust" placeholder="Use {{variables}} like {{client_name}}, {{amount}}, {{invoice_number}}"></textarea>
+                    <p class="text-xs text-slate-500 mt-1">Available variables: {{client_name}}, {{invoice_number}}, {{amount}}, {{due_date}}, {{reference}}</p>
+                </div>
+                <div>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" x-model="templateForm.is_active" class="w-4 h-4 text-trust rounded">
+                        <span class="text-sm text-slate-600">Active</span>
+                    </label>
+                </div>
+                <div class="flex justify-end gap-3 pt-4">
+                    <button type="button" @click="showTemplateModal = false" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-trust text-white rounded-lg hover:bg-trust-dark">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function notificationSettings() {
+    return {
+        activeTab: 'preferences',
+        showTemplateModal: false,
+        editingTemplate: null,
+        templates: [],
+        logs: [],
+        logFilter: '',
+        quietHoursStart: '22:00',
+        quietHoursEnd: '08:00',
+        
+        templateForm: {
+            name: '',
+            event_type: 'invoice.created',
+            channel: 'email',
+            subject: '',
+            body: '',
+            is_active: true
+        },
+        
+        events: [
+            { id: 'invoice.created', label: 'Invoice Created', description: 'When a new invoice is created', email: true, sms: false, whatsapp: false },
+            { id: 'invoice.sent', label: 'Invoice Sent', description: 'When an invoice is sent to client', email: true, sms: false, whatsapp: false },
+            { id: 'invoice.paid', label: 'Invoice Paid', description: 'When payment is received', email: true, sms: true, whatsapp: true },
+            { id: 'invoice.overdue', label: 'Invoice Overdue', description: 'When invoice becomes overdue', email: true, sms: true, whatsapp: true },
+            { id: 'payment.received', label: 'Payment Received', description: 'When payment is processed', email: true, sms: true, whatsapp: false },
+            { id: 'payment.failed', label: 'Payment Failed', description: 'When payment fails', email: true, sms: true, whatsapp: false },
+            { id: 'password.reset', label: 'Password Reset', description: 'When password reset is requested', email: true, sms: true, whatsapp: false },
+            { id: 'login.alert', label: 'Login Alert', description: 'When new login detected', email: true, sms: true, whatsapp: false },
+            { id: 'fraud.alert', label: 'Fraud Alert', description: 'Suspicious activity detected', email: true, sms: true, whatsapp: true },
+        ],
+        
+        getToken() {
+            return localStorage.getItem('accessToken') || localStorage.getItem('token') || '';
+        },
+        
+        getAuthHeaders() {
+            const token = this.getToken();
+            return token ? {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            } : { 'Content-Type': 'application/json' };
+        },
+        
+        async apiCall(url, options = {}) {
+            const res = await fetch(url, { ...options, headers: { ...this.getAuthHeaders(), ...options.headers } });
+            if (res.status === 401) {
+                window.location.href = '/login';
+                return null;
+            }
+            return res;
+        },
+        
+        async init() {
+            lucide.createIcons();
+            await this.loadPreferences();
+            await this.loadTemplates();
+            await this.loadLogs();
+        },
+        
+        async loadPreferences() {
+            try {
+                const res = await this.apiCall('/api/v1/tenant/notifications/preferences');
+                if (!res) return;
+                const data = await res.json();
+                
+                if (data.preferences && data.preferences.length > 0) {
+                    data.preferences.forEach(p => {
+                        const event = this.events.find(e => e.id === p.event_type);
+                        if (event) {
+                            event.email = p.channel_email;
+                            event.sms = p.channel_sms;
+                            event.whatsapp = p.channel_whatsapp;
+                        }
+                    });
+                }
+            } catch(e) { console.error(e); }
+        },
+        
+        async savePreference(event) {
+            try {
+                await this.apiCall('/api/v1/tenant/notifications/preferences', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        event_type: event.id,
+                        channel_email: event.email,
+                        channel_sms: event.sms,
+                        channel_whatsapp: event.whatsapp,
+                        is_enabled: event.email || event.sms || event.whatsapp
+                    })
+                });
+            } catch(e) { console.error(e); }
+        },
+        
+        async saveQuietHours() {
+            try {
+                await this.apiCall('/api/v1/tenant/notifications/preferences', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        quiet_hours_start: this.quietHoursStart,
+                        quiet_hours_end: this.quietHoursEnd
+                    })
+                });
+            } catch(e) { console.error(e); }
+        },
+        
+        async loadTemplates() {
+            try {
+                const res = await this.apiCall('/api/v1/tenant/notifications/templates');
+                if (!res) return;
+                const data = await res.json();
+                this.templates = data.templates || [];
+            } catch(e) { console.error(e); }
+            lucide.createIcons();
+        },
+        
+        async saveTemplate() {
+            const url = this.editingTemplate 
+                ? '/api/v1/tenant/notifications/templates/' + this.editingTemplate.id
+                : '/api/v1/tenant/notifications/templates';
+            
+            const method = this.editingTemplate ? 'PUT' : 'POST';
+            
+            try {
+                await this.apiCall(url, {
+                    method: method,
+                    body: JSON.stringify(this.templateForm)
+                });
+                this.showTemplateModal = false;
+                this.editingTemplate = null;
+                this.templateForm = { name: '', event_type: 'invoice.created', channel: 'email', subject: '', body: '', is_active: true };
+                await this.loadTemplates();
+            } catch(e) { console.error(e); }
+        },
+        
+        editTemplate(tpl) {
+            this.editingTemplate = tpl;
+            this.templateForm = { ...tpl };
+            this.showTemplateModal = true;
+        },
+        
+        async deleteTemplate(tpl) {
+            if(!confirm('Delete this template?')) return;
+            try {
+                await this.apiCall('/api/v1/tenant/notifications/templates/' + tpl.id, { method: 'DELETE' });
+                await this.loadTemplates();
+            } catch(e) { console.error(e); }
+        },
+        
+        async loadLogs() {
+            try {
+                const url = '/api/v1/tenant/notifications/logs' + (this.logFilter ? '?status=' + this.logFilter : '');
+                const res = await this.apiCall(url);
+                if (!res) return;
+                const data = await res.json();
+                this.logs = data.logs || [];
+            } catch(e) { console.error(e); }
+            lucide.createIcons();
+        },
+        
+        async retryLog(log) {
+            if(!confirm('Retry this notification?')) return;
+            try {
+                await this.apiCall('/api/v1/tenant/notifications/' + log.id + '/retry', { method: 'POST' });
+                await this.loadLogs();
+            } catch(e) { console.error(e); }
+        },
+        
+        formatTime(dateStr) {
+            if(!dateStr) return '-';
+            return new Date(dateStr).toLocaleString();
+        }
+    };
+}
+</script>

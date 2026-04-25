@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -11,9 +12,10 @@ import (
 
 // ReminderService handles automated payment reminders
 type ReminderService struct {
-	db           *database.DB
-	emailService *EmailService
-	waService    *WhatsAppService
+	db              *database.DB
+	emailService   *EmailService
+	waService     *WhatsAppService
+	notificationSvc *NotificationService
 }
 
 // ReminderConfig for configuring reminder schedules
@@ -40,12 +42,13 @@ var defaultReminderConfig = ReminderConfig{
 	GracePeriodDays: 3,
 }
 
-// NewReminderService creates a new reminder service
-func NewReminderService(db *database.DB, email *EmailService, wa *WhatsAppService) *ReminderService {
+// NewReminderService creates a new reminder service with all dependencies
+func NewReminderService(db *database.DB, deps *ServiceDependencies) *ReminderService {
 	return &ReminderService{
-		db:           db,
-		emailService: email,
-		waService:    wa,
+		db:               db,
+		emailService:     deps.Email,
+		waService:        deps.WhatsApp,
+		notificationSvc: deps.Notification,
 	}
 }
 
@@ -129,7 +132,29 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", invoice.UserID)
 
-	// Send email
+	// Use NotificationService if available
+	if s.notificationSvc != nil {
+		amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
+		s.notificationSvc.Send(context.Background(), &NotificationRequest{
+			TenantID:   tenantID,
+			UserID:    invoice.UserID,
+			EventType: "invoice.due_soon",
+			Channels:  []string{ChannelEmail, ChannelWA},
+			Recipient: client.Email,
+			Subject:  "Invoice Due Soon - " + invoice.InvoiceNumber,
+			Body:     fmt.Sprintf("Invoice %s is due on %s. Amount: %s. Please arrange payment.", invoice.InvoiceNumber, FormatDate(invoice.DueDate), amount),
+			Variables: map[string]string{
+				"invoice_number": invoice.InvoiceNumber,
+				"amount":         amount,
+				"due_date":       FormatDate(invoice.DueDate),
+			},
+			Reference: invoice.InvoiceNumber,
+		})
+		s.logReminder(invoice.UserID, invoice.ID, "due_soon")
+		return nil
+	}
+
+	// Legacy: Direct email send (deprecated)
 	if defaultReminderConfig.EnableEmail && client.Email != "" {
 		emailData := &ReminderEmailData{
 			CompanyName:   user.CompanyName,
@@ -190,8 +215,32 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 	}
 
 	balanceDue := invoice.Total - invoice.PaidAmount
+	tenantID := invoice.TenantID
 
-	// Send email
+	// Use NotificationService if available
+	if s.notificationSvc != nil {
+		amount := fmt.Sprintf("%s %.2f", invoice.Currency, balanceDue)
+		s.notificationSvc.Send(context.Background(), &NotificationRequest{
+			TenantID:   tenantID,
+			UserID:    invoice.UserID,
+			EventType: "invoice.overdue",
+			Channels:  []string{ChannelEmail, ChannelWA},
+			Recipient: client.Email,
+			Subject:  fmt.Sprintf("Invoice Overdue - %s (%d days)", invoice.InvoiceNumber, daysOverdue),
+			Body:     fmt.Sprintf("Invoice %s is %d days overdue. Amount: %s. Please arrange payment.", invoice.InvoiceNumber, daysOverdue, amount),
+			Variables: map[string]string{
+				"invoice_number": invoice.InvoiceNumber,
+				"amount":      amount,
+				"due_date":    FormatDate(invoice.DueDate),
+				"days_overdue": fmt.Sprintf("%d", daysOverdue),
+			},
+			Reference: invoice.InvoiceNumber,
+		})
+		s.logReminder(invoice.UserID, invoice.ID, reminderType)
+		return nil
+	}
+
+	// Legacy: Direct email send (deprecated)
 	if defaultReminderConfig.EnableEmail && client.Email != "" {
 		emailData := &ReminderEmailData{
 			CompanyName:   user.CompanyName,
