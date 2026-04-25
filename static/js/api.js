@@ -1013,7 +1013,7 @@ const InvoiceFastAPI = {
         },
     },
     
-    // Automations
+    // Automations - Enterprise Edition
     automations: {
         async getAll() {
             return InvoiceFastAPI.request('/tenant/automations');
@@ -1051,6 +1051,127 @@ const InvoiceFastAPI = {
         
         async getLogs(id) {
             return InvoiceFastAPI.request('/tenant/automations/' + id + '/logs');
+        },
+        
+        // Recurring Invoices
+        recurring: {
+            async list() {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/');
+            },
+            async get(id) {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/' + id);
+            },
+            async create(data) {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/', {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                });
+            },
+            async update(id, data) {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/' + id, {
+                    method: 'PUT',
+                    body: JSON.stringify(data),
+                });
+            },
+            async pause(id) {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/' + id + '/pause', { method: 'POST' });
+            },
+            async resume(id) {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/' + id + '/resume', { method: 'POST' });
+            },
+            async delete(id) {
+                return InvoiceFastAPI.request('/tenant/automations/recurring/' + id, { method: 'DELETE' });
+            },
+        },
+        
+        // Reminder Rules
+        reminders: {
+            async list() {
+                return InvoiceFastAPI.request('/tenant/automations/reminders/');
+            },
+            async get(id) {
+                return InvoiceFastAPI.request('/tenant/automations/reminders/' + id);
+            },
+            async create(data) {
+                return InvoiceFastAPI.request('/tenant/automations/reminders/', {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                });
+            },
+            async update(id, data) {
+                return InvoiceFastAPI.request('/tenant/automations/reminders/' + id, {
+                    method: 'PUT',
+                    body: JSON.stringify(data),
+                });
+            },
+            async delete(id) {
+                return InvoiceFastAPI.request('/tenant/automations/reminders/' + id, { method: 'DELETE' });
+            },
+            async stats() {
+                return InvoiceFastAPI.request('/tenant/automations/reminders/stats');
+            },
+        },
+        
+        // Workflows
+        workflows: {
+            async list() {
+                return InvoiceFastAPI.request('/tenant/automations/workflows/');
+            },
+            async get(id) {
+                return InvoiceFastAPI.request('/tenant/automations/workflows/' + id);
+            },
+            async create(data) {
+                return InvoiceFastAPI.request('/tenant/automations/workflows/', {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                });
+            },
+            async update(id, data) {
+                return InvoiceFastAPI.request('/tenant/automations/workflows/' + id, {
+                    method: 'PUT',
+                    body: JSON.stringify(data),
+                });
+            },
+            async delete(id) {
+                return InvoiceFastAPI.request('/tenant/automations/workflows/' + id, { method: 'DELETE' });
+            },
+            async stats() {
+                return InvoiceFastAPI.request('/tenant/automations/workflows/stats');
+            },
+        },
+        
+        // Job Queue
+        jobs: {
+            async list(status, limit = 50, offset = 0) {
+                const params = new URLSearchParams({ limit, offset });
+                if (status) params.set('status', status);
+                return InvoiceFastAPI.request('/tenant/automations/jobs/?' + params);
+            },
+            async get(id) {
+                return InvoiceFastAPI.request('/tenant/automations/jobs/' + id);
+            },
+            async stats() {
+                return InvoiceFastAPI.request('/tenant/automations/jobs/stats');
+            },
+            async failed(limit = 50, offset = 0) {
+                return InvoiceFastAPI.request(`/tenant/automations/jobs/failed?limit=${limit}&offset=${offset}`);
+            },
+            async recent(limit = 20) {
+                return InvoiceFastAPI.request('/tenant/automations/jobs/recent?limit=' + limit);
+            },
+            async retry(id) {
+                return InvoiceFastAPI.request('/tenant/automations/jobs/' + id + '/retry', { method: 'POST' });
+            },
+            async cancel(id) {
+                return InvoiceFastAPI.request('/tenant/automations/jobs/' + id + '/cancel', { method: 'POST' });
+            },
+        },
+        
+        // Monitoring
+        monitoring: {
+            async stats() {
+                return InvoiceFastAPI.request('/admin/automation/stats');
+            },
         },
     },
     

@@ -929,3 +929,211 @@ type Integration struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
+
+// ============================================================================
+// AUTOMATION MODULE MODELS - Enterprise-grade persistent job queue system
+// ============================================================================
+
+// AutomationJob represents a persistent job in the queue system
+// This survives server restarts and ensures no missed executions
+type AutomationJob struct {
+	ID          string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID    string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	JobType     string     `json:"job_type" gorm:"not null"` // recurring_invoice, reminder, workflow, webhook
+	Priority    int        `json:"priority" gorm:"default:0"` // 0=low, 1=normal, 2=high
+	Payload     string     `json:"payload" gorm:"type:jsonb"` // JSON payload for the job
+	Status      string     `json:"status" gorm:"index"`        // pending, processing, completed, failed, dead_letter
+	RunAt       time.Time  `json:"run_at" gorm:"index;not null"`
+	StartedAt   *time.Time `json:"started_at"`
+	CompletedAt *time.Time `json:"completed_at"`
+	RetryCount  int        `json:"retry_count" gorm:"default:0"`
+	MaxRetries  int        `json:"max_retries" gorm:"default:3"`
+	LastError   string     `json:"last_error"`
+	NextRetryAt *time.Time `json:"next_retry_at"`
+	Metadata    string     `json:"metadata" gorm:"type:jsonb"` // Additional metadata
+	// Idempotency key to prevent duplicate execution
+	IdempotencyKey string    `json:"idempotency_key" gorm:"index"`
+	// Links
+	AutomationID *string `json:"automation_id" gorm:"type:uuid;index"`
+	InvoiceID    *string `json:"invoice_id" gorm:"type:uuid;index"`
+	ClientID     *string `json:"client_id" gorm:"type:uuid;index"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// Job status constants
+const (
+	JobStatusPending     = "pending"
+	JobStatusProcessing = "processing"
+	JobStatusCompleted  = "completed"
+	JobStatusFailed     = "failed"
+	JobStatusDeadLetter = "dead_letter"
+)
+
+// Job type constants
+const (
+	JobTypeRecurringInvoice = "recurring_invoice"
+	JobTypeReminder         = "reminder"
+	JobTypeWorkflow         = "workflow"
+	JobTypeWebhook          = "webhook"
+	JobTypeKRAQueue         = "kra_queue"
+)
+
+// RecurringInvoice represents a recurring invoice template
+type RecurringInvoice struct {
+	ID               string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID         string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID           string     `json:"user_id" gorm:"type:uuid;index;not null"`
+	ClientID         string     `json:"client_id" gorm:"type:uuid;index;not null"`
+	Name             string     `json:"name"`
+	Description      string     `json:"description"`
+	// Schedule
+	Frequency        string     `json:"frequency" gorm:"not null"` // daily, weekly, monthly, custom
+	IntervalDays     int        `json:"interval_days"`              // For custom frequency
+	StartDate        time.Time  `json:"start_date"`
+	EndDate          *time.Time `json:"end_date"`
+	NextRunDate      time.Time  `json:"next_run_date" gorm:"index"`
+	// Limits
+	MaxCycles        *int       `json:"max_cycles"`
+	CurrentCycle     int        `json:"current_cycle" gorm:"default:0"`
+	// Invoice template data (JSON snapshot at creation)
+	InvoiceTemplate  string     `json:"invoice_template" gorm:"type:jsonb"`
+	// Auto-actions
+	AutoSend         bool       `json:"auto_send" gorm:"default:false"`
+	AutoSubmitKRA     bool      `json:"auto_submit_kra" gorm:"default:false"`
+	// Status
+	IsActive         bool       `json:"is_active" gorm:"default:true;index"`
+	Status           string     `json:"status" gorm:"default:'active'"` // active, paused, completed, cancelled
+	PausedAt         *time.Time `json:"paused_at"`
+	// Last execution
+	LastInvoiceID    *string    `json:"last_invoice_id" gorm:"type:uuid;index"`
+	LastRunAt        *time.Time `json:"last_run_at"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+// Frequency constants
+const (
+	FrequencyDaily   = "daily"
+	FrequencyWeekly  = "weekly"
+	FrequencyMonthly = "monthly"
+	FrequencyCustom  = "custom"
+)
+
+// ReminderRule defines when and how to send reminders
+type ReminderRule struct {
+	ID                string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID          string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID            string     `json:"user_id" gorm:"type:uuid;index;not null"`
+	Name              string     `json:"name"`
+	Description       string     `json:"description"`
+	// Trigger configuration
+	ReminderType     string     `json:"reminder_type" gorm:"not null"` // before_due, on_due, after_due
+	DaysBeforeDue    int        `json:"days_before_due"`                // For before_due type
+	DaysAfterDue      int        `json:"days_after_due"`               // For after_due type (overdue reminders)
+	// Frequency for after_due (how often to repeat reminder)
+	Frequency        int        `json:"frequency" gorm:"default:1"`     // Days between reminders
+	MaxReminders     int        `json:"max_reminders" gorm:"default:3"`  // Stop after this many reminders
+	// Channel configuration (channels stored as JSON)
+	Channels         string     `json:"channels" gorm:"type:jsonb"`     // ["email", "sms", "whatsapp"]
+	// Templates (JSON)
+	Templates        string     `json:"templates" gorm:"type:jsonb"`     // Channel-specific templates
+	// Filtering
+	InvoiceStatus    string     `json:"invoice_status"`                 // Filter by invoice status
+	// Status
+	IsActive          bool       `json:"is_active" gorm:"default:true;index"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+// ReminderType constants
+const (
+	ReminderTypeBeforeDue = "before_due"
+	ReminderTypeOnDue     = "on_due"
+	ReminderTypeAfterDue  = "after_due"
+)
+
+// ReminderStatus tracks individual reminder sends
+type ReminderStatus struct {
+	ID             string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID       string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	InvoiceID      string     `json:"invoice_id" gorm:"type:uuid;index;not null"`
+	ReminderRuleID string     `json:"reminder_rule_id" gorm:"type:uuid;index;not null"`
+	AttemptNumber  int        `json:"attempt_number" gorm:"default:1"`
+	Channel        string     `json:"channel"`         // email, sms, whatsapp
+	SentAt         *time.Time `json:"sent_at"`
+	Status         string     `json:"status"`           // pending, sent, delivered, failed
+	ErrorMessage   string     `json:"error_message"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// AutomationWorkflow defines a workflow with conditions and actions
+type AutomationWorkflow struct {
+	ID           string     `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID     string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID       string     `json:"user_id" gorm:"type:uuid;index;not null"`
+	Name         string     `json:"name"`
+	Description  string     `json:"description"`
+	// Trigger
+	TriggerEvent string     `json:"trigger_event" gorm:"not null"` // invoice_created, invoice_sent, invoice_paid, invoice_overdue, payment_received, payment_failed
+	// Conditions (JSON array of conditions)
+	Conditions   string     `json:"conditions" gorm:"type:jsonb"`
+	// Actions (JSON array of actions to execute)
+	Actions      string     `json:"actions" gorm:"type:jsonb"`
+	// Status
+	IsActive     bool       `json:"is_active" gorm:"default:true;index"`
+	Priority     int        `json:"priority" gorm:"default:0"`
+	// Execution tracking
+	TotalRuns    int        `json:"total_runs" gorm:"default:0"`
+	SuccessRuns  int        `json:"success_runs" gorm:"default:0"`
+	FailedRuns   int        `json:"failed_runs" gorm:"default:0"`
+	LastRunAt    *time.Time `json:"last_run_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// TriggerEvent constants
+const (
+	EventInvoiceCreated  = "invoice_created"
+	EventInvoiceSent     = "invoice_sent"
+	EventInvoicePaid     = "invoice_paid"
+	EventInvoiceOverdue  = "invoice_overdue"
+	EventPaymentReceived = "payment_received"
+	EventPaymentFailed   = "payment_failed"
+	EventFraudDetected   = "fraud_detected"
+	EventClientAdded     = "client_added"
+)
+
+// WorkflowCondition defines a condition for workflow execution
+type WorkflowCondition struct {
+	Field    string      `json:"field"`
+	Operator string      `json:"operator"` // equals, not_equals, contains, greater_than, less_than, in, not_in
+	Value    interface{} `json:"value"`
+}
+
+// WorkflowAction defines an action to execute
+type WorkflowAction struct {
+	ActionType string                 `json:"action_type"` // send_email, send_sms, send_whatsapp, create_invoice, update_status, webhook, notify_admin
+	Config     map[string]interface{} `json:"config"`
+	Order      int                    `json:"order"`
+	Delay      int                    `json:"delay"` // Delay in seconds before executing
+}
+
+// AutomationAuditLog represents a comprehensive audit trail for automation
+type AutomationAuditLog struct {
+	ID            string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID        string    `json:"user_id" gorm:"type:uuid;index"`
+	ActorType     string    `json:"actor_type"`       // user, system, automation
+	ActorID       string    `json:"actor_id"`         // automation_job_id, workflow_id, user_id
+	Event         string    `json:"event" gorm:"index"` // invoice_generated, reminder_sent, job_created, job_executed, job_failed
+	EntityType    string    `json:"entity_type"`       // invoice, payment, client, automation, job
+	EntityID      string    `json:"entity_id" gorm:"index"`
+	Description   string    `json:"description"`
+	OldValue      string    `json:"old_value" gorm:"type:jsonb"`
+	NewValue      string    `json:"new_value" gorm:"type:jsonb"`
+	Metadata      string    `json:"metadata" gorm:"type:jsonb"`
+	IPAddress     string    `json:"ip_address"`
+	UserAgent     string    `json:"user_agent"`
+	CreatedAt     time.Time `json:"created_at" gorm:"index"`
+}

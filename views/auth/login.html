@@ -132,6 +132,7 @@
                                 
                                 if (res.ok && data.access_token) {
                                     localStorage.setItem('accessToken', data.access_token);
+                                    localStorage.setItem('token', data.access_token);
                                     localStorage.setItem('refreshToken', data.refresh_token);
                                     if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
                                     // Check for redirect param
