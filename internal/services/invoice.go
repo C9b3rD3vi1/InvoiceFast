@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -39,58 +40,47 @@ var validCurrencies = map[string]bool{
 }
 
 type InvoiceService struct {
-	db              *database.DB
-	emailService    *EmailService
-	whatsappService *WhatsAppService
-	exchangeService *ExchangeRateService
-	kraService      *KRAService
-	cfg             *config.Config
+	db                  *database.DB
+	emailService       *EmailService
+	whatsappService    *WhatsAppService
+	exchangeService   *ExchangeRateService
+	kraService         *KRAService
+	cfg                *config.Config
+	notificationSvc    *NotificationService
 }
 
 func NewInvoiceService(db *database.DB) *InvoiceService {
 	return &InvoiceService{db: db}
 }
 
+type ServiceDependencies struct {
+	DB             *database.DB
+	Email          *EmailService
+	WhatsApp       *WhatsAppService
+	Notification  *NotificationService
+	Exchange      *ExchangeRateService
+	KRA            *KRAService
+	SMS            *SMSService
+	Config        *config.Config
+}
+
+func NewInvoiceServiceWithDeps(db *database.DB, deps *ServiceDependencies) *InvoiceService {
+	svc := &InvoiceService{
+		db:                db,
+		emailService:     deps.Email,
+		notificationSvc: deps.Notification,
+		exchangeService: deps.Exchange,
+		kraService:       deps.KRA,
+		cfg:             deps.Config,
+	}
+	if deps.WhatsApp != nil {
+		svc.whatsappService = deps.WhatsApp
+	}
+	return svc
+}
+
 func (s *InvoiceService) GetDB() *gorm.DB {
 	return s.db.DB
-}
-
-func NewInvoiceServiceWithNotifications(db *database.DB, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
-	return &InvoiceService{
-		db:              db,
-		emailService:    email,
-		whatsappService: whatsapp,
-		cfg:             cfg,
-	}
-}
-
-func NewInvoiceServiceWithExchange(db *database.DB, exchange *ExchangeRateService) *InvoiceService {
-	return &InvoiceService{
-		db:              db,
-		exchangeService: exchange,
-	}
-}
-
-func NewInvoiceServiceWithAll(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, cfg *config.Config) *InvoiceService {
-	return &InvoiceService{
-		db:              db,
-		exchangeService: exchange,
-		emailService:    email,
-		whatsappService: whatsapp,
-		cfg:             cfg,
-	}
-}
-
-// NewInvoiceServiceWithKRAService creates invoice service with KRA integration
-func NewInvoiceServiceWithKRAService(db *database.DB, exchange *ExchangeRateService, email *EmailService, whatsapp *WhatsAppService, kra *KRAService, cfg *config.Config) *InvoiceService {
-	return &InvoiceService{
-		db:              db,
-		exchangeService: exchange,
-		emailService:    email,
-		whatsappService: whatsapp,
-		kraService:      kra,
-		cfg:             cfg,
-	}
 }
 
 // CreateInvoice creates a new invoice with kraPayloadItems (tenant-scoped)
@@ -826,10 +816,6 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 
 // sendInvoiceNotifications sends email and WhatsApp notifications for an invoice
 func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userID string) {
-	if s.emailService == nil {
-		return
-	}
-
 	// Load client and user for notifications (tenant-scoped)
 	var client models.Client
 	var user models.User
@@ -837,36 +823,64 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", userID)
 
-	// Build invoice link
+	// Build notification data
 	invoiceLink := fmt.Sprintf("%s/invoice/%s", s.getBaseURL(), invoice.MagicToken)
-
-	// Send email notification
-	emailData := &InvoiceEmailData{
-		CompanyName:   user.CompanyName,
-		CompanyEmail:  user.Email,
-		ClientName:    client.Name,
-		ClientEmail:   client.Email,
-		InvoiceNumber: invoice.InvoiceNumber,
-		InvoiceLink:   invoiceLink,
-		Amount:        invoice.Total,
-		Currency:      invoice.Currency,
-		DueDate:       invoice.DueDate.Format("02 Jan 2006"),
+	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
+	
+	// Use NotificationService if available
+	if s.notificationSvc != nil {
+		// Trigger invoice.created event
+		vars := map[string]string{
+			"client_name":    client.Name,
+			"invoice_number": invoice.InvoiceNumber,
+			"amount":        amount,
+			"due_date":     invoice.DueDate.Format("02 Jan 2006"),
+			"link":         invoiceLink,
+		}
+		
+		// Queue notification for invoice created
+		s.notificationSvc.Send(context.Background(), &NotificationRequest{
+			TenantID:   tenantID,
+			UserID:     userID,
+			EventType:  "invoice.created",
+			Channels:  []string{ChannelEmail, ChannelWA},
+			Recipient: client.Email,
+			Subject:   "New Invoice " + invoice.InvoiceNumber,
+			Body:     fmt.Sprintf("Invoice %s for %s has been created. Amount: %s. Due: %s", invoice.InvoiceNumber, client.Name, amount, invoice.DueDate.Format("02 Jan 2006")),
+			Variables: vars,
+			Reference: invoice.InvoiceNumber,
+		})
+		return
 	}
+	
+	// Legacy direct calls (deprecated) - only runs if no NotificationService
+	if s.emailService != nil {
+		emailData := &InvoiceEmailData{
+			CompanyName:   user.CompanyName,
+			CompanyEmail:  user.Email,
+			ClientName:    client.Name,
+			ClientEmail:   client.Email,
+			InvoiceNumber: invoice.InvoiceNumber,
+			InvoiceLink:   invoiceLink,
+			Amount:        invoice.Total,
+			Currency:      invoice.Currency,
+			DueDate:       invoice.DueDate.Format("02 Jan 2006"),
+		}
 
-	if err := s.emailService.SendInvoiceEmail(emailData); err != nil {
-		log.Printf("Failed to send invoice email for %s: %v", invoice.InvoiceNumber, err)
+		if err := s.emailService.SendInvoiceEmail(emailData); err != nil {
+			log.Printf("Failed to send invoice email for %s: %v", invoice.InvoiceNumber, err)
+		}
 	}
 
 	// Send WhatsApp notification if configured
 	if s.whatsappService != nil && client.Phone != "" {
-		amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
-		data := map[string]string{
+		waData := map[string]string{
 			"company": user.CompanyName,
 			"invoice": invoice.InvoiceNumber,
 			"amount":  amount,
 			"link":    invoiceLink,
 		}
-		if err := s.whatsappService.SendInvoiceNotification(client.Phone, data); err != nil {
+		if err := s.whatsappService.SendInvoiceNotification(client.Phone, waData); err != nil {
 			log.Printf("Failed to send WhatsApp for %s: %v", invoice.InvoiceNumber, err)
 		}
 	}
@@ -986,7 +1000,39 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 			Details:    fmt.Sprintf(`{"invoice_id": "%s", "amount": %f, "method": "%s", "status": "%s"}`, invoiceID, payment.Amount, payment.Method, newStatus),
 		})
 
+		// Send payment notification
+		go s.sendPaymentNotification(tenantID, &invoice, payment)
+
 		return nil
+	})
+}
+
+// sendPaymentNotification sends payment received notifications
+func (s *InvoiceService) sendPaymentNotification(tenantID string, invoice *models.Invoice, payment *models.Payment) {
+	if s.notificationSvc == nil {
+		return
+	}
+
+	var client models.Client
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
+
+	amount := fmt.Sprintf("%s %.2f", invoice.Currency, payment.Amount)
+	
+	s.notificationSvc.Send(context.Background(), &NotificationRequest{
+		TenantID:   tenantID,
+		UserID:    invoice.UserID,
+		EventType: "payment.received",
+		Channels: []string{ChannelEmail, ChannelWA},
+		Recipient: client.Email,
+		Subject:  "Payment Received - " + invoice.InvoiceNumber,
+		Body:    fmt.Sprintf("Payment of %s received for Invoice %s. Thank you!", amount, invoice.InvoiceNumber),
+		Variables: map[string]string{
+			"invoice_number": invoice.InvoiceNumber,
+			"amount":      amount,
+			"reference":   payment.Reference,
+			"client_name": client.Name,
+		},
+		Reference: invoice.InvoiceNumber,
 	})
 }
 

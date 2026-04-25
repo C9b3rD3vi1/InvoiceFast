@@ -9,14 +9,16 @@ import (
 )
 
 type ThankYouMessageService struct {
-	db           *database.DB
-	emailService *EmailService
+	db               *database.DB
+	emailService    *EmailService
+	notificationSvc *NotificationService
 }
 
-func NewThankYouMessageService(db *database.DB, email *EmailService) *ThankYouMessageService {
+func NewThankYouMessageService(db *database.DB, deps *ServiceDependencies) *ThankYouMessageService {
 	return &ThankYouMessageService{
-		db:           db,
-		emailService: email,
+		db:               db,
+		emailService:     deps.Email,
+		notificationSvc: deps.Notification,
 	}
 }
 
