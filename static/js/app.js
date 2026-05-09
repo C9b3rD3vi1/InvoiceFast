@@ -53,6 +53,7 @@ document.addEventListener('alpine:init', () => {
                 }
                 
                 this.currentPlan = subData?.plan || null;
+                this.subscription = subData?.subscription || null;
                 this.paymentMethods = methodsData || [];
                 this.transactions = historyData?.transactions || [];
                 
@@ -239,9 +240,15 @@ document.addEventListener('alpine:init', () => {
             }
         },
         
-        formatPrice(price) {
+        formatPrice(price, currency = 'KES') {
             if (!price && price !== 0) return '-';
-            return 'KES ' + new Intl.NumberFormat('en-KE').format(price);
+            const symbols = { USD: '$', KES: 'KES ', EUR: '€', GBP: '£' };
+            const symbol = symbols[currency] || currency + ' ';
+            
+            // Convert cents to actual amount (KES uses cents too)
+            const displayPrice = price > 100 ? (price / 100) : price;
+            
+            return symbol + new Intl.NumberFormat('en-KE').format(displayPrice);
         },
         
         formatDate(date) {

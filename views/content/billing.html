@@ -69,22 +69,49 @@
                 <h2 class="text-4xl font-bold mt-2" x-text="currentPlan?.name || 'No Plan'">No Plan</h2>
                 <div class="flex items-center gap-4 mt-4">
                     <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                        <span class="text-white/80" x-text="subscriptionStatus === 'trialing' ? 'Trial Active' : 'Active'"></span>
+                        <!-- Trialing: Blue clock icon -->
+                        <template x-if="subscriptionStatus === 'trialing'">
+                            <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                            </svg>
+                        </template>
+                        <!-- Active: Green check icon -->
+                        <template x-if="subscriptionStatus === 'active'">
+                            <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                        </template>
+                        <!-- Past Due: Yellow warning icon -->
+                        <template x-if="subscriptionStatus === 'past_due'">
+                            <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </template>
+                        <!-- Expired/Canceled: Red X icon -->
+                        <template x-if="subscriptionStatus === 'expired' || subscriptionStatus === 'none'">
+                            <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                            </svg>
+                        </template>
+                        <span class="text-white/80" x-text="subscriptionStatus === 'trialing' ? 'Trial Active' : (subscriptionStatus === 'past_due' ? 'Payment Past Due' : (subscriptionStatus === 'expired' ? 'Expired' : 'Active'))"></span>
                     </div>
-                    <div class="flex items-center gap-2" x-show="subscriptionStatus === 'trialing' && currentPlan?.renewsAt">
+                    <div class="flex items-center gap-2" x-show="(subscriptionStatus === 'trialing' || subscriptionStatus === 'active') && currentPlan?.renewsAt">
                         <svg class="w-5 h-5 text-white/40" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
                         </svg>
                         <span class="text-white/60">Renews <span x-text="formatDate(currentPlan?.renewsAt)"></span></span>
                     </div>
+                    <div class="flex items-center gap-2" x-show="subscriptionStatus === 'past_due' && currentPlan?.renewsAt">
+                        <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="text-amber-200">Update payment to continue</span>
+                    </div>
                 </div>
             </div>
             <div class="text-right">
-                <p class="text-5xl font-bold" x-text="formatPrice(currentPlan?.price)">$0</p>
-                <p class="text-white/60 mt-1">/<span x-text="currentPlan?.billingCycle">month</span></p>
+                <p class="text-5xl font-bold" x-text="currentPlan?.price ? formatPrice(currentPlan?.price, 'USD') : (subscription?.amount ? formatPrice(subscription?.amount, subscription?.currency) : '$0')">$0</p>
+                <p class="text-white/60 mt-1">/<span x-text="currentPlan?.billingCycle || subscription?.billing_cycle || 'month'">month</span></p>
             </div>
         </div>
 
@@ -193,7 +220,7 @@
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="font-semibold text-slate-900" x-text="formatPrice(tx.amount)">$19.00</p>
+                        <p class="font-semibold text-slate-900" x-text="formatPrice(tx.amount, tx.currency || 'USD')">$19.00</p>
                         <p class="text-sm capitalize" :class="tx.status === 'completed' ? 'text-green-600' : tx.status === 'pending' ? 'text-amber-600' : 'text-red-600'" x-text="tx.status">Completed</p>
                     </div>
                 </div>

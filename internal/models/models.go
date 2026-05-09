@@ -841,7 +841,7 @@ type Subscription struct {
 	BillingCycle           string     `json:"billing_cycle" gorm:"default:'monthly'"` // monthly, yearly
 	PaymentMethod          string     `json:"payment_method"`                   // card, mpesa, intasend, bank_transfer
 	Amount                 int64      `json:"amount" gorm:"not null"`           // Amount in cents
-	Currency               string     `json:"currency" gorm:"default:'USD'"`
+	Currency               string     `json:"currency" gorm:"default:'KES'"`
 	CurrentPeriodStart     time.Time  `json:"current_period_start"`
 	CurrentPeriodEnd       time.Time  `json:"current_period_end"`
 	TrialStart             *time.Time `json:"trial_start"`
