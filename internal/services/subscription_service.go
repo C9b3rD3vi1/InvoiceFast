@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+	"fmt"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
 	"time"
@@ -11,12 +13,14 @@ import (
 type SubscriptionService struct {
 	db          *database.DB
 	planService *PlanService
+	notifySvc  *NotificationService
 }
 
-func NewSubscriptionService(db *database.DB, planSvc *PlanService) *SubscriptionService {
+func NewSubscriptionService(db *database.DB, planSvc *PlanService, notifySvc *NotificationService) *SubscriptionService {
 	return &SubscriptionService{
 		db:          db,
 		planService: planSvc,
+		notifySvc:  notifySvc,
 	}
 }
 
@@ -43,20 +47,23 @@ func (s *SubscriptionService) CreateSubscriptionWithTrial(tenantID string) (*mod
 		return nil, err
 	}
 
-	trialEnd := time.Now().AddDate(0, 0, 14)
+	trialStart := time.Now()
+	trialEnd := trialStart.AddDate(0, 0, 14)
 
 	sub := &models.Subscription{
-		ID:           uuid.New().String(),
-		TenantID:     tenantID,
-		PlanID:       starterPlan.ID,
-		Status:       "trialing",
-		BillingCycle: "monthly",
-		Amount:       starterPlan.MonthlyPriceUSD,
-		Currency:     "USD",
-		TrialEndsAt:  &trialEnd,
-		StartsAt:     time.Now(),
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:                 uuid.New().String(),
+		TenantID:           tenantID,
+		PlanID:             starterPlan.ID,
+		Status:             "trialing",
+		BillingCycle:       "monthly",
+		Amount:             starterPlan.MonthlyPriceUSD,
+		Currency:           "USD",
+		TrialStart:         &trialStart,
+		TrialEnd:           &trialEnd,
+		CurrentPeriodStart: trialStart,
+		CurrentPeriodEnd:   trialEnd,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 
 	if err := s.db.Create(sub).Error; err != nil {
@@ -80,17 +87,19 @@ func (s *SubscriptionService) CreateSubscription(tenantID, planID string, billin
 		amount = plan.MonthlyPriceUSD
 	}
 
+	now := time.Now()
 	sub := &models.Subscription{
-		ID:           uuid.New().String(),
-		TenantID:     tenantID,
-		PlanID:       planID,
-		Status:       "active",
-		BillingCycle: billingCycle,
-		Amount:       amount,
-		Currency:     "USD",
-		StartsAt:     time.Now(),
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:                 uuid.New().String(),
+		TenantID:           tenantID,
+		PlanID:             planID,
+		Status:             "active",
+		BillingCycle:       billingCycle,
+		Amount:             amount,
+		Currency:           "USD",
+		CurrentPeriodStart: now,
+		CurrentPeriodEnd:   now.AddDate(0, 1, 0), // 1 month from now
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 
 	for _, opt := range opts {
@@ -102,6 +111,7 @@ func (s *SubscriptionService) CreateSubscription(tenantID, planID string, billin
 	}
 
 	s.InitUsageTracking(tenantID)
+	s.sendSubscriptionNotification(tenantID, sub, EventSubCreated)
 	return sub, nil
 }
 
@@ -112,9 +122,8 @@ func (s *SubscriptionService) CancelSubscription(tenantID string) error {
 	}
 
 	now := time.Now()
-	sub.CancelledAt = &now
+	sub.CanceledAt = &now
 	sub.Status = "canceled"
-	sub.RenewsAt = nil
 	sub.UpdatedAt = now
 
 	return s.db.Save(sub).Error
@@ -127,9 +136,9 @@ func (s *SubscriptionService) SuspendSubscription(tenantID, reason string) error
 	}
 
 	now := time.Now()
-	sub.Status = "suspended"
-	sub.SuspendedAt = &now
-	sub.LastPaymentError = reason
+	sub.Status = "past_due"
+	sub.PastDueSince = &now
+	sub.PauseReason = reason
 	sub.UpdatedAt = now
 
 	return s.db.Save(sub).Error
@@ -142,7 +151,8 @@ func (s *SubscriptionService) ReactivateSubscription(tenantID string) error {
 	}
 
 	sub.Status = "active"
-	sub.SuspendedAt = nil
+	sub.PastDueSince = nil
+	sub.PausedAt = nil
 	sub.RetryCount = 0
 	sub.UpdatedAt = time.Now()
 
@@ -200,13 +210,13 @@ func (s *SubscriptionService) ExtendTrial(tenantID string, days int) error {
 		return err
 	}
 
-	if sub.TrialEndsAt == nil {
+	if sub.TrialEnd == nil {
 		now := time.Now()
-		sub.TrialEndsAt = &now
+		sub.TrialEnd = &now
 	}
 
-	newEnd := sub.TrialEndsAt.Add(time.Duration(days) * 24 * time.Hour)
-	sub.TrialEndsAt = &newEnd
+	newEnd := sub.TrialEnd.Add(time.Duration(days) * 24 * time.Hour)
+	sub.TrialEnd = &newEnd
 	sub.UpdatedAt = time.Now()
 
 	return s.db.Save(sub).Error
@@ -226,7 +236,12 @@ func (s *SubscriptionService) ProcessRenewalPayment(tenantID string) error {
 		sub.Status = "suspended"
 	}
 
-	return s.db.Save(sub).Error
+	if err := s.db.Save(sub).Error; err != nil {
+		return err
+	}
+
+	s.sendSubscriptionNotification(tenantID, sub, EventSubRenewed)
+	return nil
 }
 
 func (s *SubscriptionService) RecordTransaction(sub *models.Subscription, txType, status, failureReason string) error {
@@ -234,9 +249,10 @@ func (s *SubscriptionService) RecordTransaction(sub *models.Subscription, txType
 		ID:             uuid.New().String(),
 		SubscriptionID: sub.ID,
 		TenantID:       sub.TenantID,
+		PlanID:         sub.PlanID,
 		Amount:         sub.Amount,
 		Currency:       sub.Currency,
-		PaymentMethod:  sub.PaymentMethod,
+		Provider:       sub.Provider,
 		Status:         status,
 		Type:           txType,
 		FailureReason:  failureReason,
@@ -380,4 +396,45 @@ func (s *SubscriptionService) GetSubscriptionWithPlan(tenantID string) (*models.
 	}
 
 	return sub, plan, nil
+}
+
+func (s *SubscriptionService) sendSubscriptionNotification(tenantID string, sub *models.Subscription, eventType string) {
+	if s.notifySvc == nil {
+		return
+	}
+
+	plan, _ := s.planService.GetPlan(sub.PlanID)
+	planName := "Unknown"
+	if plan != nil {
+		planName = plan.Name
+	}
+
+	amountStr := fmt.Sprintf("%s %d", sub.Currency, sub.Amount)
+	body := ""
+	subject := ""
+	switch eventType {
+	case EventSubCreated:
+		subject = "Subscription Activated"
+		body = fmt.Sprintf("Your subscription to the %s plan has been activated. Amount: %s", planName, amountStr)
+	case EventSubRenewed:
+		subject = "Subscription Renewed"
+		body = fmt.Sprintf("Your subscription has been renewed. Plan: %s, Amount: %s", planName, amountStr)
+	case EventSubExpiring:
+		subject = "Subscription Expiring Soon"
+		body = fmt.Sprintf("Your subscription will expire in %d days. Plan: %s", sub.DaysUntilRenewal(), planName)
+	}
+
+	s.notifySvc.Send(context.Background(), &NotificationRequest{
+		TenantID:  tenantID,
+		UserID:   tenantID,
+		EventType: eventType,
+		Channels: []string{ChannelEmail},
+		Subject:  subject,
+		Body:     body,
+		Variables: map[string]string{
+			"plan_name": planName,
+			"amount":   amountStr,
+			"status":   sub.Status,
+		},
+	})
 }

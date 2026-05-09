@@ -8,6 +8,8 @@ import (
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+
+	"github.com/google/uuid"
 )
 
 // AuditService handles comprehensive audit logging
@@ -60,6 +62,7 @@ func (s *AuditService) LogAction(ctx context.Context, tenantID, userID, action, 
 	detailsJSON, _ := json.Marshal(details)
 
 	entry := &models.AuditLog{
+		ID:         uuid.New().String(),
 		TenantID:   tenantID,
 		UserID:     userID,
 		Action:     action,

@@ -87,7 +87,7 @@ func (h *PaymentMatchingHandler) MatchPayment(c *fiber.Ctx) error {
 	}
 
 	userID := middleware.GetUserID(c)
-	if err := h.service.MatchPayment(paymentID, req.InvoiceID, userID); err != nil {
+	if err := h.service.MatchPayment(tenantID, paymentID, req.InvoiceID, userID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 

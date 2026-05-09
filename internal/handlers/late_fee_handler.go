@@ -49,12 +49,17 @@ func (h *LateFeeHandler) UpdateConfig(c *fiber.Ctx) error {
 }
 
 func (h *LateFeeHandler) CalculateFee(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
 	invoiceID := c.Params("invoiceID")
 	if invoiceID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
 	}
 
-	fee, err := h.service.CalculateLateFee(invoiceID)
+	fee, err := h.service.CalculateLateFee(tenantID, invoiceID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}

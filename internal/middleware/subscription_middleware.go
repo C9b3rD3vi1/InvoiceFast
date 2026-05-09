@@ -79,7 +79,7 @@ func (m *SubscriptionMiddleware) EnforceActiveSubscription() fiber.Handler {
 			})
 		}
 
-		if sub.HasTrial() && sub.TrialEndsAt != nil {
+		if sub.HasTrial() {
 			return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
 				"error":   "Trial expired",
 				"upgrade": "/billing/plans",

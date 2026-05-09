@@ -45,7 +45,10 @@ const InvoiceFastAPI = {
         
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || 'Request failed');
+            const error = new Error(data.error || 'Request failed');
+            error.response = data;
+            error.status = res.status;
+            throw error;
         }
         
         // Handle empty responses
@@ -1025,10 +1028,14 @@ const InvoiceFastAPI = {
             return InvoiceFastAPI.request('/tenant/billing/history');
         },
         
-        async createCheckoutSession(planId) {
+        async getPlans() {
+            return InvoiceFastAPI.request('/tenant/billing/plans');
+        },
+        
+        async createCheckoutSession(data) {
             return InvoiceFastAPI.request('/tenant/billing/checkout', {
                 method: 'POST',
-                body: JSON.stringify({ plan_id: planId }),
+                body: JSON.stringify(data),
             });
         },
     },

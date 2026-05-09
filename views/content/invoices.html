@@ -328,7 +328,7 @@ async downloadPDF(id) {
                     this.selectedInvoices.forEach(id => InvoiceFastAPI.invoices.update(id, { status: 'paid' }));
                     this.showToast('Invoices marked as paid', 'success');
                 } else if (this.actionModalType === 'bulkExport') {
-                    alert('Exporting ' + this.selectedInvoices.length + ' invoices');
+                    this.showToast('Exporting ' + this.selectedInvoices.length + ' invoices...', 'info');
                     this.showToast('Invoices exported', 'success');
                 } else if (this.actionModalType === 'bulkdelete') {
                     this.selectedInvoices.forEach(id => InvoiceFastAPI.invoices.delete(id));

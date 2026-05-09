@@ -49,6 +49,11 @@ func (h *ReminderSequenceHandler) GetSequences(c *fiber.Ctx) error {
 }
 
 func (h *ReminderSequenceHandler) UpdateSequence(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
 	sequenceID := c.Params("id")
 	if sequenceID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "sequence ID required"})
@@ -59,7 +64,7 @@ func (h *ReminderSequenceHandler) UpdateSequence(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	seq, err := h.service.UpdateSequence(sequenceID, &req)
+	seq, err := h.service.UpdateSequence(tenantID, sequenceID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -68,12 +73,17 @@ func (h *ReminderSequenceHandler) UpdateSequence(c *fiber.Ctx) error {
 }
 
 func (h *ReminderSequenceHandler) DeleteSequence(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
 	sequenceID := c.Params("id")
 	if sequenceID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "sequence ID required"})
 	}
 
-	if err := h.service.DeleteSequence(sequenceID); err != nil {
+	if err := h.service.DeleteSequence(tenantID, sequenceID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 

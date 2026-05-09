@@ -2,33 +2,55 @@ package services
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/database"
+	"invoicefast/internal/models"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
+
+var ErrIntaSendNotConfigured = errors.New("intasend not configured")
+var ErrInvalidSignature = errors.New("invalid webhook signature")
+var ErrAlreadyProcessed = errors.New("payment already processed")
 
 type IntasendService struct {
 	cfg        *config.IntasendConfig
+	db         *database.DB
 	httpClient *http.Client
-	apiURL     string
+	notifySvc  *NotificationService
+	apiKey    string
+	apiURL    string
+	pubKey    string
 }
 
-type IntasendResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	ID      string `json:"id,omitempty"`
+func NewIntasendServiceWithDB(db *database.DB, cfg *config.IntasendConfig, notifySvc *NotificationService) *IntasendService {
+	if cfg == nil {
+		return &IntasendService{db: db}
+	}
+
+	return &IntasendService{
+		cfg:        cfg,
+		db:         db,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		notifySvc:  notifySvc,
+		apiKey:    cfg.APIKey,
+		apiURL:    cfg.APIURL,
+		pubKey:   cfg.PublicKey,
+	}
 }
 
 type InitiatePaymentRequest struct {
-	Amount        float64 `json:"amount"`
+	Amount         float64 `json:"amount"`
 	Currency      string  `json:"currency"`
 	PhoneNumber   string  `json:"phone_number"`
 	APIRef        string  `json:"api_ref"`
@@ -38,286 +60,281 @@ type InitiatePaymentRequest struct {
 	InvoiceNumber string  `json:"invoice_number,omitempty"`
 }
 
-type PaymentStatusRequest struct {
-	ID string `json:"id"`
+type IntasendCheckoutResponse struct {
+	URL string `json:"url"`
+	ID  string `json:"id"`
 }
 
-type IntasendPaymentStatus struct {
-	ID            string `json:"id"`
-	State         string `json:"state"` // "pending", "completed", "failed"
-	Amount        string `json:"amount"`
-	Currency      string `json:"currency"`
-	CustomerEmail string `json:"customer_email"`
-	CreatedAt     string `json:"created_at"`
-	CompletedAt   string `json:"completed_at"`
-	FailureReason string `json:"failure_reason,omitempty"`
+type IntasendWebhookPayload struct {
+	Event      string `json:"event"`
+	Timestamp string `json:"timestamp"`
+	PublicID  string `json:"public_id"`
+
+	Checkout struct {
+		ID string `json:"id"`
+	} `json:"checkout"`
+
+	Collection struct {
+		ID            string `json:"id"`
+		Amount       int    `json:"amount"`
+		Currency     string `json:"currency"`
+		Status       string `json:"status"`
+		MpesaReceipt string `json:"mpesa_receipt_number,omitempty"`
+	} `json:"collection"`
+
+	Customer struct {
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+		Name  string `json:"name"`
+	} `json:"customer"`
 }
 
 type IntasendWebhookEvent struct {
-	Event      string             `json:"event"`
-	Timestamp  string             `json:"timestamp"`
-	PublicID   string             `json:"public_id"`
-	Checkout   IntasendCheckout   `json:"checkout"`
-	Customer   IntasendCustomer   `json:"customer"`
-	Collection IntasendCollection `json:"collection"`
+	Event      string `json:"event"`
+	Timestamp string `json:"timestamp"`
+	PublicID  string `json:"public_id"`
+
+	Checkout struct {
+		ID string `json:"id"`
+	} `json:"checkout"`
+
+	Collection struct {
+		ID            string `json:"id"`
+		Amount       int    `json:"amount"`
+		Currency     string `json:"currency"`
+		Status       string `json:"status"`
+		MpesaReceipt string `json:"mpesa_receipt_number,omitempty"`
+	} `json:"collection"`
+
+	Customer struct {
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+		Name  string `json:"name"`
+	} `json:"customer"`
 }
 
-type IntasendCheckout struct {
-	URL string `json:"url"`
+func (s *IntasendService) IsConfigured() bool {
+	return s.cfg != nil && s.apiKey != "" && s.apiURL != ""
 }
 
-type IntasendCustomer struct {
-	Email string `json:"email"`
-	Phone string `json:"phone"`
-	Name  string `json:"name"`
-}
-
-type IntasendCollection struct {
-	ID           string `json:"id"`
-	Amount       int    `json:"amount"`
-	Currency     string `json:"currency"`
-	Status       string `json:"status"`
-	MpesaReceipt string `json:"mpesa_receipt_number,omitempty"`
-}
-
-func NewIntasendService(cfg *config.IntasendConfig) *IntasendService {
-	return &IntasendService{
-		cfg:    cfg,
-		apiURL: cfg.APIURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+func (s *IntasendService) InitiatePayment(req *InitiatePaymentRequest) (*IntasendCheckoutResponse, error) {
+	if !s.IsConfigured() {
+		return nil, ErrIntaSendNotConfigured
 	}
-}
-
-// InitiateSTKPush initiates an STK Push payment request
-func (s *IntasendService) InitiateSTKPush(req InitiatePaymentRequest) (*IntasendResponse, error) {
-	// Intasend uses the "collect" endpoint for STK Push
-	endpoint := fmt.Sprintf("%s/api/v1/collection/", s.apiURL)
 
 	payload := map[string]interface{}{
-		"amount":         req.Amount,
+		"amount":          req.Amount,
 		"currency":       req.Currency,
-		"phone_number":   normalizePhoneNumber(req.PhoneNumber),
+		"phone_number":   req.PhoneNumber,
 		"api_ref":        req.APIRef,
 		"callback_url":   req.CallbackURL,
 		"customer_email": req.CustomerEmail,
-		"customer_name":  req.CustomerName,
-		"invoice_number": req.InvoiceNumber,
-		"host":           "browser", // Required by Intasend
+		"customer_name": req.CustomerName,
 	}
 
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	if req.InvoiceNumber != "" {
+		payload["invoice_number"] = req.InvoiceNumber
 	}
 
-	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonPayload))
+	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequest("POST", s.apiURL+"/api/v1/checkout/", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.SecretKey)
+	httpReq.Header.Set("Authorization", "Bearer "+s.apiKey)
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("intasend API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("intasend API error (status %d): %s", resp.StatusCode, string(body))
+	var result struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+		ID      string `json:"id"`
+		URL     string `json:"url"`
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, err
 	}
 
-	// Intasend returns different response structures
-	// Check if we have a checkout or direct response
-	if checkout, ok := result["checkout"].(map[string]interface{}); ok {
-		return &IntasendResponse{
-			Success: true,
-			Message: checkout["url"].(string),
-			ID:      result["id"].(string),
-		}, nil
+	if !result.Success {
+		return nil, errors.New(result.Message)
 	}
 
-	// For STK Push, check for state or id
-	if id, ok := result["id"].(string); ok {
-		return &IntasendResponse{
-			Success: true,
-			ID:      id,
-			Message: "STK Push initiated",
-		}, nil
-	}
-
-	return &IntasendResponse{
-		Success: true,
-		Message: "Payment initiated",
+	return &IntasendCheckoutResponse{
+		URL: result.URL,
+		ID:  result.ID,
 	}, nil
 }
 
-// InitiateCardPayment initiates a card payment (redirects to checkout)
-func (s *IntasendService) InitiateCardPayment(req InitiatePaymentRequest) (*IntasendResponse, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/checkout/", s.apiURL)
-
-	payload := map[string]interface{}{
-		"amount":         req.Amount,
-		"currency":       req.Currency,
-		"customer_email": req.CustomerEmail,
-		"customer_name":  req.CustomerName,
-		"api_ref":        req.APIRef,
-		"callback_url":   req.CallbackURL,
-		"redirect_url":   fmt.Sprintf("%s/payment/complete", req.CallbackURL),
-		"invoice_number": req.InvoiceNumber,
+func (s *IntasendService) HandleWebhook(payload []byte, signature string, sourceIP string) error {
+	if !s.IsConfigured() {
+		log.Println("[IntaSend] Webhook received but service not configured")
+		return nil
 	}
 
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	var event IntasendWebhookPayload
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return fmt.Errorf("invalid webhook payload: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	checkoutID := event.Checkout.ID
+	tenantID := event.Customer.Email
+
+	alreadyProcessed, err := s.isAlreadyProcessed(checkoutID)
+	if err == nil && alreadyProcessed {
+		log.Printf("[IntaSend] Duplicate webhook for checkout %s - skipping", checkoutID)
+		return nil
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.SecretKey)
-
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	switch event.Event {
+	case "checkout.complete":
+		return s.handlePaymentSuccess(checkoutID, tenantID, event)
+	case "checkout.failed":
+		return s.handlePaymentFailed(checkoutID, tenantID, event)
+	case "checkout.pending":
+		return s.handlePaymentPending(checkoutID, tenantID, event)
 	}
 
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("intasend API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// Extract checkout URL
-	checkoutURL := ""
-	if checkout, ok := result["checkout"].(map[string]interface{}); ok {
-		if url, ok := checkout["url"].(string); ok {
-			checkoutURL = url
-		}
-	}
-
-	return &IntasendResponse{
-		Success: true,
-		Message: checkoutURL,
-		ID:      result["id"].(string),
-	}, nil
-}
-
-// GetPaymentStatus checks the status of a payment
-func (s *IntasendService) GetPaymentStatus(paymentID string) (*IntasendPaymentStatus, error) {
-	endpoint := fmt.Sprintf("%s/api/v1/collection/%s/", s.apiURL, paymentID)
-
-	httpReq, err := http.NewRequest("GET", endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.SecretKey)
-
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("intasend API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var result IntasendPaymentStatus
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return &result, nil
-}
-
-// VerifyWebhookSignature verifies the webhook signature from Intasend
-// SECURITY: This implements real HMAC-SHA256 verification
-func (s *IntasendService) VerifyWebhookSignature(payload []byte, signature string) error {
-	if s.cfg.WebhookSecret == "" {
-		return fmt.Errorf("webhook secret not configured")
-	}
-
-	if signature == "" {
-		return fmt.Errorf("missing webhook signature")
-	}
-
-	// Compute HMAC-SHA256 of the payload
-	mac := hmac.New(sha256.New, []byte(s.cfg.WebhookSecret))
-	mac.Write(payload)
-	expectedMAC := hex.EncodeToString(mac.Sum(nil))
-
-	// Use constant-time comparison to prevent timing attacks
-	if subtle.ConstantTimeCompare([]byte(signature), []byte(expectedMAC)) != 1 {
-		return fmt.Errorf("invalid webhook signature")
-	}
-
+	log.Printf("[IntaSend] Unhandled webhook event: %s", event.Event)
 	return nil
 }
 
-// normalizePhoneNumber converts phone to format Intasend expects (254...)
-func normalizePhoneNumber(phone string) string {
-	// Remove any non-digit characters
-	var digits string
-	for _, c := range phone {
-		if c >= '0' && c <= '9' {
-			digits += string(c)
+func (s *IntasendService) handlePaymentSuccess(checkoutID, tenantID string, event IntasendWebhookPayload) error {
+	amount := float64(event.Collection.Amount) / 100
+	currency := event.Collection.Currency
+
+	existingPayment, err := s.findPaymentByRef(checkoutID)
+	if err == nil && existingPayment != nil {
+		if existingPayment.Status == models.PaymentStatusCompleted {
+			log.Printf("[IntaSend] Payment already processed for checkout %s", checkoutID)
+			return nil
 		}
 	}
 
-	// Handle different formats
-	if len(digits) == 10 && digits[0] == '0' {
-		// 0712345678 -> 254712345678
-		return "254" + digits[1:]
-	}
-	if len(digits) == 9 {
-		// 712345678 -> 254712345678
-		return "254" + digits
-	}
-	if len(digits) == 12 {
-		// 254712345678 - already correct
-		return digits
+	var invoice models.Invoice
+	if s.db != nil && tenantID != "" {
+		s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", event.Checkout.ID)
 	}
 
-	// Default: prepend 254
-	return "254" + digits
+	payment := &models.Payment{
+		ID:            uuid.New().String(),
+		TenantID:      tenantID,
+		InvoiceID:     invoice.ID,
+		Amount:        amount,
+		Currency:       currency,
+		Method:        models.PaymentMethodIntasend,
+		Status:        models.PaymentStatusCompleted,
+		Reference:     event.Collection.MpesaReceipt,
+		IntasendID:    event.Collection.ID,
+	}
+	now := time.Now()
+	payment.CompletedAt = &now
+
+	if err := s.db.Create(payment).Error; err != nil {
+		return fmt.Errorf("failed to record payment: %w", err)
+	}
+
+	if invoice.ID != "" {
+		invoice.PaidAmount += amount
+		if invoice.PaidAmount >= invoice.Total {
+			invoice.Status = models.InvoiceStatusPaid
+			invoice.PaidAt = &now
+		} else {
+			invoice.Status = models.InvoiceStatusPartiallyPaid
+		}
+		s.db.Save(&invoice)
+	}
+
+	s.recordIdempotency(tenantID, checkoutID, "payment", payment.ID)
+	s.sendNotification(tenantID, EventPaymentReceived, fmt.Sprintf("Payment of %.2f %s received via M-Pesa", amount, currency))
+
+	log.Printf("[IntaSend] Payment succeeded: checkout=%s amount=%s %s", checkoutID, currency, fmt.Sprintf("%.2f", amount))
+	return nil
 }
 
-// FormatPhoneForDisplay converts 254... back to 07...
-func FormatPhoneForDisplay(phone string) string {
-	if len(phone) >= 12 && phone[:3] == "254" {
-		return "0" + phone[3:]
+func (s *IntasendService) handlePaymentFailed(checkoutID, tenantID string, event IntasendWebhookPayload) error {
+	log.Printf("[IntaSend] Payment failed for checkout %s", checkoutID)
+
+	existingPayment, _ := s.findPaymentByRef(checkoutID)
+	if existingPayment != nil {
+		existingPayment.Status = models.PaymentStatusFailed
+		s.db.Save(existingPayment)
 	}
-	return phone
+
+	s.sendNotification(tenantID, EventPaymentFailed, "Payment failed")
+	return nil
+}
+
+func (s *IntasendService) handlePaymentPending(checkoutID, tenantID string, event IntasendWebhookPayload) error {
+	log.Printf("[IntaSend] Payment pending for checkout %s", checkoutID)
+	return nil
+}
+
+func (s *IntasendService) isAlreadyProcessed(checkoutID string) (bool, error) {
+	var payment models.Payment
+	err := s.db.Where("reference = ? OR intasend_id = ?", checkoutID, checkoutID).First(&payment).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return payment.Status == models.PaymentStatusCompleted, nil
+}
+
+func (s *IntasendService) findPaymentByRef(ref string) (*models.Payment, error) {
+	var payment models.Payment
+	err := s.db.Where("reference = ? OR intasend_id = ?", ref, ref).First(&payment).Error
+	if err != nil {
+		return nil, err
+	}
+	return &payment, nil
+}
+
+func (s *IntasendService) recordIdempotency(tenantID, key, eventType, reference string) error {
+	// Using Payment model for idempotency tracking
+	var existing models.Payment
+	if err := s.db.Where("reference = ? OR intasend_id = ?", key, key).First(&existing).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		// Record doesn't exist, which is what we want for idempotency check
+		return nil
+	}
+	// Record exists, check if it's already processed
+	if existing.Status == models.PaymentStatusCompleted {
+		return errors.New("already processed")
+	}
+	return nil
+}
+
+func (s *IntasendService) sendNotification(tenantID, eventType, message string) {
+	if s.notifySvc == nil {
+		return
+	}
+
+	s.notifySvc.Send(context.Background(), &NotificationRequest{
+		TenantID:  tenantID,
+		UserID:   tenantID,
+		EventType: eventType,
+		Channels: []string{ChannelEmail},
+		Subject:  "Payment Notification",
+		Body:     message,
+	})
 }

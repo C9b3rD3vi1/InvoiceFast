@@ -631,7 +631,17 @@ invoice: {
                 window.location.href = '/invoices';
             } catch(err) {
                 console.error('Save error:', err);
-                this.showToast('Failed to save: ' + err.message, 'error');
+                let message = 'Failed to save invoice';
+                if (err.response) {
+                    if (err.response.reason === 'no_active_subscription') {
+                        message = 'No active subscription. Please upgrade to create invoices. Go to /billing to upgrade.';
+                    } else if (err.response.error) {
+                        message = err.response.error;
+                    }
+                } else {
+                    message += ': ' + err.message;
+                }
+                this.showToast(message, 'error');
             } finally {
                 this.saving = false;
             }
@@ -655,7 +665,17 @@ invoice: {
                 this.showToast('Invoice sent successfully!', 'success');
                 window.location.href = '/invoices/' + invoice.id;
             } catch(err) {
-                this.showToast('Failed to send: ' + err.message, 'error');
+                let message = 'Failed to send invoice';
+                if (err.response) {
+                    if (err.response.reason === 'no_active_subscription') {
+                        message = 'No active subscription. Please upgrade to send invoices. Go to /billing to upgrade.';
+                    } else if (err.response.error) {
+                        message = err.response.error;
+                    }
+                } else {
+                    message += ': ' + err.message;
+                }
+                this.showToast(message, 'error');
             } finally {
                 this.saving = false;
             }
@@ -667,7 +687,7 @@ invoice: {
         },
 
         previewInvoice() {
-            alert('Preview coming soon');
+            this.showToast('Invoice preview feature coming soon!', 'info');
         },
 
          formatInvoiceData() {
@@ -702,9 +722,31 @@ invoice: {
                  title: this.invoice.title || '',
                  items: items,
                  tax_rate: parseFloat(this.invoice.tax_rate) || 0,
-                 discount: parseFloat(this.invoice.discount) || 0,
-             };
-         }
+discount: parseFloat(this.invoice.discount) || 0,
+              };
+          }
     };
 }
 </script>
+
+<!-- Toast Notification -->
+<template x-if="toast.show">
+    <div class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+        <template x-if="toast.type === 'success'">
+            <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+        </template>
+        <template x-if="toast.type === 'error'">
+            <i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>
+        </template>
+        <template x-if="toast.type === 'warning'">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600"></i>
+        </template>
+        <template x-if="toast.type === 'info'">
+            <i data-lucide="info" class="w-5 h-5 text-blue-600"></i>
+        </template>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+        <button @click="toast.show = false" class="p-1 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+    </div>
+</template>

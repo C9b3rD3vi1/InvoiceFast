@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -12,11 +13,12 @@ import (
 )
 
 type PaymentMatchingService struct {
-	db *database.DB
+	db        *database.DB
+	notifySvc *NotificationService
 }
 
-func NewPaymentMatchingService(db *database.DB) *PaymentMatchingService {
-	return &PaymentMatchingService{db: db}
+func NewPaymentMatchingService(db *database.DB, notifySvc *NotificationService) *PaymentMatchingService {
+	return &PaymentMatchingService{db: db, notifySvc: notifySvc}
 }
 
 func (s *PaymentMatchingService) CreateUnallocated(tenantID, reference, phone string, amount float64) (*models.UnallocatedPayment, error) {
@@ -140,7 +142,7 @@ func (s *PaymentMatchingService) GetPayments(tenantID string, filter PaymentFilt
 	return result, total, nil
 }
 
-func (s *PaymentMatchingService) MatchPayment(paymentID, invoiceID, userID string) error {
+func (s *PaymentMatchingService) MatchPayment(tenantID, paymentID, invoiceID, userID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var unallocated models.UnallocatedPayment
 		if err := tx.First(&unallocated, "id = ? AND is_matched = ?", paymentID, false).Error; err != nil {
@@ -191,6 +193,7 @@ func (s *PaymentMatchingService) MatchPayment(paymentID, invoiceID, userID strin
 			return fmt.Errorf("failed to update unallocated: %w", err)
 		}
 
+		s.sendMatchNotification(unallocated.TenantID, &invoice, EventPaymentMatched)
 		return nil
 	})
 }
@@ -229,7 +232,12 @@ func (s *PaymentMatchingService) ManualMatch(tenantID, invoiceID, reference, pho
 			invoice.Status = models.InvoiceStatusPartiallyPaid
 		}
 
-		return tx.Save(&invoice).Error
+		if err := tx.Save(&invoice).Error; err != nil {
+			return fmt.Errorf("failed to update invoice: %w", err)
+		}
+
+		s.sendMatchNotification(tenantID, &invoice, EventPaymentMatched)
+		return nil
 	})
 }
 
@@ -306,6 +314,42 @@ func (s *PaymentMatchingService) ReconcilePayment(tenantID, paymentID, userID st
 			}
 		}
 
+		s.sendMatchNotification(tenantID, &invoice, EventPaymentMatched)
 		return nil
+	})
+}
+
+func (s *PaymentMatchingService) sendMatchNotification(tenantID string, invoice *models.Invoice, eventType string) {
+	if s.notifySvc == nil {
+		return
+	}
+
+	var client models.Client
+	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
+
+	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.PaidAmount)
+	body := ""
+	subject := ""
+	switch eventType {
+	case EventPaymentMatched:
+		subject = "Payment Matched"
+		body = fmt.Sprintf("Payment of %s has been matched to invoice %s", amount, invoice.InvoiceNumber)
+	case EventPaymentUnmatched:
+		subject = "Payment Unmatched"
+		body = fmt.Sprintf("A payment of %s for invoice %s has been unmatched", amount, invoice.InvoiceNumber)
+	}
+
+	s.notifySvc.Send(context.Background(), &NotificationRequest{
+		TenantID:  tenantID,
+		UserID:   invoice.UserID,
+		EventType: eventType,
+		Channels: []string{ChannelEmail},
+		Subject:  subject,
+		Body:     body,
+		Variables: map[string]string{
+			"invoice_number": invoice.InvoiceNumber,
+			"amount":        amount,
+			"client_name":   client.Name,
+		},
 	})
 }

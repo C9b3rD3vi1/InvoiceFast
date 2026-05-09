@@ -344,21 +344,28 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 
 	starterPlan := models.SubscriptionPlan{}
 	if err := s.db.First(&starterPlan, "slug = ?", "starter").Error; err == nil && starterPlan.ID != "" {
-		trialEndsAt := time.Now().AddDate(0, 0, 14)
+		now := time.Now()
+		trialEnd := now.AddDate(0, 0, 14)
 		subscription := &models.Subscription{
-			ID:           uuid.New().String(),
-			TenantID:     tenant.ID,
-			PlanID:       starterPlan.ID,
-			Status:       "trialing",
-			BillingCycle: "monthly",
-			Amount:       starterPlan.MonthlyPriceUSD,
-			Currency:     "USD",
-			TrialEndsAt:  &trialEndsAt,
-			StartsAt:     time.Now(),
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			ID:                 uuid.New().String(),
+			TenantID:           tenant.ID,
+			PlanID:             starterPlan.ID,
+			Status:             "trialing",
+			BillingCycle:       "monthly",
+			Amount:             starterPlan.MonthlyPriceUSD,
+			Currency:           "USD",
+			TrialStart:         &now,
+			TrialEnd:           &trialEnd,
+			CurrentPeriodStart: now,
+			CurrentPeriodEnd:   trialEnd,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
-		s.db.Create(subscription)
+		if err := s.db.Create(subscription).Error; err != nil {
+			log.Printf("[Register] Failed to create trial subscription: %v", err)
+		} else {
+			log.Printf("[Register] Trial subscription created for tenant: %s, plan: %s", tenant.ID, starterPlan.Name)
+		}
 
 		usage := &models.UsageTracking{
 			ID:           uuid.New().String(),
@@ -368,7 +375,11 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 			UsersUsed:    1,
 			UpdatedAt:    time.Now(),
 		}
-		s.db.Create(usage)
+		if err := s.db.Create(usage).Error; err != nil {
+			log.Printf("[Register] Failed to create usage tracking: %v", err)
+		}
+	} else {
+		log.Printf("[Register] Starter plan not found, skipping trial creation: %v", err)
 	}
 
 	if err := s.db.Create(user).Error; err != nil {

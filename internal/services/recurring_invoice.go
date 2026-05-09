@@ -138,9 +138,9 @@ func (s *RecurringInvoiceService) calculateNextDate(frequency string, lastDate t
 }
 
 // EnableRecurring enables recurring on an invoice
-func (s *RecurringInvoiceService) EnableRecurring(invoiceID, frequency string) error {
+func (s *RecurringInvoiceService) EnableRecurring(tenantID, invoiceID, frequency string) error {
 	var invoice models.Invoice
-	if err := s.db.First(&invoice, "id = ?", invoiceID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", invoiceID).Error; err != nil {
 		return fmt.Errorf("invoice not found: %w", err)
 	}
 
@@ -160,8 +160,8 @@ func (s *RecurringInvoiceService) EnableRecurring(invoiceID, frequency string) e
 }
 
 // DisableRecurring disables recurring on an invoice
-func (s *RecurringInvoiceService) DisableRecurring(invoiceID string) error {
-	result := s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+func (s *RecurringInvoiceService) DisableRecurring(tenantID, invoiceID string) error {
+	result := s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
 		"is_recurring":        false,
 		"recurring_frequency": nil,
 		"recurring_next_date": nil,

@@ -7,14 +7,20 @@ import (
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+
+	stripe "github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/checkout/session"
+	"github.com/stripe/stripe-go/v72/customer"
+	"github.com/stripe/stripe-go/v72/paymentintent"
+	"github.com/stripe/stripe-go/v72/refund"
+	"github.com/stripe/stripe-go/v72/webhook"
 )
 
-// StripeService now expects real Stripe configuration
-// In production, this would use the actual stripe-go/v72 package
 type StripeService struct {
 	db        *database.DB
 	secretKey string
 	publicKey string
+	whSecret string
 }
 
 type CreatePaymentIntentRequest struct {
@@ -32,141 +38,276 @@ type PaymentIntentResponse struct {
 	Currency     string  `json:"currency"`
 }
 
-// NewStripeService creates a new Stripe service with required configuration
-func NewStripeService(db *database.DB, secretKey, publicKey string) *StripeService {
+func NewStripeService(db *database.DB, secretKey, publicKey, whSecret string) *StripeService {
+	stripe.Key = secretKey
 	return &StripeService{
 		db:        db,
 		secretKey: secretKey,
 		publicKey: publicKey,
+		whSecret: whSecret,
 	}
 }
 
-// CreatePaymentIntent creates a real payment intent with Stripe
 func (s *StripeService) CreatePaymentIntent(req *CreatePaymentIntentRequest) (*PaymentIntentResponse, error) {
 	if s.secretKey == "" {
 		return nil, errors.New("stripe not configured - secret key required")
 	}
 
-	// For now, return structured error indicating configuration needed
-	// In production, this would use the stripe-go package
-	return nil, errors.New("stripe integration requires proper configuration and stripe-go package")
+	amountCents := int64(req.Amount * 100)
+
+	desc := fmt.Sprintf("Invoice %s", req.InvoiceID)
+	if req.Description != "" {
+		desc = req.Description
+	}
+
+	params := &stripe.PaymentIntentParams{
+		Amount:                  stripe.Int64(amountCents),
+		Currency:              stripe.String(req.Currency),
+		Description:          stripe.String(desc),
+		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+			Enabled: stripe.Bool(true),
+		},
+	}
+	if req.Email != "" {
+		params.ReceiptEmail = stripe.String(req.Email)
+	}
+
+	pi, err := paymentintent.New(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create payment intent: %w", err)
+	}
+
+	return &PaymentIntentResponse{
+		ClientSecret: pi.ClientSecret,
+		PaymentID:    pi.ID,
+		Amount:      req.Amount,
+		Currency:    req.Currency,
+	}, nil
 }
 
-// HandleWebhook processes Stripe webhook events
-func (s *StripeService) HandleWebhook(eventType string, data map[string]interface{}) error {
+func (s *StripeService) HandleWebhook(payload []byte, signature string) error {
 	if s.secretKey == "" {
 		return errors.New("stripe not configured")
 	}
 
-	// In production, this would verify the webhook signature and process events
-	// using the stripe-go package's webhook functionality
-	switch eventType {
-	case "payment_intent.succeeded":
-		return s.handlePaymentSuccess(data)
-	case "payment_intent.payment_failed":
-		return s.handlePaymentFailure(data)
-	case "charge.refunded":
-		return s.handleRefund(data)
-	default:
-		// Ignore other event types
-		return nil
+	event, err := webhook.ConstructEvent(payload, signature, s.whSecret)
+	if err != nil {
+		return fmt.Errorf("webhook signature verification failed: %w", err)
 	}
+
+	switch event.Type {
+	case "payment_intent.succeeded":
+		return s.handlePaymentSuccess(event.Data.Object)
+	case "payment_intent.payment_failed":
+		return s.handlePaymentFailure(event.Data.Object)
+	case "charge.refunded":
+		return s.handleRefund(event.Data.Object)
+	}
+
+	return nil
 }
 
-func (s *StripeService) handlePaymentSuccess(data map[string]interface{}) error {
-	// Extract invoice ID from metadata
-	metadata, ok := data["metadata"].(map[string]interface{})
+func (s *StripeService) handlePaymentSuccess(data interface{}) error {
+	pi, ok := data.(*stripe.PaymentIntent)
 	if !ok {
-		return errors.New("no metadata in webhook")
+		return errors.New("invalid payment intent data")
 	}
-	invoiceID, ok := metadata["invoice_id"].(string)
-	if !ok {
-		return errors.New("no invoice_id in metadata")
+
+	invoiceID := pi.Description
+	if invoiceID == "" {
+		return errors.New("no invoice reference in payment intent")
 	}
 
 	var invoice models.Invoice
-	if err := s.db.First(&invoice, "id = ?", invoiceID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter("")).First(&invoice, "id = ?", invoiceID).Error; err != nil {
 		return fmt.Errorf("invoice not found: %w", err)
 	}
 
-	// Extract payment amount
-	amountFloat, ok := data["amount"].(float64)
-	if !ok {
-		return errors.New("invalid amount in webhook")
-	}
-	t := time.Now()
-	amount := amountFloat / 100 // Convert from cents to units
+	amount := float64(pi.Amount) / 100
 
-	// Create payment record
 	payment := &models.Payment{
-		ID:          data["id"].(string),
+		ID:          pi.ID,
 		TenantID:    invoice.TenantID,
 		UserID:      invoice.UserID,
 		InvoiceID:   invoiceID,
 		Amount:      amount,
-		CompletedAt: &t,
+		Currency:    string(pi.Currency),
+		Method:      models.PaymentMethodCard,
+		Status:      models.PaymentStatusCompleted,
+		Reference:   pi.ID,
 	}
+	now := time.Now()
+	payment.CompletedAt = &now
 
 	if err := s.db.Create(payment).Error; err != nil {
 		return fmt.Errorf("failed to create payment: %w", err)
 	}
 
-	// Update invoice
 	invoice.PaidAmount += amount
 	if invoice.PaidAmount >= invoice.Total {
 		invoice.Status = models.InvoiceStatusPaid
+		invoice.PaidAt = &now
 	}
 
 	return s.db.Save(&invoice).Error
 }
 
-func (s *StripeService) handlePaymentFailure(data map[string]interface{}) error {
-	// Handle failed payment - could notify user, retry, etc.
-	// For now, just log the failure
-	return nil
+func (s *StripeService) handlePaymentFailure(data interface{}) error {
+	pi, ok := data.(*stripe.PaymentIntent)
+	if !ok {
+		return errors.New("invalid payment intent data")
+	}
+
+	invoiceID := pi.Description
+	if invoiceID == "" {
+		return nil
+	}
+
+	lastError := ""
+	if pi.LastPaymentError != nil {
+		lastError = pi.LastPaymentError.Error()
+	}
+
+	return s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).
+		Updates(map[string]interface{}{
+			"last_payment_error": lastError,
+		}).Error
 }
 
-func (s *StripeService) handleRefund(data map[string]interface{}) error {
-	// Handle refund - update payment status
-	return nil
+func (s *StripeService) handleRefund(data interface{}) error {
+	ch, ok := data.(*stripe.Charge)
+	if !ok {
+		return errors.New("invalid charge data")
+	}
+
+	if ch.Invoice == nil {
+		return nil
+	}
+
+	var payment models.Payment
+	if err := s.db.Where("stripe_charge_id = ?", ch.ID).First(&payment).Error; err != nil {
+		return nil
+	}
+
+	payment.Status = models.PaymentStatusRefunded
+	return s.db.Save(&payment).Error
 }
 
-// CreateCheckoutSession creates a real Stripe checkout session
-func (s *StripeService) CreateCheckoutSession(invoiceID, successURL, cancelURL string) (string, error) {
+func (s *StripeService) CreateCheckoutSession(invoice *models.Invoice, successURL, cancelURL string) (string, error) {
 	if s.secretKey == "" {
 		return "", errors.New("stripe not configured")
 	}
 
-	var invoice models.Invoice
-	if err := s.db.Preload("Client").First(&invoice, "id = ?", invoiceID).Error; err != nil {
-		return "", fmt.Errorf("invoice not found: %w", err)
+	amountCents := int64(invoice.Total * 100)
+
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					UnitAmount: stripe.Int64(amountCents),
+					Currency:  stripe.String(invoice.Currency),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name: stripe.String(fmt.Sprintf("Invoice %s", invoice.InvoiceNumber)),
+					},
+				},
+				Quantity: stripe.Int64(1),
+			},
+		},
+		Mode:       stripe.String("payment"),
+		SuccessURL: stripe.String(successURL),
+		CancelURL:  stripe.String(cancelURL),
 	}
 
-	return "", errors.New("stripe integration requires proper configuration and stripe-go package")
+	sess, err := session.New(params)
+	if err != nil {
+		return "", fmt.Errorf("failed to create checkout session: %w", err)
+	}
+
+	return sess.URL, nil
 }
 
-// CreateCustomer creates a real Stripe customer
+func (s *StripeService) CreateBillingSession(planName string, amount int64, customerEmail, successURL, cancelURL string) (string, error) {
+	if s.secretKey == "" {
+		return "", errors.New("stripe not configured")
+	}
+
+	amountCents := amount * 100
+
+	params := &stripe.CheckoutSessionParams{
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					UnitAmount: stripe.Int64(amountCents),
+					Currency:  stripe.String("usd"),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name: stripe.String("InvoiceFast - " + planName + " Plan"),
+					},
+					Recurring: &stripe.CheckoutSessionLineItemPriceDataRecurringParams{
+						Interval: stripe.String("month"),
+					},
+				},
+				Quantity: stripe.Int64(1),
+			},
+		},
+		Mode:                stripe.String("subscription"),
+		SuccessURL:          stripe.String(successURL),
+		CancelURL:           stripe.String(cancelURL),
+		CustomerEmail:      stripe.String(customerEmail),
+		BillingAddressCollection: stripe.String("required"),
+	}
+
+	sess, err := session.New(params)
+	if err != nil {
+		return "", fmt.Errorf("failed to create billing session: %w", err)
+	}
+
+	return sess.URL, nil
+}
+
 func (s *StripeService) CreateCustomer(email, name string) (string, error) {
 	if s.secretKey == "" {
 		return "", errors.New("stripe not configured")
 	}
-	return "", errors.New("stripe integration requires proper configuration and stripe-go package")
+
+	params := &stripe.CustomerParams{
+		Email: stripe.String(email),
+		Name: stripe.String(name),
+	}
+
+	c, err := customer.New(params)
+	if err != nil {
+		return "", fmt.Errorf("failed to create customer: %w", err)
+	}
+
+	return c.ID, nil
 }
 
-// Refund processes a refund through Stripe
 func (s *StripeService) Refund(paymentID string, amount float64) error {
 	if s.secretKey == "" {
 		return errors.New("stripe not configured")
 	}
-	return errors.New("stripe integration requires proper configuration and stripe-go package")
+
+	amountCents := int64(amount * 100)
+
+	params := &stripe.RefundParams{
+		PaymentIntent: stripe.String(paymentID),
+		Amount:       stripe.Int64(amountCents),
+	}
+
+	_, err := refund.New(params)
+	if err != nil {
+		return fmt.Errorf("failed to process refund: %w", err)
+	}
+
+	return nil
 }
 
-// GetPublicKey returns the publishable key
 func (s *StripeService) GetPublicKey() string {
 	return s.publicKey
 }
 
-// IsEnabled returns true if stripe is properly configured
 func (s *StripeService) IsEnabled() bool {
 	return s.secretKey != "" && s.publicKey != ""
 }

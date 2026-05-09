@@ -22,34 +22,35 @@ func NewThankYouMessageService(db *database.DB, deps *ServiceDependencies) *Than
 	}
 }
 
-func (s *ThankYouMessageService) SendThankYou(invoiceID string) error {
-	var invoice models.Invoice
-	if err := s.db.Preload("Client").First(&invoice, "id = ?", invoiceID).Error; err != nil {
-		return fmt.Errorf("invoice not found: %w", err)
+// SendThankYou sends a thank you message to the client - expects invoice to already be loaded with TenantID
+func (s *ThankYouMessageService) SendThankYou(invoice *models.Invoice) error {
+	if invoice == nil || invoice.ID == "" {
+		return fmt.Errorf("invoice is required")
 	}
 
 	if invoice.ClientID == "" {
 		return fmt.Errorf("client not found for invoice")
 	}
 
-	client, err := s.GetClient(invoice.ClientID)
+	tenantID := invoice.TenantID
+	client, err := s.GetClient(tenantID, invoice.ClientID)
 	if err != nil {
 		return fmt.Errorf("client not found: %w", err)
 	}
 
-	companyName := s.getCompanyName(invoice.TenantID)
+	companyName := s.getCompanyName(tenantID)
 
 	if client.Email != "" {
-		s.sendEmailThankYou(client.Email, &invoice, companyName)
+		s.sendEmailThankYou(client.Email, invoice, companyName)
 	}
 
 	log.Printf("Thank you message sent for invoice %s to client %s", invoice.InvoiceNumber, client.Name)
 	return nil
 }
 
-func (s *ThankYouMessageService) GetClient(clientID string) (*models.Client, error) {
+func (s *ThankYouMessageService) GetClient(tenantID, clientID string) (*models.Client, error) {
 	var client models.Client
-	if err := s.db.First(&client, "id = ?", clientID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", clientID).Error; err != nil {
 		return nil, err
 	}
 	return &client, nil

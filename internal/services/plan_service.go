@@ -1,8 +1,11 @@
 package services
 
 import (
+	"fmt"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+	"log"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -121,4 +124,76 @@ func (s *PlanService) SeedDefaultPlans() error {
 	}
 
 	return nil
+}
+
+func (s *PlanService) MigrateUsersWithoutSubscription() error {
+	var tenants []models.Tenant
+	if err := s.db.Find(&tenants).Error; err != nil {
+		return err
+	}
+
+	starterPlan, err := s.GetPlanBySlug("starter")
+	if err != nil {
+		return fmt.Errorf("starter plan not found: %w", err)
+	}
+
+	now := time.Now()
+	trialEnd := now.AddDate(0, 0, 14)
+	migrated := 0
+
+	for _, tenant := range tenants {
+		var existingSub models.Subscription
+		err := s.db.Where("tenant_id = ? AND status IN ?", tenant.ID, []string{"trialing", "active", "past_due", "canceled"}).First(&existingSub).Error
+		if err == nil {
+			continue
+		}
+
+		subscription := &models.Subscription{
+			ID:                 uuid.New().String(),
+			TenantID:           tenant.ID,
+			PlanID:             starterPlan.ID,
+			Status:             "trialing",
+			BillingCycle:       "monthly",
+			Amount:             starterPlan.MonthlyPriceUSD,
+			Currency:           "USD",
+			TrialStart:         &now,
+			TrialEnd:           &trialEnd,
+			CurrentPeriodStart: now,
+			CurrentPeriodEnd:   trialEnd,
+			CreatedAt:          now,
+			UpdatedAt:          now,
+		}
+
+		if err := s.db.Create(subscription).Error; err != nil {
+			log.Printf("[Migrate] Failed to create trial for tenant %s: %v", tenant.ID, err)
+			continue
+		}
+
+		var usage models.UsageTracking
+		if err := s.db.First(&usage, "tenant_id = ?", tenant.ID).Error; err != nil {
+			usage = models.UsageTracking{
+				ID:           uuid.New().String(),
+				TenantID:     tenant.ID,
+				InvoicesUsed: 0,
+				ClientsUsed:  0,
+				UsersUsed:    1,
+				UpdatedAt:    now,
+			}
+			s.db.Create(&usage)
+		}
+
+		migrated++
+		log.Printf("[Migrate] Assigned trial subscription to tenant: %s", tenant.ID)
+	}
+
+	log.Printf("[Migrate] Total users migrated to trial: %d", migrated)
+	return nil
+}
+
+func (s *PlanService) GetPlanBySlug(slug string) (*models.SubscriptionPlan, error) {
+	var plan models.SubscriptionPlan
+	if err := s.db.Where("slug = ?", slug).First(&plan).Error; err != nil {
+		return nil, err
+	}
+	return &plan, nil
 }

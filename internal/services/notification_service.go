@@ -70,6 +70,11 @@ const (
 	EventPasswordReset = "password.reset"
 	EventLoginAlert = "login.alert"
 	EventSubExpiring = "subscription.expiring"
+	EventSubCreated  = "subscription.created"
+	EventSubRenewed  = "subscription.renewed"
+
+	EventPaymentMatched   = "payment.matched"
+	EventPaymentUnmatched = "payment.unmatched"
 
 	EventFraudAlert     = "fraud.alert"
 	EventFailedPayment = "payment.attempts"

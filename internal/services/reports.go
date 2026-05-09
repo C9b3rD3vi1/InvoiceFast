@@ -406,7 +406,7 @@ func (s *ReportService) GetClientRevenueReport(tenantID string, period string, l
 
 	for i := range results {
 		var client models.Client
-		s.db.First(&client, "id = ?", results[i].ClientID)
+		s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", results[i].ClientID)
 		results[i].Name = client.Name
 		results[i].Email = client.Email
 
@@ -1467,7 +1467,7 @@ func (s *ReportService) GetPaymentVerification(tenantID string, invoiceID string
 	verification := make(map[string]interface{})
 
 	var invoice models.Invoice
-	if err := s.db.First(&invoice, "id = ?", invoiceID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", invoiceID).Error; err != nil {
 		return nil, err
 	}
 
@@ -1477,7 +1477,7 @@ func (s *ReportService) GetPaymentVerification(tenantID string, invoiceID string
 	verification["invoice_status"] = invoice.Status
 
 	var payments []models.Payment
-	s.db.Model(&models.Payment{}).
+	s.db.Scopes(database.TenantFilter(tenantID)).Model(&models.Payment{}).
 		Where("invoice_id = ?", invoiceID).
 		Order("created_at DESC").
 		Find(&payments)

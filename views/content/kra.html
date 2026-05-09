@@ -1740,6 +1740,28 @@
 		}
 	</script>
 
+	<!-- Toast Notification -->
+	<template x-if="toast.show">
+		<div class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+			<template x-if="toast.type === 'success'">
+				<i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+			</template>
+			<template x-if="toast.type === 'error'">
+				<i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>
+			</template>
+			<template x-if="toast.type === 'warning'">
+				<i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600"></i>
+			</template>
+			<template x-if="toast.type === 'info'">
+				<i data-lucide="info" class="w-5 h-5 text-blue-600"></i>
+			</template>
+			<span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+			<button @click="toast.show = false" class="p-1 hover:bg-slate-100 rounded-lg">
+				<i data-lucide="x" class="w-4 h-4"></i>
+			</button>
+		</div>
+	</template>
+
 	<style>
 		@keyframes slide-up {
 			from {

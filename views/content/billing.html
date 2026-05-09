@@ -1,373 +1,328 @@
-<!-- Billing Content -->
+<!-- Billing Content - Enterprise Grade -->
 <div class="p-6" x-data="billingContent()" x-init="init()">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-8">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">Billing</h1>
-            <p class="text-slate-500 text-sm mt-1">Manage your subscription and payments</p>
+            <h1 class="text-3xl font-bold text-slate-900">Billing & Subscription</h1>
+            <p class="text-slate-500 mt-1">Manage your subscription, payments, and plan limits</p>
         </div>
         <div class="flex items-center gap-3">
-            <button @click="invoiceModalOpen = true" class="px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50 flex items-center gap-2">
-                <i data-lucide="file-text" class="w-4 h-4"></i>
-                View Invoices
-            </button>
-            <button @click="upgradeModalOpen = true" class="bg-trust text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-trust-dark flex items-center gap-2 shadow-lg shadow-trust/30">
-                <i data-lucide="zap" class="w-4 h-4"></i>
-                Upgrade Plan
-            </button>
+            <template x-if="loading">
+                <div class="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl">
+                    <span class="font-medium">Loading...</span>
+                </div>
+            </template>
+            <template x-if="!loading && subscriptionStatus === 'trialing'">
+                <div class="px-4 py-2 rounded-xl bg-blue-100 text-blue-700">
+                    <span class="font-medium">Trial Active (<span x-text="trialDaysRemaining"></span> days left)</span>
+                </div>
+            </template>
+            <template x-if="!loading && subscriptionStatus === 'active'">
+                <div class="px-4 py-2 rounded-xl bg-green-100 text-green-700">
+                    <span class="font-medium">Active</span>
+                </div>
+            </template>
+            <template x-if="!loading && subscriptionStatus === 'past_due'">
+                <div class="px-4 py-2 rounded-xl bg-red-100 text-red-700">
+                    <span class="font-medium">Past Due</span>
+                </div>
+            </template>
+            <template x-if="!loading && subscriptionStatus === 'expired'">
+                <div class="px-4 py-2 rounded-xl bg-red-100 text-red-700">
+                    <span class="font-medium">Trial Expired</span>
+                </div>
+            </template>
+            <template x-if="!loading && subscriptionStatus === 'none'">
+                <div class="px-4 py-2 rounded-xl bg-amber-100 text-amber-700">
+                    <span class="font-medium">No Trial</span>
+                </div>
+            </template>
         </div>
     </div>
 
-    <!-- Current Plan -->
-    <div class="bg-gradient-to-r from-trust to-trust-dark rounded-2xl p-6 mb-6 text-white">
-        <div class="flex items-center justify-between">
+    <!-- Alert for limits -->
+    <template x-if="usageWarning">
+        <div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <div class="p-2 bg-amber-100 rounded-lg">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+            </div>
             <div>
-                <p class="text-white/70 text-sm">Current Plan</p>
-                <h2 class="text-3xl font-bold mt-1" x-text="currentPlan.name">Free Plan</h2>
-                <p class="text-white/70 mt-2" x-text="currentPlan.description">Perfect for starting out</p>
+                <h4 class="font-semibold text-amber-800">Approaching Usage Limits</h4>
+                <p class="text-amber-700 text-sm mt-1" x-text="usageWarning"></p>
+            </div>
+            <button @click="upgradeModalOpen = true" class="ml-auto px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700">
+                Upgrade Now
+            </button>
+        </div>
+    </template>
+
+    <!-- Current Plan Card -->
+    <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-8 mb-6 text-white overflow-hidden relative">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-16 -mt-16"></div>
+        <div class="absolute bottom-0 left-0 w-48 h-48 bg-trust/20 rounded-full -ml-8 -mb-8"></div>
+        
+        <div class="relative flex items-start justify-between">
+            <div>
+                <p class="text-white/60 text-sm font-medium uppercase tracking-wider">Current Plan</p>
+                <h2 class="text-4xl font-bold mt-2" x-text="currentPlan?.name || 'No Plan'">No Plan</h2>
+                <div class="flex items-center gap-4 mt-4">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="text-white/80" x-text="subscriptionStatus === 'trialing' ? 'Trial Active' : 'Active'"></span>
+                    </div>
+                    <div class="flex items-center gap-2" x-show="subscriptionStatus === 'trialing' && currentPlan?.renewsAt">
+                        <svg class="w-5 h-5 text-white/40" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="text-white/60">Renews <span x-text="formatDate(currentPlan?.renewsAt)"></span></span>
+                    </div>
+                </div>
             </div>
             <div class="text-right">
-                <p class="text-4xl font-bold" x-text="currentPlan.price">$0</p>
-                <p class="text-white/70" x-text="'/month'">/month</p>
-                <div x-show="currentPlan.savings > 0" class="mt-2 px-3 py-1 bg-yellow-500 rounded-full text-sm font-medium">
-                    Save <span x-text="currentPlan.savings">0</span>%
-                </div>
+                <p class="text-5xl font-bold" x-text="formatPrice(currentPlan?.price)">$0</p>
+                <p class="text-white/60 mt-1">/<span x-text="currentPlan?.billingCycle">month</span></p>
             </div>
         </div>
-        
-        <!-- Usage -->
-        <div class="grid grid-cols-4 gap-4 mt-6">
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-white/70 text-xs">Invoices</p>
-                <p class="text-xl font-bold mt-1"><span x-text="usage.invoices">0</span> / <span x-text="usage.invoicesLimit">Unlimited</span></p>
-                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
-                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.invoices / usage.invoicesLimit) * 100, 100) + '%'"></div>
-                </div>
-            </div>
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-white/70 text-xs">Clients</p>
-                <p class="text-xl font-bold mt-1"><span x-text="usage.clients">0</span> / <span x-text="usage.clientsLimit">Unlimited</span></p>
-                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
-                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.clients / usage.clientsLimit) * 100, 100) + '%'"></div>
-                </div>
-            </div>
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-white/70 text-xs">Team Members</p>
-                <p class="text-xl font-bold mt-1"><span x-text="usage.team">0</span> / <span x-text="usage.teamLimit">1</span></p>
-                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
-                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.team / usage.teamLimit) * 100, 100) + '%'"></div>
-                </div>
-            </div>
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-white/70 text-xs">Storage</p>
-                <p class="text-xl font-bold mt-1"><span x-text="usage.storage">0</span> / <span x-text="usage.storageLimit">1GB</span></p>
-                <div class="w-full bg-white/20 h-1.5 rounded-full mt-2">
-                    <div class="bg-white h-1.5 rounded-full" :style="'width: ' + Math.min((usage.storage / usage.storageLimit) * 100, 100) + '%'"></div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Plans -->
-    <div class="mb-6">
-        <h3 class="text-lg font-semibold text-slate-900 mb-4">Available Plans</h3>
-        <div class="grid grid-cols-3 gap-4">
-            <template x-for="plan in plans" :key="plan.id">
-                <div class="bg-white rounded-2xl border-2 p-6 transition-all cursor-pointer"
-                    :class="plan.id === currentPlan.id ? 'border-trust shadow-lg shadow-trust/20' : 'border-slate-200 hover:border-slate-300'"
-                    @click="selectPlan(plan)">
-                    <div class="flex items-center justify-between mb-4">
-                        <div>
-                            <h4 class="font-semibold text-slate-900" x-text="plan.name">Starter</h4>
-                            <p class="text-xs text-slate-500" x-text="plan.description">For small business</p>
+        <!-- Usage Progress Bars -->
+        <div class="grid grid-cols-4 gap-6 mt-10">
+            <template x-for="metric in usageMetrics" :key="metric.key">
+                <div class="bg-white/5 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white/60 text-sm" x-text="metric.label">Invoices</span>
+                        <span class="text-white font-medium" x-text="metric.used + '/' + metric.limit">0/10</span>
+                    </div>
+                    <div class="h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500" 
+                            :class="metric.percentage > 80 ? 'bg-red-500' : metric.percentage > 60 ? 'bg-amber-500' : 'bg-green-500'"
+                            :style="'width: ' + Math.min(metric.percentage, 100) + '%'">
                         </div>
-                        <span x-show="plan.id === currentPlan.id" class="px-2 py-1 bg-trust text-white text-xs rounded-full">Current</span>
-                        <span x-show="plan.popular" class="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full">Popular</span>
                     </div>
-                    <p class="text-2xl font-bold text-slate-900">
-                        <span x-text="plan.price">$19</span>
-                        <span class="text-sm font-normal text-slate-500">/month</span>
-                    </p>
-                    <div class="mt-4 space-y-2">
-                        <template x-for="feature in plan.features" :key="feature">
-                            <div class="flex items-center gap-2 text-sm text-slate-600">
-                                <i data-lucide="check" class="w-4 h-4 text-green-500"></i>
-                                <span x-text="feature"></span>
-                            </div>
-                        </template>
-                    </div>
+                    <p class="text-xs text-white/40 mt-2" x-text="metric.remainingText"></p>
                 </div>
             </template>
         </div>
     </div>
 
-    <!-- Payment Methods -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-slate-900">Payment Methods</h3>
-            <button @click="addPaymentModalOpen = true" class="px-4 py-2 bg-trust text-white rounded-xl text-sm hover:bg-trust-dark flex items-center gap-2">
-                <i data-lucide="plus" class="w-4 h-4"></i>
-                Add Method
+    <!-- Action Cards Grid -->
+    <div class="grid grid-cols-3 gap-6 mb-6">
+        <!-- Upgrade Card -->
+        <div class="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="p-3 bg-trust/10 rounded-xl">
+                    <svg class="w-6 h-6 text-trust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                    </svg>
+                </div>
+                <h3 class="font-semibold text-slate-900">Upgrade Plan</h3>
+            </div>
+            <p class="text-slate-500 text-sm mb-4">Unlock more invoices, clients, and advanced features.</p>
+            <button @click="upgradeModalOpen = true" class="w-full py-2.5 bg-trust text-white rounded-lg font-medium hover:bg-trust-dark">
+                View Plans
             </button>
         </div>
-        
-        <div class="space-y-3">
-            <template x-for="method in paymentMethods" :key="method.id">
-                <div class="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
-                    <div class="flex items-center gap-4">
-                        <div class="w-12 h-8 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold" x-text="method.brand">VISA</div>
-                        <div>
-                            <p class="font-medium text-slate-900">•••• •••�� •��•• <span x-text="method.last4">4242</span></p>
-                            <p class="text-sm text-slate-500">Expires <span x-text="method.expMonth">12</span>/<span x-text="method.expYear">25</span></p>
-                        </div>
+
+        <!-- Payment Methods Card -->
+        <div class="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="p-3 bg-blue-50 rounded-xl">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V3a3 3 0 00-3-3H6a3 3 0 00-3 3v12a3 3 0 003 3z"/>
+                    </svg>
+                </div>
+                <h3 class="font-semibold text-slate-900">Payment Method</h3>
+            </div>
+            <template x-if="paymentMethods.length > 0">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-6 bg-slate-100 rounded flex items-center justify-center text-xs font-bold text-slate-600">
+                        <span x-text="paymentMethods[0]?.type || 'CARD'"></span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span x-show="method.isDefault" class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Default</span>
-                        <button x-show="!method.isDefault" @click="setDefaultPayment(method.id)" class="text-sm text-trust hover:underline">Set Default</button>
-                        <button @click="removePaymentMethod(method.id)" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                        </button>
-                    </div>
+                    <span class="text-sm text-slate-600">•••• <span x-text="paymentMethods[0]?.last4 || '4242'"></span></span>
                 </div>
             </template>
-            <template x-if="paymentMethods.length === 0">
-                <div class="p-8 text-center border border-dashed border-slate-300 rounded-xl">
-                    <i data-lucide="credit-card" class="w-8 h-8 text-slate-400 mx-auto mb-2"></i>
-                    <p class="text-slate-500">No payment methods added</p>
+            <button @click="paymentMethodModalOpen = true" class="w-full py-2.5 border border-slate-200 rounded-lg font-medium text-slate-600 hover:bg-slate-50">
+                Manage Methods
+            </button>
+        </div>
+
+        <!-- Billing History Card -->
+        <div class="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="p-3 bg-green-50 rounded-xl">
+                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
                 </div>
-            </template>
+                <h3 class="font-semibold text-slate-900">Billing History</h3>
+            </div>
+            <p class="text-slate-500 text-sm mb-4">View and download your invoices and receipts.</p>
+            <button @click="historyModalOpen = true" class="w-full py-2.5 border border-slate-200 rounded-lg font-medium text-slate-600 hover:bg-slate-50">
+                View History
+            </button>
         </div>
     </div>
 
-    <!-- Billing History -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-6">
-        <h3 class="font-semibold text-slate-900 mb-4">Billing History</h3>
-        <div class="space-y-3">
-            <template x-for="item in billingHistory" :key="item.id">
-                <div class="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
+    <!-- Recent Transactions -->
+    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-900">Recent Transactions</h3>
+            <button @click="historyModalOpen = true" class="text-trust text-sm font-medium hover:underline">View All</button>
+        </div>
+        <div class="divide-y divide-slate-100">
+            <template x-if="transactions.length === 0">
+                <div class="p-8 text-center">
+                    <p class="text-slate-400">No transactions yet</p>
+                </div>
+            </template>
+            <template x-for="tx in transactions.slice(0, 5)" :key="tx.id">
+                <div class="px-6 py-4 flex items-center justify-between hover:bg-slate-50">
                     <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-                            :class="item.type === 'charge' ? 'bg-green-100' : 'bg-red-100'">
-                            <i :data-lucide="item.type === 'charge' ? 'arrow-down-right' : 'arrow-up-right'" 
-                                class="w-5 h-5" :class="item.type === 'charge' ? 'text-green-600' : 'text-red-600'"></i>
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center"
+                            :class="tx.status === 'completed' ? 'bg-green-100' : tx.status === 'pending' ? 'bg-amber-100' : 'bg-red-100'">
+                            <svg class="w-5 h-5" :class="tx.status === 'completed' ? 'text-green-600' : tx.status === 'pending' ? 'text-amber-600' : 'text-red-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
                         </div>
                         <div>
-                            <p class="font-medium text-slate-900" x-text="item.description">Monthly subscription</p>
-                            <p class="text-sm text-slate-500" x-text="item.date">Jan 1, 2024</p>
+                            <p class="font-medium text-slate-900" x-text="tx.type">Payment</p>
+                            <p class="text-sm text-slate-500" x-text="formatDate(tx.createdAt)">Jan 1, 2024</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="font-medium text-slate-900"><span x-text="item.currency">KES</span> <span x-text="item.amount">1,900</span></p>
-                        <span class="px-2 py-1 rounded-full text-xs font-medium" 
-                            :class="item.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
-                            x-text="item.status">Paid</span>
+                        <p class="font-semibold text-slate-900" x-text="formatPrice(tx.amount)">$19.00</p>
+                        <p class="text-sm capitalize" :class="tx.status === 'completed' ? 'text-green-600' : tx.status === 'pending' ? 'text-amber-600' : 'text-red-600'" x-text="tx.status">Completed</p>
                     </div>
                 </div>
-            </template>
-            <template x-if="billingHistory.length === 0">
-                <p class="text-center text-slate-500 py-8">No billing history yet</p>
             </template>
         </div>
     </div>
 
     <!-- Upgrade Modal -->
-    <div x-show="upgradeModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="upgradeModalOpen = false">
-        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-            <div class="text-center mb-6">
-                <div class="w-16 h-16 bg-trust/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i data-lucide="zap" class="w-8 h-8 text-trust"></i>
+    <div x-show="upgradeModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="upgradeModalOpen" @click="upgradeModalOpen = false" class="fixed inset-0 bg-slate-900/50 transition-opacity" aria-hidden="true"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                    <h3 class="text-xl font-bold text-slate-900">Choose Your Plan</h3>
+                    <button @click="upgradeModalOpen = false" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
                 </div>
-                <h3 class="text-xl font-bold text-slate-900">Upgrade to <span x-text="selectedPlanToUpgrade?.name">Pro</span></h3>
-                <p class="text-slate-500 mt-1">Get more features and higher limits</p>
-            </div>
-            
-            <div class="bg-slate-50 rounded-xl p-4 mb-6">
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-slate-600">Plan</span>
-                    <span class="font-medium" x-text="selectedPlanToUpgrade?.name">Pro</span>
-                </div>
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-slate-600">Billing</span>
-                    <div class="flex items-center gap-2">
-                        <button @click="billingCycle = 'monthly'" 
-                            class="px-3 py-1 rounded-lg text-sm" 
-                            :class="billingCycle === 'monthly' ? 'bg-trust text-white' : 'bg-white border'">Monthly</button>
-                        <button @click="billingCycle = 'yearly'" 
-                            class="px-3 py-1 rounded-lg text-sm" 
-                            :class="billingCycle === 'yearly' ? 'bg-trust text-white' : 'bg-white border'">Yearly</button>
+                <div class="p-6">
+                    <!-- Payment Method Selector -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Select Payment Method</label>
+                        <div class="flex gap-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="paymentMethod" value="stripe" x-model="paymentMethod" class="w-4 h-4 text-trust">
+                                <span class="text-sm text-slate-600">Card (Stripe)</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="paymentMethod" value="mpesa" x-model="paymentMethod" class="w-4 h-4 text-trust">
+                                <span class="text-sm text-slate-600">M-Pesa</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Phone input for M-Pesa -->
+                    <div x-show="paymentMethod === 'mpesa'" class="mb-6">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">M-Pesa Phone Number</label>
+                        <input type="tel" x-model="mpesaPhone" placeholder="2547XXXXXXXX" class="w-full px-4 py-2 border border-slate-200 rounded-lg">
+                        <p class="text-xs text-slate-500 mt-1">Enter number starting with 254</p>
+                    </div>
+                    
+                    <!-- Loading state for plans -->
+                    <template x-if="plans.length === 0 && !loading">
+                        <div class="text-center py-8 text-slate-500">
+                            <p>No plans available</p>
+                        </div>
+                    </template>
+                    
+                    <div x-show="plans.length > 0" class="grid grid-cols-4 gap-4">
+                        <template x-for="plan in plans" :key="plan.id">
+                            <div class="border-2 rounded-xl p-5 cursor-pointer transition-all"
+                                :class="selectedPlan?.id === plan.id ? 'border-trust bg-trust/5' : 'border-slate-200 hover:border-slate-300'"
+                                @click="selectedPlan = plan">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="font-semibold text-slate-900" x-text="plan.name"></span>
+                                    <span x-show="plan.popular" class="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">Popular</span>
+                                    <span x-show="plan.custom" class="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs rounded-full">Custom</span>
+                                </div>
+                                <p x-show="plan.description" class="text-xs text-slate-500 mb-3" x-text="plan.description"></p>
+                                <p class="text-2xl font-bold text-slate-900">
+                                    <span x-text="plan.custom ? 'Custom' : (plan.price > 0 ? 'KES ' + plan.price.toLocaleString() + '/mo' : 'Trial')"></span>
+                                </p>
+                                <p x-show="plan.trialDays" class="text-xs text-green-600 mt-1" x-text="plan.trialDays + ' day free trial'"></p>
+                                <ul class="mt-4 space-y-2">
+                                    <template x-for="feature in plan.features" :key="feature">
+                                        <li class="flex items-start gap-2 text-sm text-slate-600">
+                                            <svg class="w-4 h-4 text-green-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                            </svg>
+                                            <span x-text="feature"></span>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button @click="upgradeModalOpen = false" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Cancel</button>
+                        <button @click="confirmUpgrade()" class="px-6 py-2 bg-trust text-white rounded-lg font-medium hover:bg-trust-dark" :disabled="!selectedPlan">
+                            Confirm Upgrade
+                        </button>
                     </div>
                 </div>
-                <hr class="my-3 border-slate-200">
-                <div class="flex justify-between items-center">
-                    <span class="font-medium text-slate-900">Total</span>
-                    <span class="text-xl font-bold text-trust" x-text="selectedPlanToUpgrade?.price">$29</span>
-                </div>
-            </div>
-
-            <div class="flex gap-3">
-                <button @click="upgradeModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
-                <button @click="confirmUpgrade()" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Confirm Upgrade</button>
             </div>
         </div>
     </div>
 
-    <!-- Add Payment Modal -->
-    <div x-show="addPaymentModalOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="addPaymentModalOpen = false">
-        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"></div>
-        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 class="text-xl font-bold text-slate-900 mb-4">Add Payment Method</h3>
-            
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Card Number</label>
-                    <input type="text" x-model="newCard.number" placeholder="4242 4242 4242 4242" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Expiry</label>
-                        <input type="text" x-model="newCard.expiry" placeholder="MM/YY" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
+    <!-- Success Modal -->
+    <div x-show="successModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="successModalOpen" @click="successModalOpen = false" class="fixed inset-0 bg-slate-900/50 transition-opacity" aria-hidden="true"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle">
+                <div class="p-8 text-center">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">CVC</label>
-                        <input type="text" x-model="newCard.cvc" placeholder="123" class="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Subscription Activated!</h3>
+                    <p class="text-slate-600 mb-6" x-text="successMessage"></p>
+                    <button @click="successModalOpen = false; loadData()" class="w-full py-3 bg-trust text-white rounded-xl font-medium hover:bg-trust-dark">
+                        Continue to Billing
+                    </button>
                 </div>
-            </div>
-
-            <div class="flex gap-3 mt-6">
-                <button @click="addPaymentModalOpen = false" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
-                <button @click="addPaymentMethod()" class="flex-1 px-4 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Add Card</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast -->
-    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
-        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
-        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+    <!-- Failure Modal -->
+    <div x-show="failureModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="failureModalOpen" @click="failureModalOpen = false" class="fixed inset-0 bg-slate-900/50 transition-opacity" aria-hidden="true"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle">
+                <div class="p-8 text-center">
+                    <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Payment Failed</h3>
+                    <p class="text-slate-600 mb-2" x-text="failureMessage"></p>
+                    <p class="text-sm text-slate-500 mb-6">Please try again or contact support.</p>
+                    <button @click="failureModalOpen = false" class="w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200">
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<script>
-function billingContent() {
-    return {
-        upgradeModalOpen: false,
-        addPaymentModalOpen: false,
-        invoiceModalOpen: false,
-        billingCycle: 'monthly',
-        selectedPlanToUpgrade: null,
-        currentPlan: {
-            id: 'free', name: 'Free Plan', price: '$0', description: 'Perfect for starting out',
-            savings: 0
-        },
-        usage: { invoices: 12, invoicesLimit: 10, clients: 8, clientsLimit: 5, team: 2, teamLimit: 1, storage: 0.2, storageLimit: 1 },
-        plans: [
-            { id: 'free', name: 'Free', price: '$0', description: 'Perfect for starting out', popular: false, 
-              features: ['10 invoices/month', '5 clients', '1 team member', '1GB storage', 'Email support'] },
-            { id: 'starter', name: 'Starter', price: '$19', description: 'For growing businesses', popular: true, savings: 20,
-              features: ['100 invoices/month', '50 clients', '3 team members', '10GB storage', 'Priority support', 'Custom branding'] },
-            { id: 'pro', name: 'Pro', price: '$49', description: 'For scaling teams', popular: false, savings: 35,
-              features: ['Unlimited invoices', 'Unlimited clients', 'Unlimited team', '100GB storage', 'VIP support', 'Advanced reports', 'API access'] }
-        ],
-        paymentMethods: [
-            { id: '1', brand: 'VISA', last4: '4242', expMonth: '12', expYear: '25', isDefault: true }
-        ],
-        billingHistory: [
-            { id: '1', type: 'charge', description: 'Starter Plan - Monthly', date: 'Jan 1, 2024', currency: 'KES', amount: '1,900', status: 'paid' },
-            { id: '2', type: 'charge', description: 'Starter Plan - Monthly', date: 'Dec 1, 2023', currency: 'KES', amount: '1,900', status: 'paid' }
-        ],
-        newCard: { number: '', expiry: '', cvc: '' },
-        toast: { show: false, message: '', type: 'success' },
-
-        async init() {
-            lucide.createIcons();
-            await this.loadBilling();
-        },
-
-        async loadBilling() {
-            try {
-                const [subscription, methods, history] = await Promise.all([
-                    InvoiceFastAPI.billing.getSubscription(),
-                    InvoiceFastAPI.billing.getPaymentMethods(),
-                    InvoiceFastAPI.billing.getHistory()
-                ]);
-                this.currentPlan = subscription?.plan || this.currentPlan;
-                this.usage = subscription?.usage || this.usage;
-                this.paymentMethods = methods || this.paymentMethods;
-                this.billingHistory = history || this.billingHistory;
-            } catch(err) {
-                console.error('Failed to load billing:', err);
-            }
-        },
-
-        selectPlan(plan) {
-            if (plan.id === this.currentPlan.id) return;
-            this.selectedPlanToUpgrade = plan;
-            this.upgradeModalOpen = true;
-        },
-
-        async confirmUpgrade() {
-            try {
-                await InvoiceFastAPI.request('/tenant/billing/subscription', {
-                    method: 'POST',
-                    body: JSON.stringify({ 
-                        plan_id: this.selectedPlanToUpgrade.id,
-                        cycle: this.billingCycle 
-                    })
-                });
-                this.showToast('Plan upgraded successfully', 'success');
-                this.upgradeModalOpen = false;
-                await this.loadBilling();
-            } catch(err) {
-                this.showToast('Failed to upgrade plan', 'error');
-            }
-        },
-
-        async addPaymentMethod() {
-            try {
-                await InvoiceFastAPI.request('/tenant/billing/mpesa', {
-                    method: 'POST',
-                    body: JSON.stringify({ phone: this.newCard.number })
-                });
-                this.showToast('Payment method added', 'success');
-                this.addPaymentModalOpen = false;
-                this.newCard = { number: '', expiry: '', cvc: '' };
-                await this.loadBilling();
-            } catch(err) {
-                this.showToast('Failed to add payment method', 'error');
-            }
-        },
-
-        async setDefaultPayment(id) {
-            try {
-                await InvoiceFastAPI.request(`/tenant/billing/payment-methods/${id}/default`, {
-                    method: 'PUT'
-                });
-                this.showToast('Default payment updated', 'success');
-                await this.loadBilling();
-            } catch(err) {
-                this.showToast('Failed to update default', 'error');
-            }
-        },
-
-        async removePaymentMethod(id) {
-            if (!confirm('Remove this payment method?')) return;
-            try {
-                await InvoiceFastAPI.request(`/tenant/billing/payment-methods/${id}`, {
-                    method: 'DELETE'
-                });
-                this.showToast('Payment method removed', 'success');
-                await this.loadBilling();
-            } catch(err) {
-                this.showToast('Failed to remove payment method', 'error');
-            }
-        },
-
-        showToast(message, type) {
-            this.toast = { show: true, message, type };
-            setTimeout(() => this.toast.show = false, 3000);
-        }
-    };
-}
-</script>
+<style>[x-cloak] { display: none !important; }</style>

@@ -21,6 +21,7 @@ type Config struct {
 	KRA       KRAConfig
 	WhatsApp  WhatsAppConfig
 	SMS       SMSConfig
+	Stripe    StripeConfig
 }
 
 type ServerConfig struct {
@@ -55,6 +56,8 @@ type DatabaseConfig struct {
 type IntasendConfig struct {
 	PublishableKey string
 	SecretKey      string
+	APIKey         string
+	PublicKey      string
 	APIURL         string
 	WebhookSecret  string
 	// Timeouts for external calls
@@ -144,6 +147,12 @@ type TimeoutsConfig struct {
 	Shutdown      time.Duration // graceful shutdown timeout
 }
 
+type StripeConfig struct {
+	SecretKey      string
+	PublicKey     string
+	WebhookSecret string
+}
+
 func Load() *Config {
 	ginMode := getEnv("GIN_MODE", "debug")
 	isProduction := ginMode == "production"
@@ -194,6 +203,8 @@ func Load() *Config {
 		Intasend: IntasendConfig{
 			PublishableKey: getEnv("INTASEND_PUBLISHABLE_KEY", ""),
 			SecretKey:      getEnv("INTASEND_SECRET_KEY", ""),
+			APIKey:         getEnv("INTASEND_API_KEY", ""),
+			PublicKey:      getEnv("INTASEND_PUBLIC_KEY", ""),
 			APIURL:         getEnv("INTASEND_API_URL", "https://sandbox.intasend.com"),
 			WebhookSecret:  getEnv("INTASEND_WEBHOOK_SECRET", ""),
 			ConnectTimeout: getDurationEnv("INTASEND_CONNECT_TIMEOUT", 10*time.Second),
@@ -271,6 +282,11 @@ func Load() *Config {
 			APISecret:   getEnv("SMS_API_SECRET", ""),
 			SenderID:    getEnv("SMS_SENDER_ID", "INVOICEFAST"),
 			SMSEndpoint: getEnv("SMS_ENDPOINT", ""),
+		},
+		Stripe: StripeConfig{
+			SecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
+			PublicKey:     getEnv("STRIPE_PUBLIC_KEY", ""),
+			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		},
 	}
 }

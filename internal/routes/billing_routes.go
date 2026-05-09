@@ -9,7 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *services.AuthService, db *database.DB, webhookVerifier *middleware.WebhookVerifierMiddleware, idempotencySvc *services.IdempotencyService) fiber.Router {
 	group := app.Group("/api/v1/tenant/billing")
 	group.Use(middleware.TenantMiddleware(authService, db))
 
@@ -20,6 +20,8 @@ func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *serv
 	group.Put("/subscription/plan", h.ChangePlan)
 
 	group.Get("/plans", h.GetPlans)
+
+	group.Post("/checkout", h.CreateCheckoutSession)
 
 	group.Get("/history", h.GetBillingHistory)
 
@@ -33,8 +35,16 @@ func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *serv
 
 	group.Get("/usage", h.GetUsage)
 
-	group.Post("/webhook/mpesa", h.HandleMpesaWebhook)
-	group.Post("/webhook/intasend", h.HandleIntasendWebhook)
+	// BILLING WEBHOOKS - with signature verification + idempotency
+	group.Post("/webhook/mpesa",
+		middleware.IdempotencyMiddleware(idempotencySvc),
+		webhookVerifier.MpesaVerification(),
+		h.HandleMpesaWebhook)
+	
+	group.Post("/webhook/intasend",
+		middleware.IdempotencyMiddleware(idempotencySvc),
+		webhookVerifier.IntasendVerification(),
+		h.HandleIntasendWebhook)
 
 	return group
 }

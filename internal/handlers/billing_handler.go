@@ -2,23 +2,31 @@ package handlers
 
 import (
 	"invoicefast/internal/middleware"
+	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 	"log"
+	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 type BillingHandler struct {
 	subService  *services.SubscriptionService
 	planService *services.PlanService
 	billingSvc  *services.BillingService
+	stripeSvc   *services.StripeService
+	intasendSvc *services.IntasendService
 }
 
-func NewBillingHandler(subSvc *services.SubscriptionService, planSvc *services.PlanService, billingSvc *services.BillingService) *BillingHandler {
+func NewBillingHandler(subSvc *services.SubscriptionService, planSvc *services.PlanService, billingSvc *services.BillingService, stripeSvc *services.StripeService, intasendSvc *services.IntasendService) *BillingHandler {
 	return &BillingHandler{
 		subService:  subSvc,
 		planService: planSvc,
 		billingSvc:  billingSvc,
+		stripeSvc:   stripeSvc,
+		intasendSvc: intasendSvc,
 	}
 }
 
@@ -49,6 +57,114 @@ func (h *BillingHandler) GetPlans(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"plans": plans})
+}
+
+func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
+
+	var req struct {
+		PlanID       string `json:"plan_id"`
+		PaymentMethod string `json:"payment_method"` // stripe, mpesa
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	if req.PlanID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "plan_id required"})
+	}
+
+	paymentMethod := req.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = "stripe"
+	}
+
+	plan, err := h.planService.GetPlan(req.PlanID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "plan not found"})
+	}
+
+	userEmail := c.Locals("user_id")
+	emailStr, _ := userEmail.(string)
+
+	baseURL := c.BaseURL() + "/billing"
+	successURL := baseURL + "?success=true"
+	cancelURL := baseURL + "?canceled=true"
+
+	amount := plan.MonthlyPriceUSD
+	
+	// FREE PLAN - activate immediately without payment
+	if amount == 0 {
+		sub, err := h.subService.CreateSubscription(tenantID, req.PlanID, "monthly")
+		if err != nil {
+			log.Printf("[CreateCheckoutSession] CreateSubscription failed: %v", err)
+			if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
+				existing, _, getErr := h.subService.GetSubscriptionWithPlan(tenantID)
+				if getErr == nil && existing != nil {
+					log.Printf("[CreateCheckoutSession] Upgrading existing subscription")
+					existing.Status = "active"
+					existing.PlanID = req.PlanID
+					sub = existing
+				} else {
+					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Subscription already exists"})
+				}
+			} else {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+			}
+		}
+		
+		return c.JSON(fiber.Map{
+			"subscription":  sub,
+			"success":     true,
+			"message":    "Free plan activated",
+			"activated":  true,
+		})
+	}
+	
+	// PAID PLAN - requires payment first
+	log.Printf("[CreateCheckoutSession] plan=%s, amount=%d, stripeSvc=%v, paymentMethod=%s", plan.Name, amount, h.stripeSvc != nil, paymentMethod)
+	
+	if paymentMethod == "mpesa" && h.intasendSvc != nil && amount > 0 {
+		baseURL := c.BaseURL() + "/billing"
+		
+		tx, err := h.intasendSvc.InitiatePayment(&services.InitiatePaymentRequest{
+			Amount:         float64(amount),
+			Currency:      "KES",
+			PhoneNumber:  c.Query("phone", ""),
+			CustomerEmail: emailStr,
+			CallbackURL:   baseURL + "/callback",
+			APIRef:       "subscription_" + req.PlanID,
+		})
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+		
+		return c.JSON(fiber.Map{
+			"checkout_id":     tx.ID,
+			"checkout_url":  tx.URL,
+			"payment_method": "mpesa",
+			"message":       "STK push sent to your phone",
+		})
+	}
+
+	if h.stripeSvc != nil && amount > 0 && emailStr != "" {
+		sessionURL, err := h.stripeSvc.CreateBillingSession(plan.Name, amount, emailStr, successURL, cancelURL)
+		if err != nil {
+			log.Printf("Failed to create stripe billing session: %v", err)
+			log.Printf("Creating direct subscription instead (fallback)")
+		} else {
+			return c.JSON(fiber.Map{"url": sessionURL})
+		}
+	}
+	
+	// NO PAYMENT PROVIDER CONFIGURED - this should not happen in production
+	return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
+		"error": "No payment provider configured. Please contact support.",
+	})
 }
 
 func (h *BillingHandler) CreateSubscription(c *fiber.Ctx) error {
@@ -146,7 +262,7 @@ func (h *BillingHandler) GetBillingHistory(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 20)
 
-	txs, count := h.billingSvc.GetBillingHistory(tenantID, page, limit)
+	txs, count, _ := h.billingSvc.GetBillingHistory(tenantID, page, limit)
 
 	return c.JSON(fiber.Map{
 		"transactions": txs,
@@ -274,6 +390,7 @@ func (h *BillingHandler) HandleMpesaWebhook(c *fiber.Ctx) error {
 		ResultCode        string `json:"ResultCode"`
 		Amount            string `json:"Amount"`
 		PhoneNumber       string `json:"PhoneNumber"`
+		TenantID          string `json:"tenant_id"`
 	}
 
 	if err := c.BodyParser(&payload); err != nil {
@@ -282,6 +399,15 @@ func (h *BillingHandler) HandleMpesaWebhook(c *fiber.Ctx) error {
 
 	if payload.CheckoutRequestID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "CheckoutRequestID required"})
+	}
+
+	// IDEMPOTENCY CHECK
+	if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok {
+		isProcessed, _ := svc.IsProcessed(c.Context(), "billing_mpesa:"+payload.CheckoutRequestID)
+		if isProcessed {
+			log.Printf("[BILLING] Already processed: %s", payload.CheckoutRequestID)
+			return c.JSON(fiber.Map{"success": true, "status": "already_processed"})
+		}
 	}
 
 	status := "success"
@@ -293,28 +419,86 @@ func (h *BillingHandler) HandleMpesaWebhook(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// MARK IDEMPOTENCY
+	if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok {
+		svc.MarkProcessed(c.Context(), "billing_mpesa:"+payload.CheckoutRequestID, map[string]interface{}{
+			"tenant_id": payload.TenantID,
+			"result":   status,
+		})
+	}
+
 	return c.JSON(fiber.Map{"success": true})
 }
 
 func (h *BillingHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 	var payload struct {
-		Event     string `json:"event"`
-		InvoiceID string `json:"invoice_id"`
-		Status    string `json:"status"`
-		TenantID  string `json:"tenant_id"`
+		Event              string `json:"event"`
+		Status             string `json:"status"`
+		TenantID           string `json:"tenant_id"`
+		Amount            int64  `json:"amount"`
+		CheckoutRequestID string `json:"checkout_request_id"`
+		CheckoutID        string `json:"checkout_id"`
+		Message           string `json:"message"`
 	}
 
 	if err := c.BodyParser(&payload); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid payload"})
 	}
 
-	if payload.Event == "payment.success" && payload.TenantID != "" {
-		sub, err := h.subService.GetSubscription(payload.TenantID)
-		if err == nil && sub != nil {
-			if err := h.subService.ReactivateSubscription(payload.TenantID); err != nil {
-				log.Printf("[BILLING] Failed to reactivate subscription: %v", err)
+	// IDEMPOTENCY CHECK
+	iduKey := payload.CheckoutRequestID
+	if iduKey == "" {
+		iduKey = payload.CheckoutID
+	}
+	if iduKey != "" {
+		if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok {
+			isProcessed, _ := svc.IsProcessed(c.Context(), "billing:"+iduKey)
+			if isProcessed {
+				log.Printf("[BILLING] Already processed: %s", iduKey)
+				return c.JSON(fiber.Map{"success": true, "status": "already_processed"})
 			}
 		}
+	}
+
+	// BILLING webhook - confirm payment and activate subscription
+	if payload.Event == "checkout.complete" || payload.Status == "completed" {
+		if payload.TenantID != "" {
+			now := time.Now()
+			tx := &models.SubscriptionTransaction{
+				ID:                 uuid.New().String(),
+				TenantID:           payload.TenantID,
+				Provider:          "intasend",
+				ProviderReference: payload.CheckoutRequestID,
+				Status:            "completed",
+				PaymentType:       "subscription",
+				IdempotencyKey:    iduKey,
+				PaidAt:            &now,
+				CreatedAt:         now,
+				UpdatedAt:         now,
+			}
+			
+			if err := h.billingSvc.RecordBillingPayment(tx); err != nil {
+				log.Printf("[BILLING] Failed to record payment: %v", err)
+			} else {
+				sub, err := h.subService.GetActiveSubscription(payload.TenantID)
+				if err != nil || sub == nil {
+					log.Printf("[BILLING] Creating subscription for tenant: %s", payload.TenantID)
+					_, _ = h.subService.CreateSubscriptionWithTrial(payload.TenantID)
+				} else {
+					log.Printf("[BILLING] Subscription already active for tenant: %s", payload.TenantID)
+				}
+			}
+			
+			// MARK IDEMPOTENCY
+			if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok && iduKey != "" {
+				svc.MarkProcessed(c.Context(), "billing:"+iduKey, map[string]interface{}{
+					"tenant_id": payload.TenantID,
+					"amount":   payload.Amount,
+				})
+			}
+		}
+	} else if payload.Event == "checkout.failed" || payload.Status == "failed" {
+		log.Printf("[BILLING] Payment failed: %s", payload.Message)
 	}
 
 	return c.JSON(fiber.Map{"success": true})

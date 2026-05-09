@@ -210,7 +210,7 @@ func main() {
 	// Intasend service for STK Push
 	var intasendService *services.IntasendService
 	if cfg.Intasend.SecretKey != "" && cfg.Intasend.APIURL != "" {
-		intasendService = services.NewIntasendService(&cfg.Intasend)
+		intasendService = services.NewIntasendServiceWithDB(db, &cfg.Intasend, notificationService)
 	}
 
 	// Reminder service - uses notification service
@@ -299,10 +299,18 @@ func main() {
 	webhookVerifier := middleware.NewWebhookVerifierMiddleware(services.NewWebhookVerifier(cfg))
 
 	// Billing services (must be before handlers that need them)
-	planService := services.NewPlanService(db)
+planService := services.NewPlanService(db)
 	planService.SeedDefaultPlans()
-	subscriptionService := services.NewSubscriptionService(db, planService)
-	billingService := services.NewBillingService(db)
+	
+	// Migrate users without subscription to trial plan
+	if err := planService.MigrateUsersWithoutSubscription(); err != nil {
+		log.Printf("Warning: Failed to migrate users without subscription: %v", err)
+	}
+
+	stripeService := services.NewStripeService(db, cfg.Stripe.SecretKey, cfg.Stripe.PublicKey, cfg.Stripe.WebhookSecret)
+
+	subscriptionService := services.NewSubscriptionService(db, planService, notificationService)
+	billingService := services.NewBillingService(db, planService, subscriptionService, nil, notificationService, cfg)
 
 	// Initialize billing worker for cron jobs
 	billingWorker := worker.NewBillingWorker(db, subscriptionService, billingService)
@@ -345,7 +353,7 @@ func main() {
 	notificationHandler := handlers.NewNotificationHandler(db)
 
 	// Billing handler
-	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService)
+	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService, stripeService, intasendService)
 
 	// Late fee handler
 	lateFeeHandler := handlers.NewLateFeeHandler(lateFeeService)
@@ -395,7 +403,7 @@ func main() {
 	routes.ActivityRoutes(app, activityHandler, authService, db)
 
 	// Payment matching routes
-	paymentMatchingService := services.NewPaymentMatchingService(db)
+	paymentMatchingService := services.NewPaymentMatchingService(db, notificationService)
 	paymentMatchingHandler := handlers.NewPaymentMatchingHandler(paymentMatchingService, invoiceService)
 	routes.PaymentMatchingRoutes(app, paymentMatchingHandler, authService, db)
 
@@ -580,7 +588,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.TeamRoutes(app, teamHandler, authService, db)
 	routes.AutomationRoutes(app, db, authService)
 	routes.NotificationRoutes(app, notificationHandler, authService, db)
-	routes.BillingRoutes(app, billingHandler, authService, db)
+	routes.BillingRoutes(app, billingHandler, authService, db, webhookVerifier, idempotencySvc)
 
 	// Webhook endpoints (rate limited separately)
 	webhook := app.Group("/api/v1/webhook")

@@ -535,25 +535,30 @@ const (
 	PaymentStatusRefunded  PaymentStatus = "refunded"
 )
 
-// Payment represents a payment for an invoice
+// Payment represents a payment for an INVOICE (merchant)
 type Payment struct {
-	ID            string        `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID      string        `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	UserID        string        `json:"user_id" gorm:"type:uuid;index"`
+	ID              string        `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID        string        `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	UserID         string        `json:"user_id" gorm:"type:uuid;index"`
 	InvoiceID     string        `json:"invoice_id" gorm:"type:uuid;index;not null"`
-	Amount        float64       `json:"amount" gorm:"not null"`
+	Amount         float64       `json:"amount" gorm:"not null"`
 	Currency      string        `json:"currency" gorm:"default:'KES'"`
-	Method        PaymentMethod `json:"method" gorm:"not null"`
-	Status        PaymentStatus `json:"status" gorm:"default:'pending'"`
+	Method         PaymentMethod `json:"method" gorm:"not null"`
+	Status         PaymentStatus `json:"status" gorm:"default:'pending'"`
 	Reference     string        `json:"reference" gorm:"index"` // M-Pesa receipt number
 	IntasendID    string        `json:"intasend_id"`
-	PhoneNumber   string        `json:"phone_number"`
-	CustomerEmail string        `json:"customer_email"`
-	FailureReason string        `json:"failure_reason"`
-	CompletedAt   *time.Time    `json:"completed_at"`
+	StripeChargeID string       `json:"stripe_charge_id"`
+	PhoneNumber   string       `json:"phone_number"`
+	CustomerEmail string       `json:"customer_email"`
+	FailureReason string       `json:"failure_reason"`
+	IdempotencyKey string    `json:"idempotency_key" gorm:"index"` // Prevent duplicate processing
+	CompletedAt   *time.Time   `json:"completed_at"`
 	CreatedAt     time.Time    `json:"created_at"`
 	UpdatedAt     time.Time    `json:"updated_at"`
-
+	
+	// NEW: Explicit payment type
+	PaymentType string `json:"payment_type" gorm:"default:'invoice'"` // invoice (merchant)
+	
 	Invoice Invoice `json:"-" gorm:"foreignKey:InvoiceID"`
 }
 
@@ -819,6 +824,7 @@ type SubscriptionPlan struct {
 	IsActive        bool      `json:"is_active" gorm:"default:true"`
 	SortOrder       int       `json:"sort_order" gorm:"default:0"`
 	TrialDays       int       `json:"trial_days" gorm:"default:14"` // default 14-day trial
+	Tier            int       `json:"tier" gorm:"default:1"` // plan tier (1=starter, 2=pro, 3=business)
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -826,44 +832,57 @@ type SubscriptionPlan struct {
 // Subscription represents a tenant's subscription
 type Subscription struct {
 	ID                     string     `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID               string     `json:"tenant_id" gorm:"type:uuid;uniqueIndex"`
-	PlanID                 string     `json:"plan_id" gorm:"type:uuid;index"`
-	Status                 string     `json:"status" gorm:"default:'active'"`         // active, trialing, past_due, canceled, suspended, expired
+	TenantID               string     `json:"tenant_id" gorm:"type:uuid;uniqueIndex;not null"`
+	PlanID                 string     `json:"plan_id" gorm:"type:uuid;index;not null"`
+	Status                 string     `json:"status" gorm:"default:'trialing'"` // trialing, active, past_due, canceled, paused, expired
+	Provider               string     `json:"provider" gorm:"default:'manual'"` // manual, stripe, intasend, mpesa
+	ProviderCustomerID     string     `json:"provider_customer_id"`             // Stripe customer ID or IntaSend public ID
+	ProviderSubscriptionID string     `json:"provider_subscription_id"`         // Stripe sub_xxx or IntaSend subscription ID
 	BillingCycle           string     `json:"billing_cycle" gorm:"default:'monthly'"` // monthly, yearly
-	Provider               string     `json:"provider"`                               // mpesa, intasend, manual
-	ProviderCustomerID     string     `json:"provider_customer_id"`
-	ProviderSubscriptionID string     `json:"provider_subscription_id"`
-	PaymentMethod          string     `json:"payment_method"` // mpesa, card
-	Amount                 int64      `json:"amount"`         // amount in cents
-	Currency               string     `json:"currency" gorm:"default:'KES'"`
-	StartsAt               time.Time  `json:"starts_at"`
-	RenewsAt               *time.Time `json:"renews_at"`
-	ExpiresAt              *time.Time `json:"expires_at"`
-	TrialEndsAt            *time.Time `json:"trial_ends_at"`
-	CancelledAt            *time.Time `json:"cancelled_at"`
-	SuspendedAt            *time.Time `json:"suspended_at"`
-	RetryCount             int        `json:"retry_count" gorm:"default:0"`
+	PaymentMethod          string     `json:"payment_method"`                   // card, mpesa, intasend, bank_transfer
+	Amount                 int64      `json:"amount" gorm:"not null"`           // Amount in cents
+	Currency               string     `json:"currency" gorm:"default:'USD'"`
+	CurrentPeriodStart     time.Time  `json:"current_period_start"`
+	CurrentPeriodEnd       time.Time  `json:"current_period_end"`
+	TrialStart             *time.Time `json:"trial_start"`
+	TrialEnd               *time.Time `json:"trial_end"`
+	CanceledAt             *time.Time `json:"canceled_at"`
+	CancelReason           string     `json:"cancel_reason"`
+	PastDueSince           *time.Time `json:"past_due_since"`
+	PausedAt               *time.Time `json:"paused_at"`
+	PauseReason            string     `json:"pause_reason"`
 	LastPaymentAt          *time.Time `json:"last_payment_at"`
 	LastPaymentError       string     `json:"last_payment_error"`
+	RetryCount             int        `json:"retry_count" gorm:"default:0"`
+	Metadata               string     `json:"metadata" gorm:"type:jsonb"` // Additional provider metadata
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
-// SubscriptionTransaction represents payment transactions
+// SubscriptionTransaction represents payment transactions for BILLING (SaaS)
 type SubscriptionTransaction struct {
-	ID                string     `json:"id" gorm:"type:uuid;primaryKey"`
+	ID                 string     `json:"id" gorm:"type:uuid;primaryKey"`
 	SubscriptionID    string     `json:"subscription_id" gorm:"type:uuid;index"`
 	TenantID          string     `json:"tenant_id" gorm:"type:uuid;index"`
+	PlanID            string     `json:"plan_id" gorm:"type:uuid;index"`
 	Amount            int64      `json:"amount"` // in cents
 	Currency          string     `json:"currency" gorm:"default:'KES'"`
+	Provider          string     `json:"provider"` // stripe, intasend
 	ProviderReference string     `json:"provider_reference"`
-	PaymentMethod     string     `json:"payment_method"`                  // mpesa, card
-	Status            string     `json:"status" gorm:"default:'pending'"` // pending, completed, failed, refunded
-	Type              string     `json:"type"`                            // initial, renewal, upgrade, downgrade, refund
+	ProviderPaymentID string     `json:"provider_payment_id"`
+	PaymentMethod     string     `json:"payment_method"` // mpesa, card
+	Status            string     `json:"status" gorm:"default:'pending'"` // pending, processing, completed, failed, refunded
+	Type              string     `json:"type"` // initial, renewal, upgrade, downgrade, refund
+	IdempotencyKey    string     `json:"idempotency_key" gorm:"index"` // Prevent duplicate processing
 	PaidAt            *time.Time `json:"paid_at"`
 	FailureReason     string     `json:"failure_reason"`
+	FailureCode       string     `json:"failure_code"`
 	MetadataJSON      string     `json:"metadata_json"`
 	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	
+	// NEW: Payment type to distinguish billing vs invoice
+	PaymentType string `json:"payment_type" gorm:"default:'subscription'"` // subscription, invoice
 }
 
 // UsageTracking represents tenant usage for plan limits
@@ -953,24 +972,26 @@ func (s *Subscription) IsCanceled() bool {
 }
 
 func (s *Subscription) IsExpired() bool {
-	if s.ExpiresAt != nil && s.ExpiresAt.Before(time.Now()) {
-		return true
-	}
-	if s.Status == "expired" {
-		return true
-	}
-	return false
+	return s.Status == "expired"
 }
 
 func (s *Subscription) DaysUntilRenewal() int {
-	if s.RenewsAt == nil {
+	if s.CurrentPeriodEnd.IsZero() {
 		return 0
 	}
-	return int(s.RenewsAt.Sub(time.Now()).Hours() / 24)
+	return int(s.CurrentPeriodEnd.Sub(time.Now()).Hours() / 24)
 }
 
 func (s *Subscription) HasTrial() bool {
-	return s.TrialEndsAt != nil && time.Now().Before(*s.TrialEndsAt)
+	return s.TrialEnd != nil && time.Now().Before(*s.TrialEnd)
+}
+
+func (s *Subscription) IsPastDue() bool {
+	return s.Status == "past_due"
+}
+
+func (s *Subscription) IsPaused() bool {
+	return s.Status == "paused"
 }
 
 // Integration represents an external service integration

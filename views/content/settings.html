@@ -1107,7 +1107,18 @@
 
     <!-- Toast -->
     <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
-        <i :data-lucide="toast.type === 'success' ? 'check-circle' : 'alert-circle'" class="w-5 h-5" :class="toast.type === 'success' ? 'text-green-600' : 'text-red-600'"></i>
+        <template x-if="toast.type === 'success'">
+            <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+        </template>
+        <template x-if="toast.type === 'error'">
+            <i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>
+        </template>
+        <template x-if="toast.type === 'warning'">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600"></i>
+        </template>
+        <template x-if="toast.type === 'info'">
+            <i data-lucide="info" class="w-5 h-5 text-blue-600"></i>
+        </template>
         <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
         <button @click="toast.show = false" class="p-1 hover:bg-slate-100 rounded-lg">
             <i data-lucide="x" class="w-4 h-4"></i>
@@ -1206,6 +1217,7 @@ function settingsContent() {
                 this.calculateSecurityScore();
             } catch(err) {
                 console.error('Failed to load settings:', err);
+                this.showToast('Failed to load settings. Please refresh the page.', 'error');
             }
         },
 
@@ -1547,7 +1559,7 @@ function settingsContent() {
         },
 
         openInviteModal() {
-            alert('Invite member modal');
+            this.inviteModalOpen = true;
         },
 
         async updateMemberRole(member) {

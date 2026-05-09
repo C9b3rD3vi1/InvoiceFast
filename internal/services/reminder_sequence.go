@@ -48,9 +48,9 @@ func (s *ReminderSequenceService) CreateSequence(tenantID string, req *CreateSeq
 	return sequence, nil
 }
 
-func (s *ReminderSequenceService) UpdateSequence(sequenceID string, req *UpdateSequenceRequest) (*models.ReminderSequence, error) {
+func (s *ReminderSequenceService) UpdateSequence(tenantID, sequenceID string, req *UpdateSequenceRequest) (*models.ReminderSequence, error) {
 	var sequence models.ReminderSequence
-	if err := s.db.First(&sequence, "id = ?", sequenceID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&sequence, "id = ?", sequenceID).Error; err != nil {
 		return nil, fmt.Errorf("sequence not found: %w", err)
 	}
 
@@ -102,8 +102,8 @@ func (s *ReminderSequenceService) GetActiveSequences(tenantID string) ([]models.
 	return sequences, err
 }
 
-func (s *ReminderSequenceService) DeleteSequence(sequenceID string) error {
-	result := s.db.Where("id = ?", sequenceID).Delete(&models.ReminderSequence{})
+func (s *ReminderSequenceService) DeleteSequence(tenantID, sequenceID string) error {
+	result := s.db.Scopes(database.TenantFilter(tenantID)).Where("id = ?", sequenceID).Delete(&models.ReminderSequence{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete sequence: %w", result.Error)
 	}

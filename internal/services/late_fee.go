@@ -81,9 +81,9 @@ func (s *LateFeeService) UpdateConfig(tenantID string, req *UpdateLateFeeConfigR
 	return config, nil
 }
 
-func (s *LateFeeService) CalculateLateFee(invoiceID string) (float64, error) {
+func (s *LateFeeService) CalculateLateFee(tenantID, invoiceID string) (float64, error) {
 	var invoice models.Invoice
-	if err := s.db.First(&invoice, "id = ?", invoiceID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", invoiceID).Error; err != nil {
 		return 0, fmt.Errorf("invoice not found: %w", err)
 	}
 
@@ -136,8 +136,8 @@ func (s *LateFeeService) getExistingLateFee(invoiceID string) float64 {
 	return total
 }
 
-func (s *LateFeeService) ApplyLateFee(invoiceID, reason string) (*models.LateFeeInvoice, error) {
-	feeAmount, err := s.CalculateLateFee(invoiceID)
+func (s *LateFeeService) ApplyLateFee(tenantID, invoiceID, reason string) (*models.LateFeeInvoice, error) {
+	feeAmount, err := s.CalculateLateFee(tenantID, invoiceID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (s *LateFeeService) ApplyLateFee(invoiceID, reason string) (*models.LateFee
 	}
 
 	var invoice models.Invoice
-	if err := s.db.First(&invoice, "id = ?", invoiceID).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", invoiceID).Error; err != nil {
 		return nil, fmt.Errorf("invoice not found: %w", err)
 	}
 
@@ -202,7 +202,7 @@ func (s *LateFeeService) ProcessAllOverdue() error {
 	}
 
 	for _, invoice := range invoices {
-		s.ApplyLateFee(invoice.ID, "Automatic late fee applied")
+		s.ApplyLateFee(invoice.TenantID, invoice.ID, "Automatic late fee applied")
 	}
 
 	return nil

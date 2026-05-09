@@ -729,7 +729,7 @@ function invoiceView() {
             try {
                 const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
                 if (!token) {
-                    alert('Please login to download');
+                    this.showToast('Please login to download invoice', 'warning');
                     return;
                 }
                 const response = await fetch('/api/v1/tenant/invoices/' + this.invoiceId + '/pdf?token=' + encodeURIComponent(token));
@@ -748,23 +748,23 @@ function invoiceView() {
                 setTimeout(() => window.URL.revokeObjectURL(url), 100);
             } catch(err) {
                 console.error('Download failed:', err);
-                alert('Failed to download invoice');
+                this.showToast('Failed to download invoice. Please try again.', 'error');
             }
         },
 
         async sendEmail() {
             try {
                 await InvoiceFastAPI.invoices.send(this.invoiceId);
-                alert('Invoice sent via email');
+                this.showToast('Invoice sent successfully via email', 'success');
             } catch(err) {
-                alert('Failed to send email');
+                this.showToast('Failed to send email. Please try again.', 'error');
             }
         },
 
         async sendWhatsApp() {
             const phone = this.invoice?.client?.phone;
             if (!phone) {
-                alert('Client has no phone number');
+                this.showToast('Client has no phone number. Please add a phone number to send via WhatsApp.', 'warning');
                 return;
             }
             try {
@@ -780,7 +780,7 @@ function invoiceView() {
                 const data = await response.json();
                 
                 if (data.sent) {
-                    alert('WhatsApp message sent with PDF!');
+                    this.showToast('WhatsApp message sent with PDF!', 'success');
                 } else if (data.url) {
                     // Open WhatsApp Web with prefilled message
                     window.open(data.url, '_blank');
@@ -792,9 +792,10 @@ function invoiceView() {
                             this.downloadPdf();
                         }, 1000);
                     }
+                    this.showToast('WhatsApp opened. Please send the PDF manually.', 'info');
                 }
             } catch(err) {
-                alert('Failed to send WhatsApp: ' + err.message);
+                this.showToast('Failed to send WhatsApp: ' + (err.message || 'Please try again'), 'error');
             }
         },
 
@@ -807,10 +808,10 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.send(this.invoiceId);
                 this.modalOpen = null;
-                alert('Invoice sent');
+                this.showToast('Invoice sent successfully', 'success');
                 this.loadInvoice(this.invoiceId);
             } catch(err) {
-                alert('Failed to send invoice');
+                this.showToast('Failed to send invoice. Please try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -825,10 +826,10 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.update(this.invoiceId, { status: 'paid' });
                 this.modalOpen = null;
-                alert('Invoice marked as paid');
+                this.showToast('Invoice marked as paid', 'success');
                 this.loadInvoice(this.invoiceId);
             } catch(err) {
-                alert('Failed to update invoice');
+                this.showToast('Failed to update invoice status. Please try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -844,10 +845,10 @@ function invoiceView() {
                     reference: this.paymentData.reference
                 });
                 this.paymentModalOpen = false;
-                alert('Payment recorded');
+                this.showToast('Payment recorded successfully', 'success');
                 this.loadInvoice(this.invoiceId);
             } catch(err) {
-                alert('Failed to record payment');
+                this.showToast('Failed to record payment. Please check details and try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -858,10 +859,10 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.duplicate(this.invoiceId);
                 this.modalOpen = null;
-                alert('Invoice duplicated');
+                this.showToast('Invoice duplicated successfully', 'success');
                 window.location.href = '/invoices';
             } catch(err) {
-                alert('Failed to duplicate invoice');
+                this.showToast('Failed to duplicate invoice. Please try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -872,9 +873,9 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.remind(this.invoiceId);
                 this.modalOpen = null;
-                alert('Reminder sent');
+                this.showToast('Payment reminder sent successfully', 'success');
             } catch(err) {
-                alert('Failed to send reminder');
+                this.showToast('Failed to send reminder. Please try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -885,9 +886,9 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.requestPayment(this.invoiceId);
                 this.modalOpen = null;
-                alert('Payment request sent');
+                this.showToast('Payment request sent successfully', 'success');
             } catch(err) {
-                alert('Failed to send payment request');
+                this.showToast('Failed to send payment request. Please try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -898,10 +899,10 @@ function invoiceView() {
             try {
                 await InvoiceFastAPI.invoices.update(this.invoiceId, { status: 'cancelled' });
                 this.modalOpen = null;
-                alert('Invoice cancelled');
+                this.showToast('Invoice cancelled successfully', 'success');
                 this.loadInvoice(this.invoiceId);
             } catch(err) {
-                alert('Failed to cancel invoice');
+                this.showToast('Failed to cancel invoice. Please try again.', 'error');
             } finally {
                 this.actionLoading = false;
             }
@@ -981,6 +982,16 @@ function invoiceView() {
         <template x-if="toast.type === 'error'">
             <div class="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
                 <i data-lucide="x" class="w-5 h-5 text-red-600"></i>
+            </div>
+        </template>
+        <template x-if="toast.type === 'warning'">
+            <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600"></i>
+            </div>
+        </template>
+        <template x-if="toast.type === 'info'">
+            <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <i data-lucide="info" class="w-5 h-5 text-blue-600"></i>
             </div>
         </template>
         <span class="font-medium text-slate-700" x-text="toast.message"></span>

@@ -51,7 +51,7 @@ func (h *RecurringInvoiceHandler) EnableRecurring(c *fiber.Ctx) error {
 		req.Frequency = "monthly"
 	}
 
-	if err := h.service.EnableRecurring(invoiceID, req.Frequency); err != nil {
+	if err := h.service.EnableRecurring(tenantID, invoiceID, req.Frequency); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -69,7 +69,7 @@ func (h *RecurringInvoiceHandler) DisableRecurring(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice ID required"})
 	}
 
-	if err := h.service.DisableRecurring(invoiceID); err != nil {
+	if err := h.service.DisableRecurring(tenantID, invoiceID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
