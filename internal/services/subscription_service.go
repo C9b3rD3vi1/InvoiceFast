@@ -34,7 +34,7 @@ func (s *SubscriptionService) GetSubscription(tenantID string) (*models.Subscrip
 
 func (s *SubscriptionService) GetActiveSubscription(tenantID string) (*models.Subscription, error) {
 	var sub models.Subscription
-	if err := s.db.Where("tenant_id = ? AND status IN ?", tenantID, []string{"active", "trialing"}).
+	if err := s.db.Where("tenant_id = ? AND status IN ?", tenantID, []string{"active", "trialing", "past_due"}).
 		First(&sub).Error; err != nil {
 		return nil, err
 	}
@@ -327,8 +327,19 @@ func (s *SubscriptionService) CheckLimits(tenantID, resource string, amount int)
 		return false, "no_active_subscription", nil
 	}
 
-	if sub.Status == "suspended" {
-		return false, "subscription_suspended", nil
+	switch sub.Status {
+	case "active", "trialing":
+		// Allow - subscription is valid
+	case "past_due":
+		return false, "subscription_past_due", nil
+	case "paused":
+		return false, "subscription_paused", nil
+	case "canceled":
+		return false, "subscription_canceled", nil
+	case "expired":
+		return false, "subscription_expired", nil
+	default:
+		return false, "subscription_inactive", nil
 	}
 
 	plan, err := s.planService.GetPlan(sub.PlanID)

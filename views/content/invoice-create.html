@@ -634,7 +634,17 @@ invoice: {
                 let message = 'Failed to save invoice';
                 if (err.response) {
                     if (err.response.reason === 'no_active_subscription') {
-                        message = 'No active subscription. Please upgrade to create invoices. Go to /billing to upgrade.';
+                        message = 'No active subscription. Please upgrade. Go to /billing to subscribe.';
+                    } else if (err.response.reason === 'subscription_past_due') {
+                        message = 'Payment overdue. Please update your billing. Go to /billing to pay.';
+                    } else if (err.response.reason === 'subscription_paused') {
+                        message = 'Subscription is paused. Please resume or upgrade. Go to /billing.';
+                    } else if (err.response.reason === 'subscription_canceled') {
+                        message = 'Subscription canceled. Please renew. Go to /billing to subscribe.';
+                    } else if (err.response.reason === 'subscription_expired') {
+                        message = 'Subscription expired. Please renew. Go to /billing to subscribe.';
+                    } else if (err.response.reason === 'subscription_inactive') {
+                        message = 'Subscription inactive. Please contact support or go to /billing.';
                     } else if (err.response.error) {
                         message = err.response.error;
                     }
@@ -668,7 +678,17 @@ invoice: {
                 let message = 'Failed to send invoice';
                 if (err.response) {
                     if (err.response.reason === 'no_active_subscription') {
-                        message = 'No active subscription. Please upgrade to send invoices. Go to /billing to upgrade.';
+                        message = 'No active subscription. Please upgrade. Go to /billing to subscribe.';
+                    } else if (err.response.reason === 'subscription_past_due') {
+                        message = 'Payment overdue. Please update your billing. Go to /billing to pay.';
+                    } else if (err.response.reason === 'subscription_paused') {
+                        message = 'Subscription is paused. Please resume or upgrade. Go to /billing.';
+                    } else if (err.response.reason === 'subscription_canceled') {
+                        message = 'Subscription canceled. Please renew. Go to /billing to subscribe.';
+                    } else if (err.response.reason === 'subscription_expired') {
+                        message = 'Subscription expired. Please renew. Go to /billing to subscribe.';
+                    } else if (err.response.reason === 'subscription_inactive') {
+                        message = 'Subscription inactive. Please contact support or go to /billing.';
                     } else if (err.response.error) {
                         message = err.response.error;
                     }
