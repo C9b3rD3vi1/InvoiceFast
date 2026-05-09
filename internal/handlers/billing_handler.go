@@ -328,6 +328,33 @@ func (h *BillingHandler) DeletePaymentMethod(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"success": true})
 }
 
+type UpdatePaymentMethodRequest struct {
+	PaymentMethod string `json:"payment_method"`
+	Provider      string `json:"provider"`
+}
+
+func (h *BillingHandler) UpdateSubscriptionPaymentMethod(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant context required"})
+	}
+
+	var req UpdatePaymentMethodRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	if req.PaymentMethod == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "payment method is required"})
+	}
+
+	if err := h.billingSvc.UpdateSubscriptionPaymentMethod(tenantID, req.PaymentMethod, req.Provider); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"success": true, "message": "Payment method updated"})
+}
+
 func (h *BillingHandler) SetDefaultPaymentMethod(c *fiber.Ctx) error {
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {

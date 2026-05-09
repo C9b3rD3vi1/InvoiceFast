@@ -1024,6 +1024,25 @@ const InvoiceFastAPI = {
             return InvoiceFastAPI.request('/tenant/billing/payment-methods');
         },
         
+        async deletePaymentMethod(methodId) {
+            return InvoiceFastAPI.request('/tenant/billing/payment-methods/' + methodId, {
+                method: 'DELETE',
+            });
+        },
+        
+        async setDefaultPaymentMethod(methodId) {
+            return InvoiceFastAPI.request('/tenant/billing/payment-methods/' + methodId + '/default', {
+                method: 'POST',
+            });
+        },
+        
+        async updateSubscriptionPaymentMethod(paymentMethod, provider = '') {
+            return InvoiceFastAPI.request('/tenant/billing/subscription/payment-method', {
+                method: 'PUT',
+                body: JSON.stringify({ payment_method: paymentMethod, provider: provider }),
+            });
+        },
+        
         async getHistory() {
             return InvoiceFastAPI.request('/tenant/billing/history');
         },

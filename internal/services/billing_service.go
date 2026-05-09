@@ -271,7 +271,32 @@ type SavedPaymentMethod struct {
 }
 
 func (s *BillingService) GetSavedPaymentMethods(tenantID string) []SavedPaymentMethod {
-	return []SavedPaymentMethod{}
+	sub, err := s.subSvc.GetSubscription(tenantID)
+	if err != nil || sub == nil {
+		return []SavedPaymentMethod{}
+	}
+
+	methods := []SavedPaymentMethod{}
+	
+	// Add payment method from subscription if available
+	if sub.Provider != "" && sub.PaymentMethod != "" {
+		method := SavedPaymentMethod{
+			ID:        sub.ID,
+			Type:      sub.PaymentMethod,
+			IsDefault: true,
+		}
+		
+		// Try to get last 4 digits from provider customer ID or metadata
+		if sub.ProviderCustomerID != "" {
+			if len(sub.ProviderCustomerID) >= 4 {
+				method.Last4 = sub.ProviderCustomerID[len(sub.ProviderCustomerID)-4:]
+			}
+		}
+		
+		methods = append(methods, method)
+	}
+	
+	return methods
 }
 
 func (s *BillingService) DeletePaymentMethod(tenantID, methodID string) error {
@@ -280,6 +305,23 @@ func (s *BillingService) DeletePaymentMethod(tenantID, methodID string) error {
 
 func (s *BillingService) SetDefaultPaymentMethod(tenantID, methodID string) error {
 	return errors.New("not implemented")
+}
+
+func (s *BillingService) UpdateSubscriptionPaymentMethod(tenantID, paymentMethod, provider string) error {
+	sub, err := s.subSvc.GetSubscription(tenantID)
+	if err != nil {
+		return err
+	}
+	if sub == nil {
+		return errors.New("no subscription found")
+	}
+
+	sub.PaymentMethod = paymentMethod
+	if provider != "" {
+		sub.Provider = provider
+	}
+
+	return s.subSvc.db.Save(sub).Error
 }
 
 func (s *BillingService) ProcessMpesaCallback(checkoutID, status string) error {

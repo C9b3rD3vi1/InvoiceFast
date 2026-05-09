@@ -30,6 +30,7 @@ func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *serv
 	group.Get("/payment-methods", h.GetPaymentMethods)
 	group.Delete("/payment-methods/:id", h.DeletePaymentMethod)
 	group.Put("/payment-methods/:id/default", h.SetDefaultPaymentMethod)
+	group.Put("/subscription/payment-method", h.UpdateSubscriptionPaymentMethod)
 
 	group.Get("/limits/:resource", h.CheckLimits)
 

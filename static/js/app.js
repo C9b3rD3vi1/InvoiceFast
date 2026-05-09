@@ -14,6 +14,7 @@ document.addEventListener('alpine:init', () => {
         plans: [],
         upgradeModalOpen: false,
         paymentMethodModalOpen: false,
+        newPaymentMethod: 'card',
         historyModalOpen: false,
         selectedPlan: null,
         paymentMethod: 'stripe',
@@ -239,6 +240,61 @@ document.addEventListener('alpine:init', () => {
                 this.failureMessage = error.message || 'Failed to process payment. Please try again.';
             }
         },
+        
+        async setDefaultPaymentMethod(methodId) {
+            try {
+                await InvoiceFastAPI.billing.setDefaultPaymentMethod(methodId);
+                this.showToast('Default payment method updated', 'success');
+                await this.loadData();
+            } catch(error) {
+                console.error('Set default failed:', error);
+                this.showToast('Failed to update default payment method', 'error');
+            }
+        },
+        
+        async removePaymentMethod(methodId) {
+            if (!confirm('Are you sure you want to remove this payment method?')) return;
+            try {
+                await InvoiceFastAPI.billing.deletePaymentMethod(methodId);
+                this.showToast('Payment method removed', 'success');
+                await this.loadData();
+            } catch(error) {
+                console.error('Remove payment method failed:', error);
+                this.showToast('Failed to remove payment method', 'error');
+            }
+        },
+        
+        async updatePaymentMethod() {
+            if (!this.newPaymentMethod) {
+                this.showToast('Please select a payment method', 'warning');
+                return;
+            }
+            
+            try {
+                // Determine provider based on payment method
+                let provider = '';
+                if (this.newPaymentMethod === 'mpesa') {
+                    provider = 'mpesa';
+                } else if (this.newPaymentMethod === 'card') {
+                    provider = 'stripe';
+                }
+                
+                await InvoiceFastAPI.billing.updateSubscriptionPaymentMethod(this.newPaymentMethod, provider);
+                this.showToast('Payment method updated successfully', 'success');
+                this.paymentMethodModalOpen = false;
+                await this.loadData();
+            } catch(error) {
+                console.error('Update payment method failed:', error);
+                this.showToast('Failed to update payment method: ' + (error.message || 'Please try again'), 'error');
+            }
+        },
+        
+        showToast(message, type = 'info') {
+            this.toast = { show: true, message, type };
+            setTimeout(() => this.toast.show = false, 3000);
+        },
+        
+        toast: { show: false, message: '', type: 'info' },
         
         formatPrice(price, currency = 'KES') {
             if (!price && price !== 0) return '-';

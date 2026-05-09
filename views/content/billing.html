@@ -165,10 +165,55 @@
             </div>
             <template x-if="paymentMethods.length > 0">
                 <div class="flex items-center gap-3 mb-4">
-                    <div class="w-10 h-6 bg-slate-100 rounded flex items-center justify-center text-xs font-bold text-slate-600">
-                        <span x-text="paymentMethods[0]?.type || 'CARD'"></span>
+                    <!-- Card icon -->
+                    <template x-if="paymentMethods[0]?.type === 'card'">
+                        <div class="w-10 h-6 bg-blue-100 rounded flex items-center justify-center">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V3a3 3 0 00-3-3H6a3 3 0 00-3 3v12a3 3 0 003 3z"/>
+                            </svg>
+                        </div>
+                    </template>
+                    <!-- M-Pesa icon -->
+                    <template x-if="paymentMethods[0]?.type === 'mpesa'">
+                        <div class="w-10 h-6 bg-green-100 rounded flex items-center justify-center">
+                            <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                            </svg>
+                        </div>
+                    </template>
+                    <!-- IntaSend icon -->
+                    <template x-if="paymentMethods[0]?.type === 'intasend'">
+                        <div class="w-10 h-6 bg-purple-100 rounded flex items-center justify-center">
+                            <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                    </template>
+                    <!-- Default icon -->
+                    <template x-if="!['card','mpesa','intasend'].includes(paymentMethods[0]?.type)">
+                        <div class="w-10 h-6 bg-slate-100 rounded flex items-center justify-center">
+                            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V3a3 3 0 00-3-3H6a3 3 0 00-3 3v12a3 3 0 003 3z"/>
+                            </svg>
+                        </div>
+                    </template>
+                    <div>
+                        <span class="text-sm font-medium text-slate-900 uppercase" x-text="paymentMethods[0]?.type || 'Card'"></span>
+                        <span class="text-sm text-slate-500" x-text="paymentMethods[0]?.last4 ? ' •••• ' + paymentMethods[0].last4 : ''"></span>
                     </div>
-                    <span class="text-sm text-slate-600">•••• <span x-text="paymentMethods[0]?.last4 || '4242'"></span></span>
+                </div>
+            </template>
+            <template x-if="paymentMethods.length === 0 && subscription?.payment_method">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-6 bg-amber-100 rounded flex items-center justify-center">
+                        <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <span class="text-sm font-medium text-slate-900 uppercase" x-text="subscription?.payment_method || 'Unknown'"></span>
+                        <span class="text-sm text-amber-600 block">Requires setup</span>
+                    </div>
                 </div>
             </template>
             <button @click="paymentMethodModalOpen = true" class="w-full py-2.5 border border-slate-200 rounded-lg font-medium text-slate-600 hover:bg-slate-50">
@@ -308,6 +353,96 @@
         </div>
     </div>
 
+    <!-- Payment Method Modal -->
+    <div x-show="paymentMethodModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="paymentMethodModalOpen" @click="paymentMethodModalOpen = false" class="fixed inset-0 bg-slate-900/50 transition-opacity" aria-hidden="true"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-xl font-bold text-slate-900">Payment Methods</h3>
+                        <button @click="paymentMethodModalOpen = false" class="text-slate-400 hover:text-slate-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Current Payment Method from Subscription -->
+                    <div class="mb-6">
+                        <p class="text-sm font-medium text-slate-700 mb-3">Current Payment Method</p>
+                        <template x-if="!subscription?.payment_method">
+                            <div class="text-center py-4 text-slate-500">
+                                <svg class="w-12 h-12 mx-auto text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V3a3 3 0 00-3-3H6a3 3 0 00-3 3v12a3 3 0 003 3z"/>
+                                </svg>
+                                <p>No payment method set</p>
+                            </div>
+                        </template>
+                        <template x-if="subscription?.payment_method">
+                            <div class="p-3 border border-slate-200 rounded-lg bg-slate-50">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                            <template x-if="subscription?.payment_method === 'card'">
+                                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V3a3 3 0 00-3-3H6a3 3 0 00-3 3v12a3 3 0 003 3z"/>
+                                                </svg>
+                                            </template>
+                                            <template x-if="subscription?.payment_method === 'mpesa'">
+                                                <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                                                </svg>
+                                            </template>
+                                            <template x-if="subscription?.payment_method === 'intasend'">
+                                                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                </svg>
+                                            </template>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-slate-900 capitalize" x-text="subscription?.payment_method || 'Card'"></p>
+                                            <p class="text-sm text-slate-500">Linked to subscription</p>
+                                        </div>
+                                    </div>
+                                    <span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">Active</span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <!-- Update Payment Method -->
+                    <div class="border-t border-slate-200 pt-4">
+                        <p class="text-sm font-medium text-slate-700 mb-3">Change Payment Method</p>
+                        <div class="space-y-3">
+                            <label class="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                                <input type="radio" name="newPaymentMethod" value="card" x-model="newPaymentMethod" class="w-4 h-4 text-trust">
+                                <div class="ml-3">
+                                    <span class="font-medium text-slate-900">Credit/Debit Card</span>
+                                    <p class="text-sm text-slate-500">Visa, Mastercard, etc.</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
+                                <input type="radio" name="newPaymentMethod" value="mpesa" x-model="newPaymentMethod" class="w-4 h-4 text-trust">
+                                <div class="ml-3">
+                                    <span class="font-medium text-slate-900">M-Pesa</span>
+                                    <p class="text-sm text-slate-500">Mobile money payments</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button @click="paymentMethodModalOpen = false" class="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">Close</button>
+                        <button @click="updatePaymentMethod()" class="px-4 py-2 bg-trust text-white rounded-lg font-medium hover:bg-trust-dark">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Success Modal -->
     <div x-show="successModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
@@ -349,6 +484,80 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Billing History Modal -->
+    <div x-show="historyModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="historyModalOpen" @click="historyModalOpen = false" class="fixed inset-0 bg-slate-900/50 transition-opacity" aria-hidden="true"></div>
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl inline-block align-bottom text-left overflow-hidden transform transition-all sm:my-8 sm:align-middle">
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-xl font-bold text-slate-900">Billing History</h3>
+                        <button @click="historyModalOpen = false" class="text-slate-400 hover:text-slate-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Transaction List -->
+                    <div class="max-h-96 overflow-y-auto">
+                        <template x-if="transactions.length === 0">
+                            <div class="text-center py-8 text-slate-500">
+                                <svg class="w-12 h-12 mx-auto text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <p>No billing history yet</p>
+                            </div>
+                        </template>
+                        <template x-for="tx in transactions" :key="tx.id">
+                            <div class="flex items-center justify-between p-4 border-b border-slate-100 hover:bg-slate-50">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded-full flex items-center justify-center" :class="tx.status === 'completed' ? 'bg-green-100' : tx.status === 'pending' ? 'bg-amber-100' : 'bg-red-100'">
+                                        <svg class="w-5 h-5" :class="tx.status === 'completed' ? 'text-green-600' : tx.status === 'pending' ? 'text-amber-600' : 'text-red-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-900" x-text="tx.type || 'Payment'"></p>
+                                        <p class="text-sm text-slate-500" x-text="formatDate(tx.createdAt)"></p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold text-slate-900" x-text="formatPrice(tx.amount, tx.currency)"></p>
+                                    <p class="text-sm capitalize" :class="tx.status === 'completed' ? 'text-green-600' : tx.status === 'pending' ? 'text-amber-600' : 'text-red-600'" x-text="tx.status"></p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end">
+                        <button @click="historyModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div x-show="toast.show" x-cloak class="fixed bottom-4 right-4 bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3 flex items-center gap-3 z-50">
+        <template x-if="toast.type === 'success'">
+            <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i>
+        </template>
+        <template x-if="toast.type === 'error'">
+            <i data-lucide="alert-circle" class="w-5 h-5 text-red-600"></i>
+        </template>
+        <template x-if="toast.type === 'warning'">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600"></i>
+        </template>
+        <template x-if="toast.type === 'info'">
+            <i data-lucide="info" class="w-5 h-5 text-blue-600"></i>
+        </template>
+        <span class="text-sm font-medium text-slate-700" x-text="toast.message"></span>
+        <button @click="toast.show = false" class="p-1 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
     </div>
 </div>
 
