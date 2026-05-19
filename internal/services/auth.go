@@ -19,6 +19,7 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+	"invoicefast/internal/utils"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -326,6 +327,10 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		Subdomain: subdomain,
 		Plan:      "starter",
 		IsActive:  true,
+		Currency:  utils.DefaultCurrency,
+	}
+	if req.Currency != "" && utils.IsValidCurrency(req.Currency) {
+		tenant.Currency = strings.ToUpper(req.Currency)
 	}
 	if err := s.db.Create(tenant).Error; err != nil {
 		return nil, fmt.Errorf("failed to create tenant: %w", err)
@@ -683,6 +688,7 @@ type RegisterRequest struct {
 	Phone       string `json:"phone"`
 	CompanyName string `json:"company_name"`
 	KRAPIN      string `json:"kra_pin"`
+	Currency    string `json:"currency"`
 }
 
 type UpdateUserRequest struct {

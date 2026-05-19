@@ -16,6 +16,7 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+	"invoicefast/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -34,10 +35,7 @@ var (
 	ErrAlreadySent     = errors.New("invoice already sent")
 )
 
-var validCurrencies = map[string]bool{
-	"KES": true, "USD": true, "EUR": true, "GBP": true,
-	"TZS": true, "UGX": true, "NGN": true,
-}
+var validCurrencies = utils.ValidCurrencies
 
 type InvoiceService struct {
 	db                  *database.DB
@@ -51,6 +49,20 @@ type InvoiceService struct {
 
 func NewInvoiceService(db *database.DB) *InvoiceService {
 	return &InvoiceService{db: db}
+}
+
+func (s *InvoiceService) getTenantCurrency(tenantID string) string {
+	if tenantID == "" {
+		return utils.DefaultCurrency
+	}
+	var tenant models.Tenant
+	if err := s.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
+		return utils.DefaultCurrency
+	}
+	if tenant.Currency == "" {
+		return utils.DefaultCurrency
+	}
+	return tenant.Currency
 }
 
 type ServiceDependencies struct {
@@ -166,10 +178,10 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 
 	currency := strings.ToUpper(req.Currency)
 	if currency == "" {
-		currency = "KES"
+		currency = s.getTenantCurrency(tenantID)
 	}
 	if !validCurrencies[currency] {
-		currency = "KES"
+		currency = s.getTenantCurrency(tenantID)
 	}
 
 	taxRate := math.Max(0, math.Min(100, req.TaxRate))

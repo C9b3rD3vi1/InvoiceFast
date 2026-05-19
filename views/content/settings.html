@@ -175,6 +175,19 @@
                                 </select>
                             </div>
                             <div class="col-span-2">
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Default Currency</label>
+                                <select x-model="tenantCurrency" @change="saveTenantCurrency()" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust">
+                                    <option value="KES">KES - Kenyan Shilling</option>
+                                    <option value="USD">USD - US Dollar</option>
+                                    <option value="EUR">EUR - Euro</option>
+                                    <option value="GBP">GBP - British Pound</option>
+                                    <option value="TZS">TZS - Tanzanian Shilling</option>
+                                    <option value="UGX">UGX - Ugandan Shilling</option>
+                                    <option value="NGN">NGN - Nigerian Naira</option>
+                                </select>
+                                <p class="text-xs text-slate-500 mt-1">This will be the default currency for all new invoices and expenses</p>
+                            </div>
+                            <div class="col-span-2">
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Address</label>
                                 <textarea x-model="business.address" rows="2" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-trust"></textarea>
                             </div>
@@ -1245,6 +1258,7 @@ function settingsContent() {
         sessions: [],
         loginHistory: [],
         business: { name: '', email: '', phone: '', website: '', kra_pin: '', registrationNumber: '', industry: '', address: '', country: 'KE', timezone: 'Africa/Nairobi', logoUrl: '', brandColor: '#0277BD' },
+        tenantCurrency: 'KES',
         invoice: { prefix: 'INV', nextNumber: 1, currency: 'KES', defaultTaxRate: 16, paymentTerms: '30', allowPartialPayments: true, allowDiscounts: true, allowDeposits: false, autoNumber: true },
         notifications: { email: true, sms: false, whatsapp: false },
         payments: { mpesa: { enabled: true, consumerKey: '', consumerSecret: '', shortcode: '', businessShortcode: '' }, card: { enabled: false } },
@@ -1299,6 +1313,7 @@ function settingsContent() {
                 this.teamMembers = data.team || [];
                 this.integrations = data.integrations || [];
                 this.billing = data.billing || this.calculateBillingStats();
+                await this.loadTenantCurrency();
                 await this.loadIntegrations();
                 await this.loadSecurityStatus();
                 await this.loadSessions();
@@ -1307,6 +1322,41 @@ function settingsContent() {
             } catch(err) {
                 console.error('Failed to load settings:', err);
                 this.showToast('Failed to load settings. Please refresh the page.', 'error');
+            }
+        },
+
+        async loadTenantCurrency() {
+            try {
+                const res = await fetch('/api/v1/tenant/currency', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.currency) this.tenantCurrency = data.currency;
+                }
+            } catch(err) {
+                console.error('Failed to load tenant currency:', err);
+            }
+        },
+
+        async saveTenantCurrency() {
+            try {
+                const res = await fetch('/api/v1/tenant/currency', {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ currency: this.tenantCurrency })
+                });
+                if (res.ok) {
+                    this.showToast('Default currency updated successfully', 'success');
+                } else {
+                    this.showToast('Failed to update currency', 'error');
+                }
+            } catch(err) {
+                console.error('Failed to save tenant currency:', err);
+                this.showToast('Failed to update currency', 'error');
             }
         },
 

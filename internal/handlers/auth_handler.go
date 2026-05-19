@@ -7,6 +7,7 @@ import (
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
+	"invoicefast/internal/utils"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -201,10 +202,7 @@ func (h *AuthHandler) UpdateTenantCurrency(c *fiber.Ctx) error {
 	}
 
 	// Validate currency
-	validCurrencies := map[string]bool{
-		"KES": true, "USD": true, "EUR": true, "GBP": true,
-		"TZS": true, "UGX": true, "NGN": true,
-	}
+	validCurrencies := utils.ValidCurrencies
 	if !validCurrencies[req.Currency] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid currency"})
 	}
@@ -215,6 +213,21 @@ func (h *AuthHandler) UpdateTenantCurrency(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "Currency updated", "currency": req.Currency})
+}
+
+// GetTenantCurrency - get tenant's default currency
+func (h *AuthHandler) GetTenantCurrency(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	var tenant models.Tenant
+	if err := h.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "tenant not found"})
+	}
+
+	return c.JSON(fiber.Map{"currency": tenant.Currency})
 }
 
 // Logout - invalidate refresh token

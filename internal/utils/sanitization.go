@@ -181,11 +181,7 @@ func SanitizeCurrency(currency string) string {
 	}
 	
 	// Valid currencies
-	validCurrencies := map[string]bool{
-		"KES": true, "USD": true, "EUR": true, "GBP": true,
-		"TZS": true, "UGX": true, "NGN": true, "ZAR": true,
-		"RWF": true, "BWP": true, "GHS": true, "ETB": true,
-	}
+	validCurrencies := ValidCurrencies
 	
 	if !validCurrencies[currency] {
 		return "KES" // Default

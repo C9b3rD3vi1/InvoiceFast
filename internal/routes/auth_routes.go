@@ -46,6 +46,7 @@ func TenantRoutes(app fiber.Router, h *handlers.AuthHandler, authService *servic
 
 	group.Get("/search", h.Search)
 	
+	group.Get("/currency", h.GetTenantCurrency)
 	group.Put("/currency", h.UpdateTenantCurrency)
 
 	return group
