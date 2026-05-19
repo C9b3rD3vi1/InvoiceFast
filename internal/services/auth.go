@@ -262,10 +262,11 @@ func hashToken(token, secret string) string {
 }
 
 type AuthService struct {
-	db           *database.DB
-	cfg          *config.Config
-	emailService *EmailService
-	auditService *AuditService
+	db               *database.DB
+	cfg              *config.Config
+	emailService     *EmailService
+	auditService     *AuditService
+	exchangeRateSvc  *ExchangeRateService
 }
 
 type Claims struct {
@@ -281,8 +282,14 @@ type AuthResponse struct {
 	User         *models.User `json:"user"`
 }
 
-func NewAuthService(db *database.DB, cfg *config.Config, emailSvc *EmailService, auditSvc *AuditService) *AuthService {
-	return &AuthService{db: db, cfg: cfg, emailService: emailSvc, auditService: auditSvc}
+func NewAuthService(db *database.DB, cfg *config.Config, emailSvc *EmailService, auditSvc *AuditService, exchangeRateSvc *ExchangeRateService) *AuthService {
+	return &AuthService{
+		db:              db,
+		cfg:             cfg,
+		emailService:   emailSvc,
+		auditService:    auditSvc,
+		exchangeRateSvc: exchangeRateSvc,
+	}
 }
 
 func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
@@ -346,8 +353,17 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	if err := s.db.First(&starterPlan, "slug = ?", "starter").Error; err == nil && starterPlan.ID != "" {
 		now := time.Now()
 		trialEnd := now.AddDate(0, 0, 14)
-		exchangeRate := 150.0 // KES per USD
-		amountKES := int64(float64(starterPlan.MonthlyPriceUSD) * exchangeRate)
+		
+		var amountKES int64
+		if starterPlan.MonthlyPriceUSD > 0 && s.exchangeRateSvc != nil {
+			converted, err := s.exchangeRateSvc.Convert(float64(starterPlan.MonthlyPriceUSD), "USD", "KES")
+			if err == nil {
+				amountKES = int64(converted)
+			}
+		} else if starterPlan.MonthlyPriceUSD > 0 {
+			amountKES = int64(float64(starterPlan.MonthlyPriceUSD) * 150.0) // Fallback only if no exchange service
+		}
+		
 		subscription := &models.Subscription{
 			ID:                 uuid.New().String(),
 			TenantID:           tenant.ID,

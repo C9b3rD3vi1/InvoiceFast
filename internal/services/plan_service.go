@@ -11,11 +11,12 @@ import (
 )
 
 type PlanService struct {
-	db *database.DB
+	db               *database.DB
+	exchangeRateSvc  *ExchangeRateService
 }
 
-func NewPlanService(db *database.DB) *PlanService {
-	return &PlanService{db: db}
+func NewPlanService(db *database.DB, exchangeRateSvc *ExchangeRateService) *PlanService {
+	return &PlanService{db: db, exchangeRateSvc: exchangeRateSvc}
 }
 
 func (s *PlanService) GetPlan(idOrSlug string) (*models.SubscriptionPlan, error) {
@@ -45,7 +46,13 @@ func (s *PlanService) UpdatePlan(id string, updates map[string]interface{}) erro
 }
 
 func (s *PlanService) GetExchangeRate() float64 {
-	return 150.0
+	if s.exchangeRateSvc != nil {
+		rate, err := s.exchangeRateSvc.GetRate("USD", "KES")
+		if err == nil {
+			return rate
+		}
+	}
+	return 150.0 // Fallback default
 }
 
 func (s *PlanService) GetMonthlyPriceKES(plan *models.SubscriptionPlan) int64 {

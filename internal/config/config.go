@@ -26,12 +26,13 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port         string
-	BaseURL      string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
-	Mode         string // "development", "production"
+	Port            string
+	BaseURL         string
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	Mode            string // "development", "production"
+	DefaultCurrency string // Default currency (default: KES)
 }
 
 type CORSConfig struct {
@@ -193,12 +194,13 @@ func Load() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Port:         getEnv("PORT", "8082"),
-			BaseURL:      getEnv("BASE_URL", "https://invoice.simuxtech.com"),
-			ReadTimeout:  getDurationEnv("READ_TIMEOUT", 30*time.Second),
-			WriteTimeout: getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
-			IdleTimeout:  getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
-			Mode:         ginMode,
+			Port:            getEnv("PORT", "8082"),
+			BaseURL:         getEnv("BASE_URL", "https://invoice.simuxtech.com"),
+			ReadTimeout:     getDurationEnv("READ_TIMEOUT", 30*time.Second),
+			WriteTimeout:    getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
+			IdleTimeout:     getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
+			Mode:            ginMode,
+			DefaultCurrency: getEnv("DEFAULT_CURRENCY", "KES"),
 		},
 		Database: DatabaseConfig{
 			Driver: getEnv("DB_DRIVER", "sqlite3"),

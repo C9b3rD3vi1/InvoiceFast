@@ -150,11 +150,11 @@ func main() {
 	// Audit service for comprehensive logging
 	auditService := services.NewAuditService(db)
 
-	authService := services.NewAuthService(db, cfg, emailService, auditService)
-
-	// Initialize exchange rate service
+	// Initialize exchange rate service (before services that depend on it)
 	exchangeRateService := services.NewExchangeRateService(db)
 	exchangeRateService.StartCronJob()
+
+	authService := services.NewAuthService(db, cfg, emailService, auditService, exchangeRateService)
 
 	// KRA service
 	kraService := services.NewKRAServiceWithDB(cfg, db)
@@ -305,16 +305,13 @@ func main() {
 	webhookVerifier := middleware.NewWebhookVerifierMiddleware(services.NewWebhookVerifier(cfg))
 
 	// Billing services (must be before handlers that need them)
-planService := services.NewPlanService(db)
+planService := services.NewPlanService(db, exchangeRateService)
 	planService.SeedDefaultPlans()
 	
 	// Migrate users without subscription to trial plan
 	if err := planService.MigrateUsersWithoutSubscription(); err != nil {
 		log.Printf("Warning: Failed to migrate users without subscription: %v", err)
 	}
-	
-	// Migrate subscriptions to use KES (single-time migration)
-	db.Exec("UPDATE subscriptions SET currency = 'KES', amount = amount * 150 WHERE currency = 'USD'")
 
 	stripeService := services.NewStripeService(db, cfg.Stripe.SecretKey, cfg.Stripe.PublicKey, cfg.Stripe.WebhookSecret)
 
