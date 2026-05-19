@@ -15,13 +15,14 @@ type Config struct {
 	MPesa     MPesaConfig
 	JWT       JWTConfig
 	Mail      MailConfig
-	RateLimit RateLimitConfig
-	CORS      CORSConfig
-	Timeouts  TimeoutsConfig
-	KRA       KRAConfig
-	WhatsApp  WhatsAppConfig
-	SMS       SMSConfig
-	Stripe    StripeConfig
+	RateLimit   RateLimitConfig
+	CORS        CORSConfig
+	Timeouts    TimeoutsConfig
+	KRA         KRAConfig
+	WhatsApp    WhatsAppConfig
+	SMS         SMSConfig
+	Stripe      StripeConfig
+	QuickBooks  QuickBooksConfig
 }
 
 type ServerConfig struct {
@@ -121,6 +122,15 @@ type KRAConfig struct {
 	BranchID   string
 	PrivateKey string
 	CertSerial string
+}
+
+type QuickBooksConfig struct {
+	Enabled    bool
+	ClientID    string
+	ClientSecret string
+	RealmID     string
+	Environment string // sandbox, production
+	RedirectURI string
 }
 
 type RateLimitConfig struct {
@@ -287,6 +297,14 @@ func Load() *Config {
 			SecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
 			PublicKey:     getEnv("STRIPE_PUBLIC_KEY", ""),
 			WebhookSecret: getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		},
+		QuickBooks: QuickBooksConfig{
+			Enabled:    getBoolEnv("QUICKBOOKS_ENABLED", false),
+			ClientID:    getEnv("QUICKBOOKS_CLIENT_ID", ""),
+			ClientSecret: getEnv("QUICKBOOKS_CLIENT_SECRET", ""),
+			RealmID:     getEnv("QUICKBOOKS_REALM_ID", ""),
+			Environment: getEnv("QUICKBOOKS_ENVIRONMENT", "sandbox"), // sandbox, production
+			RedirectURI: getEnv("QUICKBOOKS_REDIRECT_URI", ""),
 		},
 	}
 }

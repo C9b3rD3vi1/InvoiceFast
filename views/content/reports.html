@@ -276,28 +276,112 @@
 
         <!-- Tax Tab -->
         <div x-show="activeTab === 'tax'" class="space-y-6">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- VAT Summary Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div class="bg-white rounded-xl p-4 border border-slate-200">
                     <p class="text-xs text-slate-500">Total Sales</p>
-                    <p class="text-2xl font-bold text-slate-900" x-text="taxSummary.sales"></p>
+                    <p class="text-2xl font-bold text-slate-900" x-text="vatReport.taxableSales || taxSummary.sales"></p>
                 </div>
                 <div class="bg-white rounded-xl p-4 border border-slate-200">
-                    <p class="text-xs text-slate-500">VAT Collected</p>
-                    <p class="text-2xl font-bold text-trust" x-text="taxSummary.vat"></p>
+                    <p class="text-xs text-slate-500">Output Tax (Sales)</p>
+                    <p class="text-2xl font-bold text-trust" x-text="vatReport.outputTax || taxSummary.vat"></p>
                 </div>
                 <div class="bg-white rounded-xl p-4 border border-slate-200">
-                    <p class="text-xs text-slate-500">Withholding</p>
-                    <p class="text-2xl font-bold text-amber-600" x-text="taxSummary.withholding"></p>
+                    <p class="text-xs text-slate-500">Input Tax (Purchases)</p>
+                    <p class="text-2xl font-bold text-blue-600" x-text="vatReport.inputTax || 'KES 0'"></p>
                 </div>
                 <div class="bg-white rounded-xl p-4 border border-slate-200">
-                    <p class="text-xs text-slate-500">Tax Owed</p>
-                    <p class="text-2xl font-bold text-red-600" x-text="taxSummary.owed"></p>
+                    <p class="text-xs text-slate-500">Net VAT</p>
+                    <p class="text-2xl font-bold" :class="(vatReport.netVAT || 0) >= 0 ? 'text-green-600' : 'text-red-600'" x-text="vatReport.netTax || 'KES 0'"></p>
+                </div>
+                <div class="bg-white rounded-xl p-4 border border-slate-200">
+                    <p class="text-xs text-slate-500">Invoice Count</p>
+                    <p class="text-2xl font-bold text-slate-900" x-text="vatReport.invoiceCount || 0"></p>
                 </div>
             </div>
+
+            <!-- Sales Breakdown -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white rounded-xl p-4 border border-slate-200">
+                    <p class="text-xs text-slate-500">Taxable Sales</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(vatReport.taxableSales || 0)"></p>
+                </div>
+                <div class="bg-white rounded-xl p-4 border border-slate-200">
+                    <p class="text-xs text-slate-500">Exempt Sales</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(vatReport.exemptSales || 0)"></p>
+                </div>
+                <div class="bg-white rounded-xl p-4 border border-slate-200">
+                    <p class="text-xs text-slate-500">Zero-Rated Sales</p>
+                    <p class="text-xl font-bold text-slate-900" x-text="formatCurrency(vatReport.zeroRatedSales || 0)"></p>
+                </div>
+            </div>
+
+            <!-- KRA VAT Return Section -->
+            <div x-show="vatReport.vatReturn" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-blue-100 rounded-xl">
+                            <i data-lucide="file-check" class="w-5 h-5 text-blue-600"></i>
+                        </div>
+                        <h3 class="font-semibold text-slate-900">KRA VAT Return</h3>
+                    </div>
+                    <button @click="exportData('tax')" class="px-3 py-1.5 bg-trust text-white rounded-lg text-sm">Export</button>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-xl p-3 border border-blue-100">
+                        <p class="text-xs text-slate-500">Box 1 - Output Tax</p>
+                        <p class="text-lg font-bold text-trust" x-text="formatCurrency(vatReport.vatReturn?.box1 || 0)"></p>
+                    </div>
+                    <div class="bg-white rounded-xl p-3 border border-blue-100">
+                        <p class="text-xs text-slate-500">Box 2 - Input Tax</p>
+                        <p class="text-lg font-bold text-blue-600" x-text="formatCurrency(vatReport.vatReturn?.box2 || 0)"></p>
+                    </div>
+                    <div class="bg-white rounded-xl p-3 border border-blue-100">
+                        <p class="text-xs text-slate-500">Box 3 - Net VAT</p>
+                        <p class="text-lg font-bold" :class="(vatReport.vatReturn?.box3 || 0) >= 0 ? 'text-green-600' : 'text-red-600'" x-text="formatCurrency(vatReport.vatReturn?.box3 || 0)"></p>
+                    </div>
+                    <div class="bg-white rounded-xl p-3 border border-blue-100">
+                        <p class="text-xs text-slate-500">Box 4 - Taxable Supplies</p>
+                        <p class="text-lg font-bold text-slate-900" x-text="formatCurrency(vatReport.vatReturn?.box4 || 0)"></p>
+                    </div>
+                </div>
+                <div class="mt-4 text-xs text-slate-500" x-text="'Period: ' + (vatReport.vatReturn?.period || 'N/A')"></div>
+            </div>
+
+            <!-- Monthly Breakdown -->
             <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                    <h3 class="font-semibold text-slate-900">Tax Breakdown</h3>
-                    <button @click="exportData('tax')" class="px-3 py-1.5 bg-trust text-white rounded-lg text-sm">Download</button>
+                <div class="px-6 py-4 border-b border-slate-200">
+                    <h3 class="font-semibold text-slate-900">Monthly VAT Breakdown</h3>
+                </div>
+                <table class="w-full">
+                    <thead class="bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Month</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Sales</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">VAT</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Invoices</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <template x-for="month in vatReport.monthlyBreakdown" :key="month.month">
+                            <tr class="hover:bg-slate-50">
+                                <td class="px-6 py-4 font-medium" x-text="month.month"></td>
+                                <td class="px-6 py-4 text-right" x-text="formatCurrency(month.sales)"></td>
+                                <td class="px-6 py-4 text-right font-semibold text-trust" x-text="formatCurrency(month.tax)"></td>
+                                <td class="px-6 py-4 text-right" x-text="month.invoiceCount"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="!vatReport.monthlyBreakdown || vatReport.monthlyBreakdown.length === 0">
+                            <td colspan="4" class="px-6 py-8 text-center text-slate-500">No VAT data for selected period</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Legacy Tax Breakdown (for backward compatibility) -->
+            <div x-show="taxBreakdown.length > 0" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200">
+                    <h3 class="font-semibold text-slate-900">Tax Rate Breakdown</h3>
                 </div>
                 <table class="w-full">
                     <thead class="bg-slate-50">
@@ -445,6 +529,19 @@ function reportsManager() {
         invoiceStats: { total: '0', paid: '0', pending: '0', overdue: '0' },
         paymentStats: { collected: 'KES 0', successRate: '0%', avgTime: '0 days', refunds: 'KES 0', methods: [] },
         taxSummary: { sales: 'KES 0', vat: 'KES 0', withholding: 'KES 0', owed: 'KES 0' },
+        vatReport: {
+            outputTax: 'KES 0',
+            inputTax: 'KES 0',
+            netVAT: 0,
+            netTax: 'KES 0',
+            taxableSales: 0,
+            exemptSales: 0,
+            zeroRatedSales: 0,
+            totalSales: 0,
+            invoiceCount: 0,
+            monthlyBreakdown: [],
+            vatReturn: null
+        },
         agingBuckets: [],
         revenueBreakdown: [],
         topClients: [],
@@ -466,13 +563,31 @@ function reportsManager() {
         async loadData() {
             this.loading = true;
             try {
-                const [dashboardData, agingData, revenueData, invoiceData, paymentData] = await Promise.all([
+                const [dashboardData, agingData, revenueData, invoiceData, paymentData, vatData] = await Promise.all([
                     InvoiceFastAPI.reports.getDashboard(this.period).catch(() => ({})),
                     InvoiceFastAPI.reports.getAgingDetailed().catch(() => ({})),
                     InvoiceFastAPI.reports.getRevenue(this.period).catch(() => []),
                     InvoiceFastAPI.reports.getInvoices(this.period).catch(() => ({})),
-                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => [])
+                    InvoiceFastAPI.reports.getPayments(this.period).catch(() => []),
+                    InvoiceFastAPI.reports.getVAT(this.period).catch(() => ({}))
                 ]);
+
+                // Load VAT Report data
+                if (vatData) {
+                    this.vatReport = {
+                        outputTax: this.formatCurrency(vatData.output_tax || 0),
+                        inputTax: this.formatCurrency(vatData.input_tax || 0),
+                        netVAT: vatData.net_vat || 0,
+                        netTax: this.formatCurrency(vatData.net_vat || 0),
+                        taxableSales: vatData.taxable_sales || 0,
+                        exemptSales: vatData.exempt_sales || 0,
+                        zeroRatedSales: vatData.zero_rated_sales || 0,
+                        totalSales: vatData.total_sales || 0,
+                        invoiceCount: vatData.invoice_count || 0,
+                        monthlyBreakdown: vatData.monthly_breakdown || [],
+                        vatReturn: vatData.vat_return || null
+                    };
+                }
                 
                 // Dashboard provides core KPIs
                 if (dashboardData) {

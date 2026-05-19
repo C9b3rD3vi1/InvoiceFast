@@ -173,12 +173,12 @@ func (s *BillingService) ChangePlan(tenantID, newPlanID, billingCycle string) er
 	// Recalculate amount based on billing cycle
 	var amount int64
 	if billingCycle == "yearly" {
-		amount = newPlan.YearlyPriceUSD
+		amount = s.planSvc.GetYearlyPriceKES(newPlan)
 	} else {
-		amount = newPlan.MonthlyPriceUSD
+		amount = s.planSvc.GetMonthlyPriceKES(newPlan)
 	}
 	sub.Amount = amount
-	sub.Currency = "USD" // TODO: Make configurable
+	sub.Currency = "KES"
 	
 	return s.db.Save(sub).Error
 }

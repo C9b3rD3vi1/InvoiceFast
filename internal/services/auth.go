@@ -346,14 +346,16 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	if err := s.db.First(&starterPlan, "slug = ?", "starter").Error; err == nil && starterPlan.ID != "" {
 		now := time.Now()
 		trialEnd := now.AddDate(0, 0, 14)
+		exchangeRate := 150.0 // KES per USD
+		amountKES := int64(float64(starterPlan.MonthlyPriceUSD) * exchangeRate)
 		subscription := &models.Subscription{
 			ID:                 uuid.New().String(),
 			TenantID:           tenant.ID,
 			PlanID:             starterPlan.ID,
 			Status:             "trialing",
 			BillingCycle:       "monthly",
-			Amount:             starterPlan.MonthlyPriceUSD,
-			Currency:           "USD",
+			Amount:             amountKES,
+			Currency:           "KES",
 			TrialStart:         &now,
 			TrialEnd:           &trialEnd,
 			CurrentPeriodStart: now,

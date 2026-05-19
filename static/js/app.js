@@ -7,6 +7,9 @@ document.addEventListener('alpine:init', () => {
         subscriptionStatus: 'none',
         trialDaysRemaining: 0,
         currentPlan: null,
+        subscription: null,
+        tenantCurrency: 'KES',
+        exchangeRates: {},
         usageMetrics: [],
         usageWarning: null,
         paymentMethods: [],
@@ -35,6 +38,12 @@ document.addEventListener('alpine:init', () => {
                 const subData = await InvoiceFastAPI.billing.getSubscription();
                 const methodsData = await InvoiceFastAPI.billing.getPaymentMethods();
                 const historyData = await InvoiceFastAPI.billing.getHistory();
+                
+                // Get tenant currency from API response
+                this.tenantCurrency = subData?.currency || 'KES';
+                
+                // Load exchange rates for currency conversion
+                await this.loadExchangeRates();
                 
                 // Determine subscription status
                 const sub = subData?.subscription;
@@ -79,6 +88,17 @@ document.addEventListener('alpine:init', () => {
                 }
             } else {
                 this.trialDaysRemaining = 14; // Default trial
+            }
+        },
+        
+        async loadExchangeRates() {
+            try {
+                const data = await InvoiceFastAPI.billing.getExchangeRates();
+                if (data?.rates) {
+                    this.exchangeRates = data.rates;
+                }
+            } catch (error) {
+                console.error('Failed to load exchange rates:', error);
             }
         },
         
@@ -321,6 +341,8 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('pricingContent', () => ({
         billingCycle: 'monthly',
         plans: [],
+        exchangeRates: {},
+        currency: 'KES',
         selectedPlan: null,
         loading: true,
         checkoutModalOpen: false,
@@ -332,7 +354,23 @@ document.addEventListener('alpine:init', () => {
         failureMessage: '',
         
         async init() {
+            await this.loadExchangeRates();
             await this.loadPlans();
+        },
+        
+        async loadExchangeRates() {
+            try {
+                const data = await InvoiceFastAPI.billing.getExchangeRates();
+                if (data?.rates) {
+                    this.exchangeRates = data.rates;
+                }
+            } catch (error) {
+                console.error('Failed to load exchange rates:', error);
+            }
+        },
+        
+        setCurrency(curr) {
+            this.currency = curr;
         },
         
         async loadPlans() {
@@ -430,11 +468,59 @@ async confirmCheckout() {
         },
         
         getYearlyPrice(monthlyPrice) {
-            return Math.round(monthlyPrice * 12 * 0.8);
+            if (!monthlyPrice) return 'Custom';
+            const price = monthlyPrice > 100 ? (monthlyPrice / 100) : monthlyPrice;
+            
+            if (this.currency === 'KES') {
+                return 'KES ' + Math.round(price * 12 * 0.8);
+            }
+            
+            // Convert KES to selected currency using exchange rates
+            const kesRate = this.exchangeRates['KES'] || this.exchangeRates['KES/USD'];
+            if (!kesRate) return 'KES ' + Math.round(price);
+            
+            const usdToKes = 1 / kesRate;
+            const kesAmount = price * usdToKes;
+            
+            const symbols = { USD: '$', EUR: '€', GBP: '£' };
+            const symbol = symbols[this.currency] || this.currency + ' ';
+            
+            if (this.currency === 'EUR') {
+                const eurRate = this.exchangeRates['KES/EUR'];
+                return eurRate ? symbol + Math.round(kesAmount * eurRate * 12 * 0.8) : 'KES ' + Math.round(price * 12 * 0.8);
+            } else if (this.currency === 'GBP') {
+                const gbpRate = this.exchangeRates['KES/GBP'];
+                return gbpRate ? symbol + Math.round(kesAmount * gbpRate * 12 * 0.8) : 'KES ' + Math.round(price * 12 * 0.8);
+            }
+            
+            return symbol + Math.round(kesAmount * 12 * 0.8);
         },
         
         formatPrice(price) {
-            return '$' + (price || 0);
+            if (!price && price !== 0) return 'Custom';
+            
+            // Prices from API are in KES
+            const kesAmount = price > 100 ? (price / 100) : price;
+            
+            if (this.currency === 'KES') {
+                return 'KES ' + Math.round(kesAmount);
+            }
+            
+            // Convert KES to selected currency using exchange rates
+            const kesRate = this.exchangeRates['KES'] || this.exchangeRates['KES/USD'];
+            if (!kesRate) return 'KES ' + Math.round(kesAmount);
+            
+            if (this.currency === 'USD') {
+                return '$' + Math.round(kesAmount * kesRate);
+            } else if (this.currency === 'EUR') {
+                const eurRate = this.exchangeRates['KES/EUR'];
+                return eurRate ? '€' + Math.round(kesAmount * eurRate) : 'KES ' + Math.round(kesAmount);
+            } else if (this.currency === 'GBP') {
+                const gbpRate = this.exchangeRates['KES/GBP'];
+                return gbpRate ? '£' + Math.round(kesAmount * gbpRate) : 'KES ' + Math.round(kesAmount);
+            }
+            
+            return 'KES ' + Math.round(kesAmount);
         }
     }));
 });

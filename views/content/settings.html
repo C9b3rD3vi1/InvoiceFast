@@ -1061,6 +1061,85 @@
                         </div>
                     </div>
 
+                    <!-- QuickBooks -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-green-100">
+                                    <svg class="w-6 h-6 text-green-600" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-900">QuickBooks Online</h3>
+                                    <p class="text-sm text-slate-500">Sync invoices and payments with accounting software</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="px-2 py-1 text-xs rounded-full" :class="integrationsData.quickbooks.configured ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'" x-text="integrationsData.quickbooks.configured ? 'Connected' : 'Not Connected'"></span>
+                            </div>
+                        </div>
+                        <div x-show="!integrationsData.quickbooks.systemConfigured" class="text-center py-6 bg-slate-50 rounded-xl">
+                            <p class="text-slate-500 mb-4">QuickBooks requires server configuration. Contact admin to enable.</p>
+                            <div class="text-xs text-slate-400">
+                                Required: QUICKBOOKS_ENABLED, QUICKBOOKS_CLIENT_ID, QUICKBOOKS_CLIENT_SECRET
+                            </div>
+                        </div>
+                        <div x-show="integrationsData.quickbooks.configured" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-green-50 rounded-xl p-4 border border-green-200">
+                                    <p class="text-xs text-green-600 font-medium">Status</p>
+                                    <p class="text-lg font-semibold text-green-700">Connected</p>
+                                </div>
+                                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                    <p class="text-xs text-slate-500 font-medium">Last Sync</p>
+                                    <p class="text-lg font-semibold text-slate-700" x-text="integrationsData.quickbooks.lastSync || 'Never'"></p>
+                                </div>
+                            </div>
+                            <div class="flex gap-3">
+                                <button @click="syncQuickBooks()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                                    Sync Now
+                                </button>
+                                <button @click="testQuickBooks()" class="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
+                                    Test Connection
+                                </button>
+                                <button @click="disconnectQuickBooks()" class="px-4 py-2 text-red-600 text-sm hover:bg-red-50 rounded-lg">
+                                    Disconnect
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Wave & Sage (Coming Soon) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 opacity-60">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-slate-700">Wave Accounting</p>
+                                    <p class="text-xs text-slate-500">Coming soon</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 opacity-60">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-orange-600" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-slate-700">Sage</p>
+                                    <p class="text-xs text-slate-500">Coming soon</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="flex justify-end gap-3">
                         <button @click="loadIntegrations()" class="px-6 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Reset</button>
                         <button @click="saveIntegrations()" class="px-6 py-2.5 bg-trust text-white rounded-xl hover:bg-trust-dark">Save Integrations</button>
@@ -1174,7 +1253,8 @@ function settingsContent() {
             whatsapp: { enabled: false, configured: false, phone_number_id: '', access_token: '', business_id: '' },
             sms: { enabled: false, configured: false, provider: 'africastalking', api_key: '', api_secret: '', phone_number: '', short_code: '' },
             smtp: { enabled: false, configured: false, provider: 'smtp', host: '', port: 587, username: '', password: '', from_email: '', from_name: '', use_tls: true, api_key: '', domain: '', access_key_id: '', secret_access_key: '', region: 'us-east-1', api_token: '' },
-            slack: { enabled: false, configured: false, webhook_url: '', channel: '' }
+            slack: { enabled: false, configured: false, webhook_url: '', channel: '' },
+            quickbooks: { enabled: true, configured: false, lastSync: null, systemConfigured: true }
         },
         teamMembers: [],
         billing: { plan: 'Free Plan', price: '$0/month', invoicesUsed: 0, invoicesLimit: 'Unlimited', clientsUsed: 0, clientsLimit: 'Unlimited', teamLimit: 1, storageUsed: '0', storageLimit: '1GB' },
@@ -1196,6 +1276,15 @@ function settingsContent() {
         async init() {
             lucide.createIcons();
             await this.loadSettings();
+            await this.checkQuickBooksStatus();
+        },
+
+        async checkQuickBooksStatus() {
+            try {
+                await InvoiceFastAPI.request('/tenant/integrations/quickbooks/test', { method: 'POST' });
+            } catch(err) {
+                this.integrationsData.quickbooks.systemConfigured = false;
+            }
         },
 
         async loadSettings() {
@@ -1276,6 +1365,56 @@ function settingsContent() {
             } catch(err) {
                 console.error('Failed to save integrations:', err);
                 this.showToast('Failed to save integrations: ' + err.message, 'error');
+            }
+        },
+
+        async connectQuickBooks() {
+            try {
+                const response = await InvoiceFastAPI.request('/tenant/integrations/quickbooks/connect', { method: 'POST' });
+                if (response.authorization_url) {
+                    window.location.href = response.authorization_url;
+                } else {
+                    this.showToast('QuickBooks not configured. Contact admin to set up environment variables.', 'error');
+                }
+            } catch(err) {
+                const errorMsg = err.response?.data?.error || err.message || 'Failed to connect to QuickBooks';
+                this.showToast(errorMsg, 'error');
+            }
+        },
+
+        async disconnectQuickBooks() {
+            if (!confirm('Are you sure you want to disconnect QuickBooks?')) return;
+            try {
+                await InvoiceFastAPI.request('/tenant/integrations/quickbooks/disconnect', { method: 'POST' });
+                this.integrationsData.quickbooks.configured = false;
+                this.integrationsData.quickbooks.lastSync = null;
+                this.showToast('QuickBooks disconnected', 'success');
+            } catch(err) {
+                this.showToast('Failed to disconnect', 'error');
+            }
+        },
+
+        async syncQuickBooks() {
+            try {
+                this.showToast('Syncing with QuickBooks...', 'success');
+                const result = await InvoiceFastAPI.request('/tenant/integrations/quickbooks/sync', { method: 'POST' });
+                this.integrationsData.quickbooks.lastSync = new Date().toLocaleString();
+                this.showToast(`Synced ${result.synced_invoices || 0} invoices`, 'success');
+            } catch(err) {
+                this.showToast('Sync failed: ' + err.message, 'error');
+            }
+        },
+
+        async testQuickBooks() {
+            try {
+                const result = await InvoiceFastAPI.request('/tenant/integrations/quickbooks/test', { method: 'POST' });
+                if (result.connected) {
+                    this.showToast('Connection successful!', 'success');
+                } else {
+                    this.showToast('Connection test failed', 'error');
+                }
+            } catch(err) {
+                this.showToast('Connection test failed', 'error');
             }
         },
 

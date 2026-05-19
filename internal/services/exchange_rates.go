@@ -10,6 +10,8 @@ import (
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/models"
+
+	"github.com/google/uuid"
 )
 
 type ExchangeRateService struct {
@@ -21,18 +23,13 @@ type ExchangeRateService struct {
 }
 
 func NewExchangeRateService(db *database.DB) *ExchangeRateService {
-	return &ExchangeRateService{
+	svc := &ExchangeRateService{
 		db:     db,
 		apiURL: "https://api.centralbank.go.ke/exchange-rates",
-		cachedRates: map[string]float64{
-			"KES/USD": 0.0091,
-			"KES/EUR": 0.0083,
-			"KES/GBP": 0.0072,
-			"KES/TZS": 23.5,
-			"KES/UGX": 34.2,
-			"KES/NGN": 13.5,
-		},
 	}
+	// Fetch rates on startup
+	svc.fetchRates()
+	return svc
 }
 
 type CBKRateResponse struct {
@@ -122,6 +119,68 @@ func (s *ExchangeRateService) FetchRatesFromCBK() error {
 
 	log.Printf("[ExchangeRates] Updated rates from CBK")
 	return nil
+}
+
+func (s *ExchangeRateService) fetchRates() {
+	if err := s.FetchRatesFromCBK(); err != nil {
+		log.Printf("[ExchangeRates] Initial fetch failed: %v", err)
+		// Try to load from database as fallback
+		s.loadFromDB()
+	}
+}
+
+func (s *ExchangeRateService) loadFromDB() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// Initialize map if nil
+	if s.cachedRates == nil {
+		s.cachedRates = make(map[string]float64)
+	}
+	
+	var rates []models.ExchangeRate
+	err := s.db.Limit(100).Find(&rates).Error
+	if err == nil {
+		if len(rates) == 0 {
+			// No rates in DB - seed default rates
+			s.seedDefaultRates()
+			s.db.Limit(100).Find(&rates)
+		}
+		for _, r := range rates {
+			key := fmt.Sprintf("KES/%s", r.Currency)
+			s.cachedRates[key] = r.Rate
+		}
+		log.Printf("[ExchangeRates] Loaded %d rates from database", len(rates))
+	}
+}
+
+func (s *ExchangeRateService) seedDefaultRates() {
+	defaultRates := []struct {
+		Currency string
+		Rate     float64
+	}{
+		{"USD", 0.0091},
+		{"EUR", 0.0083},
+		{"GBP", 0.0072},
+		{"TZS", 23.5},
+		{"UGX", 34.2},
+		{"NGN", 13.5},
+	}
+	
+	for _, r := range defaultRates {
+		rate := models.ExchangeRate{
+			ID:           uuid.New().String(),
+			Currency:     r.Currency,
+			BaseCurrency: "KES",
+			Rate:         r.Rate,
+			ValidFrom:    time.Now(),
+			CreatedAt:    time.Now(),
+		}
+		if err := s.db.Create(&rate).Error; err != nil {
+			log.Printf("[ExchangeRates] Failed to seed rate %s: %v", r.Currency, err)
+		}
+	}
+	log.Printf("[ExchangeRates] Seeded default exchange rates")
 }
 
 func (s *ExchangeRateService) StartCronJob() {

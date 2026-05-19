@@ -20,5 +20,11 @@ func IntegrationRoutes(app *fiber.App, h *handlers.IntegrationHandler, authServi
 	group.Delete("/:id", h.DeleteIntegration)
 	group.Post("/:id/toggle", h.ToggleIntegration)
 
+	// QuickBooks endpoints
+	group.Post("/quickbooks/connect", h.QuickBooksConnect)
+	group.Post("/quickbooks/disconnect", h.QuickBooksDisconnect)
+	group.Post("/quickbooks/test", h.QuickBooksTest)
+	group.Post("/quickbooks/sync", h.QuickBooksSync)
+
 	return group
 }

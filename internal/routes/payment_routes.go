@@ -26,16 +26,6 @@ func PaymentRoutes(app *fiber.App, h *handlers.PaymentHandler, idempotencySvc *s
 	return group
 }
 
-// PaymentAPIRoutes configures payment API endpoints
-func PaymentAPIRoutes(app *fiber.App, h *handlers.PaymentHandler) fiber.Router {
-	api := app.Group("/api/v1")
-
-	api.Post("/payment/stk-push", h.InitiateSTKPush)
-	api.Get("/payment/status/:token", h.CheckPaymentStatus)
-
-	return api
-}
-
 // TenantPaymentRoutes - tenant-scoped payment routes
 func TenantPaymentRoutes(app fiber.Router, h *handlers.PaymentHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/payments")

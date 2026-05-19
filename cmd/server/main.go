@@ -91,6 +91,12 @@ func main() {
 
 	app.Use(recover.New())
 
+	// SECURITY: Request ID middleware for tracing
+	app.Use(middleware.RequestIDMiddleware())
+
+	// SECURITY: Security headers middleware
+	app.Use(middleware.SecurityHeadersMiddleware())
+
 	// HTTPS redirect in production
 	if cfg.Server.Mode == "production" {
 		app.Use(func(c *fiber.Ctx) error {
@@ -368,7 +374,8 @@ planService := services.NewPlanService(db)
 
 	// Integration handler
 	integrationService := services.NewIntegrationService(db)
-	integrationHandler := handlers.NewIntegrationHandler(integrationService)
+	quickBooksService := services.NewQuickBooksService(cfg, db)
+	integrationHandler := handlers.NewIntegrationHandler(integrationService, quickBooksService)
 
 	// Static files
 	app.Static("/static", "./static")

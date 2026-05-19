@@ -49,15 +49,17 @@ func (s *SubscriptionService) CreateSubscriptionWithTrial(tenantID string) (*mod
 
 	trialStart := time.Now()
 	trialEnd := trialStart.AddDate(0, 0, 14)
-
+	
+	amountKES := s.planService.GetMonthlyPriceKES(starterPlan)
+	
 	sub := &models.Subscription{
 		ID:                 uuid.New().String(),
 		TenantID:           tenantID,
 		PlanID:             starterPlan.ID,
 		Status:             "trialing",
 		BillingCycle:       "monthly",
-		Amount:             starterPlan.MonthlyPriceUSD,
-		Currency:           "USD",
+		Amount:             amountKES,
+		Currency:           "KES",
 		TrialStart:         &trialStart,
 		TrialEnd:           &trialEnd,
 		CurrentPeriodStart: trialStart,
@@ -95,7 +97,7 @@ func (s *SubscriptionService) CreateSubscription(tenantID, planID string, billin
 		Status:             "active",
 		BillingCycle:       billingCycle,
 		Amount:             amount,
-		Currency:           "USD",
+		Currency:           "KES",
 		CurrentPeriodStart: now,
 		CurrentPeriodEnd:   now.AddDate(0, 1, 0), // 1 month from now
 		CreatedAt:          now,

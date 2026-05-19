@@ -160,9 +160,35 @@ func (h *PublicHandler) GetInvoiceReceipt(c *fiber.Ctx) error {
 	return h.GetInvoicePDF(c)
 }
 
-// InitiateSTKPush - initiate payment
+// InitiateSTKPush - initiate M-Pesa STK push via magic token (public)
 func (h *PublicHandler) InitiateSTKPush(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{"message": "Use payment portal"})
+	var req struct {
+		Token string `json:"token"`
+		Phone string `json:"phone"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+	if req.Token == "" || req.Phone == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token and phone are required"})
+	}
+
+	invoice, err := h.invoiceService.GetInvoiceByMagicToken(req.Token)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found or link expired"})
+	}
+
+	if h.mpesaService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "M-Pesa not configured"})
+	}
+
+	amountStr := fmt.Sprintf("%.2f", invoice.Total)
+	resp, err := h.mpesaService.InitiateSTKPush(c.Context(), invoice.TenantID, invoice.ID, req.Phone, amountStr, invoice.InvoiceNumber)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(resp)
 }
 
 // CheckPaymentStatus - check payment status

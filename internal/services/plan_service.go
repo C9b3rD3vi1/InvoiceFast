@@ -148,14 +148,16 @@ func (s *PlanService) MigrateUsersWithoutSubscription() error {
 			continue
 		}
 
+		exchangeRate := s.GetExchangeRate()
+		amountKES := int64(float64(starterPlan.MonthlyPriceUSD) * exchangeRate)
 		subscription := &models.Subscription{
 			ID:                 uuid.New().String(),
 			TenantID:           tenant.ID,
 			PlanID:             starterPlan.ID,
 			Status:             "trialing",
 			BillingCycle:       "monthly",
-			Amount:             starterPlan.MonthlyPriceUSD,
-			Currency:           "USD",
+			Amount:             amountKES,
+			Currency:           "KES",
 			TrialStart:         &now,
 			TrialEnd:           &trialEnd,
 			CurrentPeriodStart: now,

@@ -20,6 +20,7 @@ func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *serv
 	group.Put("/subscription/plan", h.ChangePlan)
 
 	group.Get("/plans", h.GetPlans)
+	group.Get("/exchange-rates", h.GetExchangeRates)
 
 	group.Post("/checkout", h.CreateCheckoutSession)
 

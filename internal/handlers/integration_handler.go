@@ -9,11 +9,13 @@ import (
 
 type IntegrationHandler struct {
 	integrationService *services.IntegrationService
+	quickBooksService *services.QuickBooksService
 }
 
-func NewIntegrationHandler(integrationSvc *services.IntegrationService) *IntegrationHandler {
+func NewIntegrationHandler(integrationSvc *services.IntegrationService, qbSvc *services.QuickBooksService) *IntegrationHandler {
 	return &IntegrationHandler{
 		integrationService: integrationSvc,
+		quickBooksService: qbSvc,
 	}
 }
 
@@ -137,4 +139,83 @@ func (h *IntegrationHandler) GetIntegrationConfig(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(config)
+}
+
+func (h *IntegrationHandler) QuickBooksConnect(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	if h.quickBooksService == nil || !h.quickBooksService.IsEnabled() {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "QuickBooks integration not configured"})
+	}
+
+	authURL, err := h.quickBooksService.GetAuthorizationURL(tenantID, "")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"authorization_url": authURL})
+}
+
+func (h *IntegrationHandler) QuickBooksCallback(c *fiber.Ctx) error {
+	code := c.Query("code")
+	state := c.Query("state")
+
+	if code == "" || state == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing code or state"})
+	}
+
+	tokens, tenantID, err := h.quickBooksService.HandleOAuthCallback(code, state)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	if err := h.quickBooksService.SaveIntegration(tenantID, tokens); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to save integration"})
+	}
+
+	return c.JSON(fiber.Map{"message": "QuickBooks connected successfully"})
+}
+
+func (h *IntegrationHandler) QuickBooksDisconnect(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	if err := h.quickBooksService.Disconnect(tenantID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "QuickBooks disconnected"})
+}
+
+func (h *IntegrationHandler) QuickBooksTest(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	connected, err := h.quickBooksService.TestConnection(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error(), "connected": false})
+	}
+
+	return c.JSON(fiber.Map{"connected": connected})
+}
+
+func (h *IntegrationHandler) QuickBooksSync(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	count, err := h.quickBooksService.SyncInvoices(tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error(), "synced": 0})
+	}
+
+	return c.JSON(fiber.Map{"synced_invoices": count, "message": "Sync completed"})
 }

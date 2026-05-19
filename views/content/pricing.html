@@ -23,6 +23,13 @@
                 <span class="ml-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Save 20%</span>
             </span>
         </div>
+        
+        <!-- Currency Toggle -->
+        <div class="flex items-center justify-center gap-2 mt-4">
+            <button @click="setCurrency('USD')" class="px-3 py-1 text-sm rounded-full transition-colors" :class="currency === 'USD' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">USD ($)</button>
+            <button @click="setCurrency('KES')" class="px-3 py-1 text-sm rounded-full transition-colors" :class="currency === 'KES' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">KES</button>
+            <button @click="setCurrency('EUR')" class="px-3 py-1 text-sm rounded-full transition-colors" :class="currency === 'EUR' ? 'bg-trust text-white' : 'bg-slate-100 text-slate-600'">EUR (€)</button>
+        </div>
     </div>
 
     <!-- Loading State -->
@@ -56,7 +63,7 @@
                         Get Started
                     </button>
                     <div class="mt-6 space-y-3">
-                        <template x-for="feature in plan.features" :key="feature">
+                        <template x-for="feature in (plan.featureLabels || plan.features).slice(0, 6)" :key="feature">
                             <div class="flex items-center gap-2 text-sm text-slate-600">
                                 <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
@@ -155,147 +162,12 @@
                     </button>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<style>[x-cloak] { display: none !important; }</style>
-            <div class="mt-6 space-y-3">
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    10 invoices/month
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    5 clients
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    1 user
-                </div>
-            </div>
-        </div>
-
-        <!-- Starter Plan -->
-        <div class="bg-white rounded-2xl border-2 border-slate-200 p-6 hover:shadow-xl transition-shadow relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-20 h-20 bg-slate-100 rounded-bl-full -mr-10 -mt-10"></div>
-            <div class="mb-6">
-                <h3 class="text-lg font-bold text-slate-900">Starter</h3>
-                <p class="text-sm text-slate-500 mt-1">For small business</p>
-            </div>
-            <div class="mb-6">
-                <span class="text-4xl font-bold text-slate-900">$19</span>
-                <span class="text-slate-500">/month</span>
-            </div>
-            <button class="w-full py-3 bg-trust text-white rounded-xl font-semibold hover:bg-trust-dark transition-colors">
-                Get Started
-            </button>
-            <div class="mt-6 space-y-3">
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    100 invoices/month
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    50 clients
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    3 users
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Email support
-                </div>
-            </div>
-        </div>
-
-        <!-- Professional Plan -->
-        <div class="bg-white rounded-2xl border-2 border-trust p-6 shadow-2xl shadow-trust/20 relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-trust/10 rounded-bl-full -mr-12 -mt-12"></div>
-            <div class="absolute top-4 left-4">
-                <span class="px-3 py-1 bg-trust text-white text-xs font-bold rounded-full">MOST POPULAR</span>
-            </div>
-            <div class="mb-6 mt-4">
-                <h3 class="text-lg font-bold text-slate-900">Professional</h3>
-                <p class="text-sm text-slate-500 mt-1">For growing teams</p>
-            </div>
-            <div class="mb-6">
-                <span class="text-4xl font-bold text-slate-900">$49</span>
-                <span class="text-slate-500">/month</span>
-            </div>
-            <button class="w-full py-3 bg-trust text-white rounded-xl font-semibold hover:bg-trust-dark transition-colors">
-                Get Started
-            </button>
-            <div class="mt-6 space-y-3">
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Unlimited invoices
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    500 clients
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    10 users
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Priority support
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Advanced automation
-                </div>
-                <div class="flex items-center gap-2 text-sm text-slate-600">
-                    <svg class="w-4 h-4 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    KRA e-TIMS integration
-                </div>
-            </div>
-        </div>
-
-        <!-- Enterprise Plan -->
-        <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
-            <div class="absolute bottom-0 left-0 w-24 h-24 bg-trust/20 rounded-full -ml-8 -mb-8"></div>
-            <div class="mb-6 relative">
-                <h3 class="text-lg font-bold">Enterprise</h3>
-                <p class="text-sm text-white/60 mt-1">For large organizations</p>
-            </div>
-            <div class="mb-6 relative">
-                <span class="text-4xl font-bold">Custom</span>
-            </div>
-            <button class="w-full py-3 bg-white text-slate-900 rounded-xl font-semibold hover:bg-white/90 transition-colors">
-                Contact Sales
-            </button>
-            <div class="mt-6 space-y-3">
-                <div class="flex items-center gap-2 text-sm text-white/80">
-                    <svg class="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Everything in Professional
-                </div>
-                <div class="flex items-center gap-2 text-sm text-white/80">
-                    <svg class="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Unlimited users
-                </div>
-                <div class="flex items-center gap-2 text-sm text-white/80">
-                    <svg class="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Dedicated account manager
-                </div>
-                <div class="flex items-center gap-2 text-sm text-white/80">
-                    <svg class="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    Custom integrations
-                </div>
-                <div class="flex items-center gap-2 text-sm text-white/80">
-                    <svg class="w-4 h-4 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-                    SLA guarantee
-                </div>
             </div>
         </div>
     </div>
 
     <!-- Features Comparison -->
-    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-16">
+    <div id="comparisonSection" class="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-16">
         <div class="px-8 py-6 border-b border-slate-200">
             <h2 class="text-2xl font-bold text-slate-900">Compare Features</h2>
             <p class="text-slate-500 mt-1">See what's included in each plan</p>
@@ -303,64 +175,12 @@
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-slate-50">
-                    <tr>
-                        <th class="px-8 py-4 text-left text-sm font-semibold text-slate-600">Feature</th>
-                        <th class="px-8 py-4 text-center text-sm font-semibold text-slate-600">Free</th>
-                        <th class="px-8 py-4 text-center text-sm font-semibold text-slate-600">Starter</th>
-                        <th class="px-8 py-4 text-center text-sm font-semibold text-trust">Professional</th>
-                        <th class="px-8 py-4 text-center text-sm font-semibold text-slate-600">Enterprise</th>
+                    <tr id="comparisonHeader">
+                        <!-- Rendered by JS -->
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">Invoices/month</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">10</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">100</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">Unlimited</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">Unlimited</td>
-                    </tr>
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">Clients</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">5</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">50</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">500</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">Unlimited</td>
-                    </tr>
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">Team members</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">1</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">3</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">10</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">Unlimited</td>
-                    </tr>
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">Email Support</td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                    </tr>
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">Priority Support</td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-slate-300 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-slate-300 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                    </tr>
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">KRA e-TIMS Integration</td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-slate-300 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-slate-300 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                        <td class="px-8 py-4 text-center"><svg class="w-5 h-5 text-green-500 mx-auto" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></td>
-                    </tr>
-                    <tr>
-                        <td class="px-8 py-4 text-sm text-slate-900">Automation</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-400">Basic</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-400">Standard</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">Advanced</td>
-                        <td class="px-8 py-4 text-center text-sm text-slate-600">Custom</td>
-                    </tr>
+                <tbody class="divide-y divide-slate-100" id="comparisonBody">
+                    <!-- Rendered by JS -->
                 </tbody>
             </table>
         </div>
@@ -382,10 +202,5 @@
                 <h3 class="font-semibold text-slate-900 mb-2">What payment methods do you accept?</h3>
                 <p class="text-slate-600">We accept all major credit cards, M-Pesa, and bank transfers for annual plans.</p>
             </div>
-            <div class="bg-white rounded-xl border border-slate-200 p-6">
-                <h3 class="font-semibold text-slate-900 mb-2">What happens if I exceed my limits?</h3>
-                <p class="text-slate-600">We'll notify you when you're approaching your limits. You can upgrade or your features will be restricted until you upgrade.</p>
-            </div>
         </div>
     </div>
-</div>

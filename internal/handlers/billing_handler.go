@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"invoicefast/internal/database"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
@@ -13,20 +14,24 @@ import (
 )
 
 type BillingHandler struct {
-	subService  *services.SubscriptionService
-	planService *services.PlanService
-	billingSvc  *services.BillingService
-	stripeSvc   *services.StripeService
-	intasendSvc *services.IntasendService
+	subService        *services.SubscriptionService
+	planService       *services.PlanService
+	billingSvc        *services.BillingService
+	stripeSvc         *services.StripeService
+	intasendSvc       *services.IntasendService
+	exchangeRateSvc   *services.ExchangeRateService
+	db                *database.DB
 }
 
-func NewBillingHandler(subSvc *services.SubscriptionService, planSvc *services.PlanService, billingSvc *services.BillingService, stripeSvc *services.StripeService, intasendSvc *services.IntasendService) *BillingHandler {
+func NewBillingHandler(subSvc *services.SubscriptionService, planSvc *services.PlanService, billingSvc *services.BillingService, stripeSvc *services.StripeService, intasendSvc *services.IntasendService, exchangeRateSvc *services.ExchangeRateService, db *database.DB) *BillingHandler {
 	return &BillingHandler{
-		subService:  subSvc,
-		planService: planSvc,
-		billingSvc:  billingSvc,
-		stripeSvc:   stripeSvc,
-		intasendSvc: intasendSvc,
+		subService:      subSvc,
+		planService:     planSvc,
+		billingSvc:      billingSvc,
+		stripeSvc:       stripeSvc,
+		intasendSvc:     intasendSvc,
+		exchangeRateSvc: exchangeRateSvc,
+		db:              db,
 	}
 }
 
@@ -42,11 +47,22 @@ func (h *BillingHandler) GetSubscription(c *fiber.Ctx) error {
 	}
 
 	usage, _ := h.subService.GetUsage(tenantID)
+	
+	// Get tenant currency
+	tenant := models.Tenant{}
+	currency := "KES" // Default
+	if err := h.db.First(&tenant, "id = ?", tenantID).Error; err == nil {
+		currency = tenant.Currency
+		if currency == "" {
+			currency = "KES"
+		}
+	}
 
 	return c.JSON(fiber.Map{
 		"subscription": sub,
 		"plan":         plan,
 		"usage":        usage,
+		"currency":     currency,
 	})
 }
 
@@ -56,7 +72,63 @@ func (h *BillingHandler) GetPlans(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"error": "failed to fetch plans"})
 	}
 
-	return c.JSON(fiber.Map{"plans": plans})
+	type PlanResponse struct {
+		ID              string `json:"id"`
+		Name            string `json:"name"`
+		Slug            string `json:"slug"`
+		Description     string `json:"description"`
+		MonthlyPriceKES int64  `json:"monthly_price_kes"`
+		YearlyPriceKES  int64  `json:"yearly_price_kes"`
+		FeaturesJSON    string `json:"features_json"`
+		LimitsJSON      string `json:"limits_json"`
+		Popular         bool   `json:"popular"`
+		SortOrder       int    `json:"sort_order"`
+	}
+
+	response := make([]PlanResponse, len(plans))
+	for i, plan := range plans {
+		response[i] = PlanResponse{
+			ID:              plan.ID,
+			Name:            plan.Name,
+			Slug:            plan.Slug,
+			Description:     plan.Description,
+			MonthlyPriceKES: h.planService.GetMonthlyPriceKES(&plan),
+			YearlyPriceKES:  h.planService.GetYearlyPriceKES(&plan),
+			FeaturesJSON:    plan.FeaturesJSON,
+			LimitsJSON:      plan.LimitsJSON,
+			Popular:         plan.SortOrder == 3,
+			SortOrder:       plan.SortOrder,
+		}
+	}
+
+	return c.JSON(fiber.Map{"plans": response})
+}
+
+func (h *BillingHandler) GetExchangeRates(c *fiber.Ctx) error {
+	rates := h.exchangeRateSvc.GetAllRates()
+	
+	normalized := make(map[string]float64)
+	// Convert to USD-based rates (USD = 1)
+	for key, rate := range rates {
+		parts := []string{}
+		if idx := strings.Index(key, "/"); idx != -1 {
+			parts = []string{key[:idx], key[idx+1:]}
+		}
+		if len(parts) == 2 {
+			if parts[1] == "USD" {
+				normalized[parts[0]] = rate
+			} else if parts[0] == "USD" {
+				normalized[parts[1]] = 1 / rate
+			} else {
+				normalized[key] = rate
+			}
+		}
+	}
+	
+	// Add base rates
+	normalized["USD"] = 1.0
+	
+	return c.JSON(fiber.Map{"rates": normalized})
 }
 
 func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {

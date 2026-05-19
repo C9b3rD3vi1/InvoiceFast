@@ -511,6 +511,8 @@ func (s *ReportService) GetTaxSummary(tenantID string, period string) (*TaxSumma
 
 type VATReport struct {
 	Period           string       `json:"period"`
+	StartDate        string       `json:"start_date"`
+	EndDate          string       `json:"end_date"`
 	OutputTax        float64      `json:"output_tax"`
 	InputTax         float64      `json:"input_tax"`
 	NetVAT           float64      `json:"net_vat"`
@@ -519,7 +521,8 @@ type VATReport struct {
 	ZeroRatedSales   float64      `json:"zero_rated_sales"`
 	TotalSales       float64      `json:"total_sales"`
 	InvoiceCount     int          `json:"invoice_count"`
-	MonthlyBreakdown []MonthlyVAT `json:"monthly_breakdown"`
+	MonthlyBreakdown []MonthlyVAT  `json:"monthly_breakdown"`
+	VATReturn        *VATReturn   `json:"vat_return,omitempty"`
 }
 
 type MonthlyVAT struct {
@@ -529,12 +532,32 @@ type MonthlyVAT struct {
 	InvoiceCount int     `json:"invoice_count"`
 }
 
+type VATReturn struct {
+	Period          string  `json:"period"`
+	DeclarationDate string  `json:"declaration_date"`
+	Box1            float64 `json:"box1"` // Total output tax (sales VAT)
+	Box2            float64 `json:"box2"` // Total input tax (purchases VAT)
+	Box3            float64 `json:"box3"` // Net VAT payable/receivable
+	Box4            float64 `json:"box4"` // Total taxable supplies
+	Box5            float64 `json:"box5"` // Total exempt supplies
+	Box6            float64 `json:"box6"` // Total zero-rated supplies
+	Box7            float64 `json:"box7"` // Total standard-rated supplies
+	Box8            float64 `json:"box8"` // Total value of VAT claimed
+	InvoiceCount    int     `json:"invoice_count"`
+	ExpenseCount    int     `json:"expense_count"`
+}
+
 func (s *ReportService) GetVATReport(tenantID, period string) (*VATReport, error) {
 	start, end := s.getDateRange(period)
 
-	report := &VATReport{Period: period}
+	report := &VATReport{
+		Period:    period,
+		StartDate: start.Format("2006-01-02"),
+		EndDate:   end.Format("2006-01-02"),
+	}
 
-	var result struct {
+	// OUTPUT TAX - Sales VAT from invoices
+	var salesResult struct {
 		Sales float64
 		Tax   float64
 		Count int64
@@ -542,12 +565,13 @@ func (s *ReportService) GetVATReport(tenantID, period string) (*VATReport, error
 	s.db.Model(&models.Invoice{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ? AND tax_rate > 0", tenantID, start, end).
 		Select("COALESCE(SUM(total), 0) as sales, COALESCE(SUM(tax_amount), 0) as tax, COUNT(*) as count").
-		Scan(&result)
+		Scan(&salesResult)
 
-	report.OutputTax = result.Tax
-	report.TaxableSales = result.Sales
-	report.InvoiceCount = int(result.Count)
+	report.OutputTax = salesResult.Tax
+	report.TaxableSales = salesResult.Sales
+	report.InvoiceCount = int(salesResult.Count)
 
+	// Zero-rated sales
 	var zeroRated float64
 	s.db.Model(&models.Invoice{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ? AND tax_rate = 0", tenantID, start, end).
@@ -555,6 +579,7 @@ func (s *ReportService) GetVATReport(tenantID, period string) (*VATReport, error
 		Scan(&zeroRated)
 	report.ZeroRatedSales = zeroRated
 
+	// Total sales
 	var totalAll float64
 	s.db.Model(&models.Invoice{}).
 		Where("tenant_id = ? AND created_at BETWEEN ? AND ?", tenantID, start, end).
@@ -562,10 +587,89 @@ func (s *ReportService) GetVATReport(tenantID, period string) (*VATReport, error
 		Scan(&totalAll)
 	report.TotalSales = totalAll
 
-	report.NetVAT = report.OutputTax
-	report.ExemptSales = report.TotalSales - report.TaxableSales - report.ZeroRatedSales
+	report.ExemptSales = totalAll - report.TaxableSales - report.ZeroRatedSales
+
+	// INPUT TAX - VAT from expenses (purchases)
+	var expenseResult struct {
+		Tax   float64
+		Count int64
+	}
+	s.db.Model(&models.Expense{}).
+		Where("tenant_id = ? AND date BETWEEN ? AND ? AND tax_amount > 0", tenantID, start, end).
+		Select("COALESCE(SUM(tax_amount), 0) as tax, COUNT(*) as count").
+		Scan(&expenseResult)
+
+	report.InputTax = expenseResult.Tax
+	report.NetVAT = report.OutputTax - report.InputTax
+
+	// Monthly breakdown
+	report.MonthlyBreakdown = s.getMonthlyVATBreakdown(tenantID, start, end)
+
+	// Generate VAT Return
+	report.VATReturn = s.generateVATReturn(report, period, start, end, int(salesResult.Count), int(expenseResult.Count))
 
 	return report, nil
+}
+
+func (s *ReportService) getMonthlyVATBreakdown(tenantID string, start, end time.Time) []MonthlyVAT {
+	var breakdown []MonthlyVAT
+
+	rows, err := s.db.Raw(`
+		SELECT 
+			strftime('%Y-%m', created_at) as month,
+			COALESCE(SUM(total), 0) as sales,
+			COALESCE(SUM(tax_amount), 0) as tax,
+			COUNT(*) as count
+		FROM invoices
+		WHERE tenant_id = ? AND created_at BETWEEN ? AND ?
+		GROUP BY strftime('%Y-%m', created_at)
+		ORDER BY month
+	`, tenantID, start, end).Rows()
+
+	if err != nil {
+		return breakdown
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var m MonthlyVAT
+		var monthStr string
+		rows.Scan(&monthStr, &m.Sales, &m.Tax, &m.InvoiceCount)
+		m.Month = monthStr
+		breakdown = append(breakdown, m)
+	}
+
+	return breakdown
+}
+
+func (s *ReportService) generateVATReturn(report *VATReport, period string, start, end time.Time, invoiceCount, expenseCount int) *VATReturn {
+	vatReturn := &VATReturn{
+		Period:          fmt.Sprintf("%s to %s", start.Format("2006-01-02"), end.Format("2006-01-02")),
+		DeclarationDate: time.Now().Format("2006-01-02"),
+		Box1:            report.OutputTax,  // Output tax
+		Box2:            report.InputTax,  // Input tax
+		Box3:            report.NetVAT,    // Net VAT
+		Box4:            report.TaxableSales + report.ExemptSales, // Taxable + exempt
+		Box5:            report.ExemptSales,
+		Box6:            report.ZeroRatedSales,
+		Box7:            report.TaxableSales,
+		Box8:            report.InputTax,
+		InvoiceCount:    invoiceCount,
+		ExpenseCount:    expenseCount,
+	}
+
+	// Ensure non-negative values for KRA return
+	if vatReturn.Box1 < 0 {
+		vatReturn.Box1 = 0
+	}
+	if vatReturn.Box2 < 0 {
+		vatReturn.Box2 = 0
+	}
+	if vatReturn.Box3 < 0 {
+		vatReturn.Box3 = 0
+	}
+
+	return vatReturn
 }
 
 func (s *ReportService) ExportReport(tenantID, format, reportType, period string) ([]byte, error) {
@@ -635,6 +739,47 @@ func (s *ReportService) toCSV(data interface{}, reportType string) ([]byte, erro
 		lines = append(lines, "Client,Email,Revenue,Invoices,Outstanding")
 		for _, c := range v {
 			lines = append(lines, fmt.Sprintf("%s,%s,%.2f,%d,%.2f", c.Name, c.Email, c.Revenue, c.Invoices, c.Outstanding))
+		}
+
+	case *VATReport:
+		lines = append(lines, "=== VAT Report ===")
+		lines = append(lines, fmt.Sprintf("Period,%s", v.Period))
+		lines = append(lines, fmt.Sprintf("Start Date,%s", v.StartDate))
+		lines = append(lines, fmt.Sprintf("End Date,%s", v.EndDate))
+		lines = append(lines, "")
+		lines = append(lines, "=== Sales Summary ===")
+		lines = append(lines, "Metric,Amount")
+		lines = append(lines, fmt.Sprintf("Taxable Sales,%.2f", v.TaxableSales))
+		lines = append(lines, fmt.Sprintf("Exempt Sales,%.2f", v.ExemptSales))
+		lines = append(lines, fmt.Sprintf("Zero-Rated Sales,%.2f", v.ZeroRatedSales))
+		lines = append(lines, fmt.Sprintf("Total Sales,%.2f", v.TotalSales))
+		lines = append(lines, fmt.Sprintf("Invoice Count,%d", v.InvoiceCount))
+		lines = append(lines, "")
+		lines = append(lines, "=== VAT Summary ===")
+		lines = append(lines, "Metric,Amount")
+		lines = append(lines, fmt.Sprintf("Output Tax (Sales VAT),%.2f", v.OutputTax))
+		lines = append(lines, fmt.Sprintf("Input Tax (Purchase VAT),%.2f", v.InputTax))
+		lines = append(lines, fmt.Sprintf("Net VAT,%.2f", v.NetVAT))
+		lines = append(lines, "")
+		if len(v.MonthlyBreakdown) > 0 {
+			lines = append(lines, "=== Monthly Breakdown ===")
+			lines = append(lines, "Month,Sales,VAT,Invoice Count")
+			for _, m := range v.MonthlyBreakdown {
+				lines = append(lines, fmt.Sprintf("%s,%.2f,%.2f,%d", m.Month, m.Sales, m.Tax, m.InvoiceCount))
+			}
+		}
+		if v.VATReturn != nil {
+			lines = append(lines, "")
+			lines = append(lines, "=== KRA VAT Return ===")
+			lines = append(lines, "Box,Description,Amount")
+			lines = append(lines, fmt.Sprintf("Box1,Output Tax (Sales VAT),%.2f", v.VATReturn.Box1))
+			lines = append(lines, fmt.Sprintf("Box2,Input Tax (Purchase VAT),%.2f", v.VATReturn.Box2))
+			lines = append(lines, fmt.Sprintf("Box3,Net VAT Payable/Receivable,%.2f", v.VATReturn.Box3))
+			lines = append(lines, fmt.Sprintf("Box4,Total Taxable Supplies,%.2f", v.VATReturn.Box4))
+			lines = append(lines, fmt.Sprintf("Box5,Exempt Supplies,%.2f", v.VATReturn.Box5))
+			lines = append(lines, fmt.Sprintf("Box6,Zero-Rated Supplies,%.2f", v.VATReturn.Box6))
+			lines = append(lines, fmt.Sprintf("Box7,Standard-Rated Supplies,%.2f", v.VATReturn.Box7))
+			lines = append(lines, fmt.Sprintf("Box8,Total VAT Claimed,%.2f", v.VATReturn.Box8))
 		}
 
 	case *FraudRiskReport:

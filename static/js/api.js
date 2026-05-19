@@ -1051,6 +1051,10 @@ const InvoiceFastAPI = {
             return InvoiceFastAPI.request('/tenant/billing/plans');
         },
         
+        async getExchangeRates() {
+            return InvoiceFastAPI.request('/tenant/billing/exchange-rates');
+        },
+        
         async createCheckoutSession(data) {
             return InvoiceFastAPI.request('/tenant/billing/checkout', {
                 method: 'POST',

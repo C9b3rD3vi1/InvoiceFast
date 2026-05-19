@@ -24,13 +24,6 @@ func NewWebhookVerifierMiddleware(verifier *services.WebhookVerifier) *WebhookVe
 // This middleware verifies the callback BEFORE any business logic runs
 func (m *WebhookVerifierMiddleware) MpesaVerification() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Get client IP for allowlist verification
-		ip := c.IP()
-		if xff := c.Get("X-Forwarded-For"); xff != "" {
-			parts := strings.Split(xff, ",")
-			ip = strings.TrimSpace(parts[0])
-		}
-
 		// Get signature from header
 		signature := c.Get("X-Mpesa-Signature")
 
@@ -44,8 +37,8 @@ func (m *WebhookVerifierMiddleware) MpesaVerification() fiber.Handler {
 		}
 
 		// Verify callback using the webhook verifier
-		callback, err := m.verifier.VerifyMpesaCallback(body, signature, ip)
-		if err != nil {
+		result := m.verifier.VerifyMpesaCallback(body, signature)
+		if !result.Valid {
 			// Log security failure - but don't expose internal details
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "callback verification failed",
@@ -53,10 +46,10 @@ func (m *WebhookVerifierMiddleware) MpesaVerification() fiber.Handler {
 			})
 		}
 
-		// Store verified callback data in context for handler to use
-		// Use the same STKCallback type that MPesaService expects
-		c.Locals("mpesa_callback", callback)
+		// Store verified callback data in context
 		c.Locals("webhook_verified", true)
+		c.Locals("webhook_provider", "mpesa")
+		c.Locals("webhook_timestamp", result.Timestamp)
 
 		return c.Next()
 	}
@@ -65,13 +58,6 @@ func (m *WebhookVerifierMiddleware) MpesaVerification() fiber.Handler {
 // IntasendVerification verifies Intasend webhook signatures
 func (m *WebhookVerifierMiddleware) IntasendVerification() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Get client IP
-		ip := c.IP()
-		if xff := c.Get("X-Forwarded-For"); xff != "" {
-			parts := strings.Split(xff, ",")
-			ip = strings.TrimSpace(parts[0])
-		}
-
 		// Get signature and timestamp headers
 		signature := c.Get("X-Intasend-Signature")
 		if signature == "" {
@@ -89,8 +75,8 @@ func (m *WebhookVerifierMiddleware) IntasendVerification() fiber.Handler {
 		}
 
 		// Verify webhook
-		event, err := m.verifier.VerifyIntasendWebhook(body, signature, timestamp, ip)
-		if err != nil {
+		result := m.verifier.VerifyIntasendWebhook(body, signature, timestamp)
+		if !result.Valid {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "webhook verification failed",
 				"code":  "WEBHOOK_VERIFICATION_FAILED",
@@ -98,8 +84,9 @@ func (m *WebhookVerifierMiddleware) IntasendVerification() fiber.Handler {
 		}
 
 		// Store verified event in context
-		c.Locals("intasend_event", event)
 		c.Locals("webhook_verified", true)
+		c.Locals("webhook_provider", "intasend")
+		c.Locals("webhook_timestamp", result.Timestamp)
 
 		return c.Next()
 	}
@@ -147,55 +134,49 @@ func RequireTenantForPrivateRoutes() fiber.Handler {
 			}
 		}
 
-		if isProtected {
-			tenantID := c.Get("X-Tenant-ID")
-			if tenantID == "" {
-				if localTenant, ok := c.Locals("tenant_id").(string); ok {
-					tenantID = localTenant
-				}
-			}
+		// Allow public paths (login, register, public APIs)
+		if !isProtected {
+			return c.Next()
+		}
 
-			if tenantID == "" {
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "tenant context required",
-					"code":  "TENANT_REQUIRED",
-				})
-			}
+		// Check for tenant context
+		tenantID := c.Locals("tenant_id")
+		if tenantID == nil {
+			// Try to get from header
+			tenantID = c.Get("X-Tenant-ID")
+		}
+
+		if tenantID == nil {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "tenant context required",
+				"code":  "TENANT_REQUIRED",
+			})
 		}
 
 		return c.Next()
 	}
 }
 
-// SanitizedErrorResponse returns standardized error without internal details
-func SanitizedErrorResponse(c *fiber.Ctx, status int, code string, message string) error {
-	return c.Status(status).JSON(fiber.Map{
-		"error": message,
-		"code":  code,
-	})
-}
-
-// SecurityHeaders adds security headers
-func SecurityHeaders() fiber.Handler {
+// WebhookTimeoutMiddleware adds timeout to webhook handlers
+func WebhookTimeoutMiddleware(timeout time.Duration) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		c.Set("X-Content-Type-Options", "nosniff")
-		c.Set("X-Frame-Options", "DENY")
-		c.Set("X-XSS-Protection", "1; mode=block")
-		c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		return c.Next()
-	}
-}
-
-// RequestID adds request ID for tracing
-func RequestID() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		reqID := c.Get("X-Request-ID")
-		if reqID == "" {
-			// Generate simple ID - in production use UUID
-			reqID = "req-" + time.Now().Format("20060102150405") + "-" + c.IP()
+		// Only apply to webhook routes
+		if !strings.HasPrefix(c.Path(), "/api/v1/webhook") {
+			return c.Next()
 		}
-		c.Locals("request_id", reqID)
-		c.Set("X-Request-ID", reqID)
-		return c.Next()
+
+		// Fiber handles timeouts via the server config
+		// This middleware is for logging/metrics purposes
+		start := time.Now()
+
+		err := c.Next()
+
+		duration := time.Since(start)
+		if duration > timeout {
+			// Log slow webhook
+			// In production, emit metric
+		}
+
+		return err
 	}
 }
