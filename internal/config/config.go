@@ -23,6 +23,7 @@ type Config struct {
 	SMS         SMSConfig
 	Stripe      StripeConfig
 	QuickBooks  QuickBooksConfig
+	Backup      BackupConfig
 }
 
 type ServerConfig struct {
@@ -156,6 +157,18 @@ type TimeoutsConfig struct {
 	ExternalAPI   time.Duration
 	Request       time.Duration
 	Shutdown      time.Duration // graceful shutdown timeout
+}
+
+type BackupConfig struct {
+	Enabled       bool
+	Schedule      string // cron expression (default: "0 3 * * *" = 3am daily)
+	LocalDir      string // local backup directory
+	S3Bucket      string // S3-compatible bucket name
+	S3Region      string
+	S3Endpoint    string // optional custom endpoint (e.g., MinIO)
+	S3AccessKey   string
+	S3SecretKey   string
+	RetentionDays int    // days to keep backups
 }
 
 type StripeConfig struct {
@@ -307,6 +320,17 @@ func Load() *Config {
 			RealmID:     getEnv("QUICKBOOKS_REALM_ID", ""),
 			Environment: getEnv("QUICKBOOKS_ENVIRONMENT", "sandbox"), // sandbox, production
 			RedirectURI: getEnv("QUICKBOOKS_REDIRECT_URI", ""),
+		},
+		Backup: BackupConfig{
+			Enabled:       getBoolEnv("BACKUP_ENABLED", true),
+			Schedule:      getEnv("BACKUP_SCHEDULE", "0 3 * * *"),
+			LocalDir:      getEnv("BACKUP_LOCAL_DIR", "./data/backups"),
+			S3Bucket:      getEnv("BACKUP_S3_BUCKET", ""),
+			S3Region:      getEnv("BACKUP_S3_REGION", "us-east-1"),
+			S3Endpoint:    getEnv("BACKUP_S3_ENDPOINT", ""),
+			S3AccessKey:   getEnv("BACKUP_S3_ACCESS_KEY", ""),
+			S3SecretKey:   getEnv("BACKUP_S3_SECRET_KEY", ""),
+			RetentionDays: getIntEnv("BACKUP_RETENTION_DAYS", 30),
 		},
 	}
 }

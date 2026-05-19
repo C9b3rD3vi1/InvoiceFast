@@ -1,0 +1,178 @@
+<style>
+.pricing-section{padding:80px 0 120px}
+.pricing-inner{max-width:1200px;margin:0 auto;padding:0 32px}
+.pricing-header{text-align:center;margin-bottom:64px}
+.pricing-toggle-row{display:flex;justify-content:center;margin-bottom:56px}
+.p-toggle{
+  display:inline-flex;background:var(--ink-3);border:1px solid var(--border);
+  border-radius:100px;padding:4px;gap:2px;
+}
+.p-tog-btn{
+  padding:10px 26px;border-radius:100px;font-size:13px;font-weight:700;
+  cursor:pointer;transition:all .25s;border:none;background:transparent;color:var(--muted);
+  font-family:'Nunito Sans',sans-serif;
+}
+.p-tog-btn.on{background:var(--gold);color:var(--void)}
+.save-note{font-size:11px;font-weight:700;color:var(--green);margin-left:6px;
+  background:var(--green-dim);padding:2px 9px;border-radius:100px}
+.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+@media(max-width:1060px){.pricing-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.pricing-grid{grid-template-columns:1fr}}
+.p-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r-xl);
+  padding:40px 32px;display:flex;flex-direction:column;position:relative;
+  transition:all .35s;
+}
+.p-card:hover{border-color:var(--gold-border);transform:translateY(-6px);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.p-card.featured{
+  background:linear-gradient(160deg,rgba(240,180,41,.07) 0%,var(--card) 55%);
+  border-color:var(--gold-border);
+  box-shadow:0 0 0 1px var(--gold-border),0 24px 60px rgba(240,180,41,.12);
+}
+.p-popular-badge{
+  position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  background:var(--gold);color:var(--void);
+  font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;
+  padding:5px 16px;border-radius:100px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;
+}
+.p-tier{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+}
+.p-desc{font-size:13px;color:var(--muted);margin-bottom:28px;line-height:1.55}
+.p-price-wrap{margin-bottom:6px}
+.p-currency{font-size:16px;font-weight:700;color:var(--muted);vertical-align:super;margin-top:8px;display:inline-block}
+.p-amount{
+  font-family:'Playfair Display',serif;font-size:54px;font-weight:900;
+  color:var(--bone);line-height:1;letter-spacing:-.04em;
+}
+.p-period{font-size:14px;color:var(--muted);font-family:'Nunito Sans',sans-serif}
+.p-divider{border:none;border-top:1px solid var(--border);margin-bottom:22px}
+.p-features{list-style:none;flex:1;margin-bottom:28px;display:flex;flex-direction:column;gap:9px}
+.p-feat{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--bone-2)}
+.p-feat i.fa-check{color:var(--green);font-size:12px;margin-top:2px;flex-shrink:0}
+.p-feat i.fa-times{color:var(--faint);font-size:12px;margin-top:2px;flex-shrink:0}
+.p-cta-gold{
+  display:block;width:100%;text-align:center;padding:14px;
+  background:var(--gold);color:var(--void);
+  font-family:'Playfair Display',serif;font-size:15px;font-weight:700;
+  border-radius:var(--r);transition:all .25s;
+}
+.p-cta-gold:hover{background:var(--gold-2);transform:translateY(-2px);box-shadow:0 8px 28px var(--gold-glow)}
+.p-cta-ghost{
+  display:block;width:100%;text-align:center;padding:14px;
+  background:transparent;color:var(--muted);
+  font-size:14px;font-weight:600;border-radius:var(--r);
+  border:1px solid var(--border-2);transition:all .25s;
+}
+.p-cta-ghost:hover{color:var(--gold);border-color:var(--gold-border);background:var(--gold-dim)}
+.p-trial{text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);margin-top:10px}
+</style>
+
+<section class="pricing-section">
+  <div class="pricing-inner">
+    <div class="pricing-header">
+      <div class="section-eyebrow">Pricing</div>
+      <h2 class="section-title">Start Free.<br><em style="font-style:italic;color:var(--gold)">Scale</em> When You Grow.</h2>
+      <p class="section-sub">No hidden fees. No credit card to start. Cancel anytime.</p>
+    </div>
+    <div class="pricing-toggle-row" style="flex-direction:column;align-items:center;gap:18px">
+      <div class="p-toggle">
+        <button class="p-tog-btn on" onclick="setBilling('monthly')">Monthly</button>
+        <button class="p-tog-btn" onclick="setBilling('annual')">Annual <span class="save-note">Save 20%</span></button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+        <i class="fas fa-exchange-alt"></i>
+        <select id="currencySelect" onchange="setCurrency(this.value)" style="background:var(--ink-3);border:1px solid var(--border);border-radius:8px;color:var(--bone);padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Nunito Sans',sans-serif;outline:none">
+        </select>
+      </div>
+    </div>
+    <div class="pricing-grid" id="pricingGrid">
+      <div style="grid-column:1/-1;text-align:center;padding:60px 0;color:var(--muted)"><i class="fas fa-spinner fa-spin"></i> Loading plans...</div>
+    </div>
+  </div>
+</section>
+
+<script>
+const CURRENCY_SYMBOLS = {KES:'KES ',USD:'$',EUR:'€',GBP:'£',TZS:'TZS ',UGX:'UGX ',NGN:'₦'};
+let billing = 'monthly';
+let currency = 'KES';
+let plans = [];
+let rates = {KES:1};
+
+function populateCurrencies() {
+  const sel = document.getElementById('currencySelect');
+  const sorted = Object.keys(rates).sort();
+  sel.innerHTML = sorted.map(c => '<option value="'+c+'"'+(c===currency?' selected':'')+'>'+c+' '+(CURRENCY_SYMBOLS[c]||'')+'</option>').join('');
+}
+
+function formatPrice(kesCents) {
+  const kesRaw = kesCents / 100;
+  const rate = rates[currency] || 1;
+  const converted = kesRaw * rate;
+  const sym = CURRENCY_SYMBOLS[currency] || currency+' ';
+  if (currency==='KES'||currency==='TZS'||currency==='UGX'||currency==='NGN') {
+    return sym + Math.round(converted).toLocaleString();
+  }
+  return sym + converted.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function renderPricing() {
+  const grid = document.getElementById('pricingGrid');
+  if (!plans.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 0;color:var(--muted)">No plans available</div>';
+    return;
+  }
+  grid.innerHTML = plans.map(plan => {
+    const isAnnual = billing === 'annual';
+    const featured = plan.popular ? ' featured' : '';
+    const badge = plan.popular ? '<div class="p-popular-badge">Most Popular</div>' : '';
+    const features = (plan.features || []).map(f =>
+      `<li class="p-feat"><i class="fas fa-check"></i> ${f}</li>`
+    ).join('');
+    let priceHtml;
+    if (plan.custom_price) {
+      priceHtml = '<div class="p-price-wrap" style="padding:18px 0"><span style="font-size:28px;font-weight:700;color:var(--bone)">Contact Us</span></div>';
+    } else {
+      const rawPrice = isAnnual ? plan.yearly_price_kes : plan.monthly_price_kes;
+      const displayPrice = isAnnual ? rawPrice / 12 : rawPrice;
+      const price = formatPrice(displayPrice);
+      const billingNote = isAnnual ? '<div style="font-size:11px;color:var(--muted);margin-top:2px">billed annually — '+formatPrice(rawPrice)+' /yr</div>' : '';
+      priceHtml = '<div class="p-price-wrap"><span class="p-amount">' + price + '</span><span class="p-period"> /month</span>' + billingNote + '</div>';
+    }
+    return `
+      <div class="p-card${featured}">
+        ${badge}
+        <div class="p-tier">${plan.name}</div>
+        <div class="p-desc">${plan.description || ''}</div>
+        ${priceHtml}
+        <hr class="p-divider">
+        <ul class="p-features">${features}</ul>
+        <a href="/register" class="${plan.custom_price ? 'p-cta-ghost' : (plan.popular ? 'p-cta-gold' : 'p-cta-ghost')}">${plan.custom_price ? 'Contact Sales →' : 'Get Started →'}</a>
+      </div>
+    `;
+  }).join('');
+}
+
+function setBilling(val) {
+  billing = val;
+  document.querySelectorAll('.p-tog-btn').forEach(b => b.classList.toggle('on', b.textContent.trim().toLowerCase().includes(val)));
+  renderPricing();
+}
+
+function setCurrency(val) {
+  currency = val;
+  renderPricing();
+}
+
+fetch('/api/v1/pricing')
+  .then(r => r.json())
+  .then(data => {
+    if (data.plans) plans = data.plans;
+    if (data.rates) { rates = data.rates; rates.KES = 1; populateCurrencies(); }
+    renderPricing();
+  })
+  .catch(() => {
+    document.getElementById('pricingGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 0;color:var(--muted)">Unable to load pricing. Please refresh.</div>';
+  });
+</script>

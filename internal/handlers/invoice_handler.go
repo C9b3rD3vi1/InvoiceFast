@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"time"
 
+	"invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/pdf"
@@ -400,25 +400,25 @@ func (h *InvoiceHandler) GetInvoicePDF(c *fiber.Ctx) error {
 	// Generate HTML for the invoice using the preloaded User
 	htmlContent, err := h.pdfService.GenerateInvoiceHTML(invoice, &invoice.User)
 	if err != nil {
-		log.Printf("HTML generation failed for %s: %v", invoiceID, err)
+		logger.Get().Error(c.UserContext(), "HTML generation failed", "invoice_id", invoiceID, "error", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate invoice HTML"})
 	}
-	log.Printf("HTML generated for %s, length: %d", invoice.InvoiceNumber, len(htmlContent))
+	logger.Get().Info(c.UserContext(), "HTML generated", "invoice_number", invoice.InvoiceNumber, "length", len(htmlContent))
 
 	// Generate PDF if generator is available
 	if h.pdfGenerator != nil {
-		log.Printf("PDF generator available, generating PDF for %s", invoice.InvoiceNumber)
+		logger.Get().Info(c.UserContext(), "PDF generator available, generating PDF", "invoice_number", invoice.InvoiceNumber)
 		pdfOutput, err := h.pdfGenerator.HtmlToPDF(htmlContent, invoice.InvoiceNumber)
 		if err == nil && pdfOutput != nil && len(pdfOutput.Content) > 0 {
-			log.Printf("PDF generated successfully for %s, size: %d bytes", invoice.InvoiceNumber, len(pdfOutput.Content))
+			logger.Get().Info(c.UserContext(), "PDF generated successfully", "invoice_number", invoice.InvoiceNumber, "size_bytes", len(pdfOutput.Content))
 			c.Set("Content-Type", "application/pdf")
 			c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", pdfOutput.Filename))
 			return c.Send(pdfOutput.Content)
 		}
 		// Fallback to HTML if PDF generation fails
-		log.Printf("PDF generation failed for %s: %v, html length: %d, falling back to HTML", invoice.InvoiceNumber, err, len(htmlContent))
+		logger.Get().Error(c.UserContext(), "PDF generation failed, falling back to HTML", "invoice_number", invoice.InvoiceNumber, "error", err, "html_length", len(htmlContent))
 	} else {
-		log.Printf("PDF generator is nil, falling back to HTML")
+		logger.Get().Warn(c.UserContext(), "PDF generator is nil, falling back to HTML")
 	}
 
 	// Fallback to HTML download

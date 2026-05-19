@@ -2,10 +2,10 @@ package services
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"invoicefast/internal/cache"
+	"invoicefast/internal/logger"
 )
 
 type IdempotencyService struct {
@@ -45,27 +45,27 @@ func (s *IdempotencyService) HandlePaymentCallback(ctx context.Context, checkout
 
 	acquired, err := s.cache.Lock(ctx, lockKey, 5*time.Minute)
 	if err != nil {
-		log.Printf("[Idempotency] Error acquiring lock for %s: %v", checkoutID, err)
+		logger.Get().Error(ctx, "Error acquiring lock", "checkout_id", checkoutID, "error", err)
 		return false, err
 	}
 
 	if !acquired {
-		log.Printf("[Idempotency] Lock already held for %s - returning 200 to stop retries", checkoutID)
+		logger.Get().Warn(ctx, "Lock already held - returning 200 to stop retries", "checkout_id", checkoutID)
 		return true, nil
 	}
 
 	processedKey := "payment:processed:" + checkoutID
 	exists, err := s.cache.Exists(ctx, processedKey)
 	if err == nil && exists {
-		log.Printf("[Idempotency] Payment %s already processed - releasing lock and returning 200", checkoutID)
+		logger.Get().Info(ctx, "Payment already processed - releasing lock and returning 200", "checkout_id", checkoutID)
 		_ = s.cache.Unlock(ctx, lockKey)
 		return true, nil
 	}
 
 	if err := s.cache.Set(ctx, processedKey, payload, 24*time.Hour); err != nil {
-		log.Printf("[Idempotency] Warning: failed to mark payment %s as processed: %v", checkoutID, err)
+		logger.Get().Warn(ctx, "Failed to mark payment as processed", "checkout_id", checkoutID, "error", err)
 	}
 
-	log.Printf("[Idempotency] New payment %s - processing callback", checkoutID)
+	logger.Get().Info(ctx, "New payment - processing callback", "checkout_id", checkoutID)
 	return false, nil
 }

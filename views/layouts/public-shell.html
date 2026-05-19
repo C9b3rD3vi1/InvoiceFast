@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{.Title}} — InvoiceFast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=JetBrains+Mono:wght@400;500;600&family=Nunito+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --void:#07070A; --ink-1:#0E0E14; --ink-2:#15151E; --ink-3:#1C1C28;
+  --ink-4:#242433; --card:#141420;
+  --gold:#F0B429; --gold-2:#F5C842; --gold-3:#FBE08A;
+  --gold-dim:rgba(240,180,41,.10); --gold-glow:rgba(240,180,41,.18);
+  --gold-border:rgba(240,180,41,.22);
+  --violet:#5B21B6; --violet-3:#A78BFA; --violet-dim:rgba(91,33,182,.12);
+  --green:#10B981; --green-dim:rgba(16,185,129,.1);
+  --red:#F43F5E; --red-dim:rgba(244,63,94,.1);
+  --bone:#FAF7F0; --bone-2:#EDE8DF; --bone-3:#D6D0C4;
+  --muted:#7A7A8C; --faint:#45455A; --ghost:rgba(250,247,240,.04);
+  --border:rgba(250,247,240,.07); --border-2:rgba(250,247,240,.13);
+  --border-gold:rgba(240,180,41,.18);
+  --r:8px; --r-md:14px; --r-lg:20px; --r-xl:28px;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--void);color:var(--bone);
+  font-family:'Nunito Sans',sans-serif;font-size:16px;line-height:1.65;min-height:100vh;
+}
+h1,h2,h3{font-family:'Playfair Display',serif}
+a{text-decoration:none;color:inherit}
+
+/* ━━━━ SCROLLBAR ━━━━ */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--void)}
+::-webkit-scrollbar-thumb{background:var(--gold);border-radius:2px}
+
+/* ━━━━ NAV ━━━━ */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  height:66px;display:flex;align-items:center;
+  background:rgba(7,7,10,.82);backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border);
+  transition:background .3s;
+}
+.nav.solid{background:rgba(7,7,10,.98)}
+.nav-inner{
+  max-width:1200px;margin:0 auto;padding:0 32px;
+  display:flex;align-items:center;width:100%;gap:40px;
+}
+.logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.logo-mark{
+  width:36px;height:36px;background:var(--gold);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;
+}
+.logo-mark img{width:22px;height:22px;object-fit:contain}
+.logo-name{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--bone);letter-spacing:-.02em}
+.logo-name span{color:var(--gold)}
+.nav-links{display:flex;gap:2px;flex:1}
+.nav-links a{
+  font-size:14px;font-weight:600;color:var(--muted);
+  padding:8px 14px;border-radius:var(--r);transition:all .2s;
+}
+.nav-links a:hover{color:var(--bone);background:var(--ghost)}
+.nav-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+.btn-nav-ghost{
+  font-size:14px;font-weight:600;color:var(--muted);
+  padding:9px 18px;border:1px solid var(--border-2);border-radius:var(--r);transition:all .2s;
+}
+.btn-nav-ghost:hover{color:var(--bone);border-color:var(--bone-3)}
+.btn-nav-gold{
+  font-family:'Playfair Display',serif;font-size:14px;font-weight:700;
+  color:var(--void);background:var(--gold);padding:10px 22px;border-radius:var(--r);
+  transition:all .2s;letter-spacing:-.01em;
+}
+.btn-nav-gold:hover{background:var(--gold-2);transform:translateY(-1px);box-shadow:0 6px 24px var(--gold-glow)}
+@media(max-width:768px){.nav-links{display:none}}
+
+/* ━━━━ PAGE LAYOUT ━━━━ */
+.page-wrap{min-height:100vh;display:flex;flex-direction:column;padding-top:66px}
+main{flex:1}
+.page-section{max-width:1100px;margin:0 auto;padding:0 32px}
+
+/* ━━━━ CARDS ━━━━ */
+.card{
+  background:var(--card);border:1px solid var(--border-2);
+  border-radius:var(--r-xl);padding:44px 40px;
+}
+.card h2{font-size:22px;font-weight:700;color:var(--bone);letter-spacing:-.02em;margin-bottom:28px}
+.card-title{font-size:26px;font-weight:700;color:var(--bone);letter-spacing:-.02em;margin-bottom:6px}
+.card-sub{font-size:15px;color:var(--muted);margin-bottom:32px}
+
+/* ━━━━ FORMS ━━━━ */
+.field{margin-bottom:18px}
+.field-label{display:block;font-size:13px;font-weight:600;color:var(--bone-2);margin-bottom:8px}
+.field-input,.field-select{
+  width:100%;padding:12px 16px;
+  background:var(--ink-2);border:1px solid var(--border);border-radius:var(--r);
+  color:var(--bone);font-family:'Nunito Sans',sans-serif;font-size:15px;
+  transition:all .25s;outline:none;
+}
+.field-input::placeholder{color:var(--faint)}
+.field-input:focus,.field-select:focus{border-color:var(--gold-border);box-shadow:0 0 0 3px var(--gold-dim)}
+.field-select{
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237A7A8C' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;cursor:pointer;
+}
+.field-select option{background:var(--ink-2);color:var(--bone)}
+.field-hint{font-size:11px;color:var(--faint);margin-top:6px;line-height:1.5}
+textarea.field-input{resize:vertical;min-height:120px}
+
+/* ━━━━ BUTTONS ━━━━ */
+.btn-primary{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  width:100%;padding:14px 24px;
+  background:var(--gold);color:var(--void);
+  font-family:'Playfair Display',serif;font-size:16px;font-weight:700;
+  border-radius:var(--r);border:none;cursor:pointer;
+  transition:all .25s;letter-spacing:-.01em;
+}
+.btn-primary:hover{background:var(--gold-2);transform:translateY(-2px);box-shadow:0 8px 28px var(--gold-glow)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ━━━━ MESSAGES ━━━━ */
+.error-msg{padding:12px 16px;background:var(--red-dim);border:1px solid rgba(244,63,94,.25);border-radius:var(--r);color:var(--red);font-size:13px;text-align:center;margin-bottom:16px}
+.success-msg{padding:16px;background:var(--green-dim);border:1px solid rgba(16,185,129,.25);border-radius:var(--r);margin-bottom:20px;display:flex;align-items:center;gap:10px}
+.success-msg i{color:var(--green);font-size:18px;flex-shrink:0}
+.success-msg p{color:var(--green);font-size:14px}
+.hidden{display:none}
+.spinner{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ━━━━ FOOTER LINKS (within content) ━━━━ */
+.footer-link{text-align:center;margin-top:20px}
+.footer-link a{color:var(--muted);font-size:14px;transition:color .2s}
+.footer-link a:hover{color:var(--gold)}
+.footer-link span{color:var(--muted);font-size:14px}
+.footer-link span a{color:var(--gold);font-weight:600}
+
+/* ━━━━ FOOTER ━━━━ */
+.footer{background:var(--void);border-top:1px solid var(--border);padding:80px 0 40px}
+.footer-inner{max-width:1200px;margin:0 auto;padding:0 32px}
+.footer-top{display:grid;grid-template-columns:2.5fr 1fr 1fr 1fr;gap:48px;margin-bottom:60px}
+@media(max-width:860px){.footer-top{grid-template-columns:1fr 1fr}}
+.footer-brand .logo{margin-bottom:16px}
+.footer-brand p{font-size:14px;color:var(--muted);max-width:280px;line-height:1.75;margin-bottom:20px}
+.footer-socials{display:flex;gap:8px}
+.f-soc{
+  width:36px;height:36px;border:1px solid var(--border);border-radius:var(--r);
+  display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--muted);
+  transition:all .2s;
+}
+.f-soc:hover{color:var(--gold);border-color:var(--gold-border);background:var(--gold-dim)}
+.footer-col h5{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:18px;
+}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+.footer-col ul li a{font-size:14px;color:var(--muted);transition:color .2s}
+.footer-col ul li a:hover{color:var(--gold)}
+.footer-bottom{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;
+  border-top:1px solid var(--border);padding-top:28px;
+}
+.footer-copy{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--faint)}
+.footer-copy strong{color:var(--gold)}
+.footer-badges{display:flex;gap:10px;flex-wrap:wrap}
+.f-badge{
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  padding:5px 12px;border:1px solid var(--border);border-radius:5px;color:var(--faint);
+  display:flex;align-items:center;gap:5px;
+}
+.f-badge i{font-size:10px}
+</style>
+</head>
+<body>
+
+<!-- ━━━━━━━━━━━━━━ NAV ━━━━━━━━━━━━━━ -->
+<nav class="nav" id="mainNav">
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-mark"><img src="/static/images/logo/logo.png" alt="InvoiceFast"></div>
+      <span class="logo-name">Invoice<span>Fast</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="/features">Features</a>
+      <a href="/#how">How It Works</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/faq">FAQ</a>
+      <a href="/contact">Contact</a>
+    </div>
+    <div class="nav-right">
+      <a href="/login" class="btn-nav-ghost">Sign In</a>
+      <a href="/register" class="btn-nav-gold">Start Free →</a>
+    </div>
+  </div>
+</nav>
+
+<div class="page-wrap">
+<main>
+{{embed}}
+</main>
+
+<!-- ━━━━━━━━━━━━━━ FOOTER ━━━━━━━━━━━━━━ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a href="/" class="logo">
+          <div class="logo-mark" style="width:32px;height:32px">
+            <img src="/static/images/logo/logo.png" alt="InvoiceFast" style="width:20px;height:20px;object-fit:contain;">
+          </div>
+          <span class="logo-name" style="font-size:18px">Invoice<span>Fast</span></span>
+        </a>
+        <p>Professional invoicing with M-Pesa integration for African freelancers and agencies. Built in Nairobi. Powering African business payments.</p>
+        <div class="footer-socials">
+          <a href="#" class="f-soc"><i class="fab fa-twitter"></i></a>
+          <a href="#" class="f-soc"><i class="fab fa-linkedin"></i></a>
+          <a href="https://github.com/C9b3rD3vi1/invoicefast" class="f-soc"><i class="fab fa-github"></i></a>
+          <a href="#" class="f-soc"><i class="fab fa-instagram"></i></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Product</h5>
+        <ul>
+          <li><a href="/features">Features</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="https://docs.invoice.simuxtech.com">API Docs</a></li>
+          <li><a href="#">Changelog</a></li>
+          <li><a href="#">Status</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Resources</h5>
+        <ul>
+          <li><a href="https://help.invoice.simuxtech.com">Help Center</a></li>
+          <li><a href="#">Blog</a></li>
+          <li><a href="https://community.simuxtech.com">Community</a></li>
+          <li><a href="#">Invoice Templates</a></li>
+          <li><a href="#">Integrations</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Company</h5>
+        <ul>
+          <li><a href="#">About</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="mailto:enterprise@simuxtech.com">Enterprise</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">© 2026 <strong>InvoiceFast</strong> by SimuxTech · Nairobi, Kenya · MIT License</div>
+      <div class="footer-badges">
+        <span class="f-badge"><i class="fas fa-shield-alt"></i> SOC 2 Type II</span>
+        <span class="f-badge"><i class="fas fa-mobile-alt"></i> Safaricom Certified</span>
+        <span class="f-badge"><i class="fab fa-github"></i> Open Source</span>
+        <span class="f-badge"><i class="fas fa-lock"></i> AES-256</span>
+      </div>
+    </div>
+  </div>
+</footer>
+</div>
+
+<script>
+// Nav scroll
+const nav = document.getElementById('mainNav');
+window.addEventListener('scroll', () => nav.classList.toggle('solid', scrollY > 80));
+</script>
+
+</body>
+</html>

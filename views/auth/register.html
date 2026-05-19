@@ -1,280 +1,154 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - InvoiceFast</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        .page-wrapper { min-height: 100vh; display: flex; flex-direction: column; }
-        main { flex: 1; display: flex; align-items: center; justify-content: center; }
-    </style>
-</head>
-<body class="bg-slate-50">
-    <div class="page-wrapper">
-        <nav class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between h-16">
-                    <a href="/" class="flex items-center gap-2">
-                        <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-10 w-auto">
-                    </a>
-                    <div class="hidden md:flex items-center gap-6">
-                        <a href="/" class="text-slate-600 hover:text-trust transition-colors font-medium">Home</a>
-                        <a href="/#features" class="text-slate-600 hover:text-trust transition-colors font-medium">Features</a>
-                        <a href="/#pricing" class="text-slate-600 hover:text-trust transition-colors font-medium">Pricing</a>
-                    </div>
-                    <div class="hidden md:flex items-center gap-3">
-                        <a href="/login" class="text-slate-600 hover:text-trust font-medium px-4 py-2">Login</a>
-                    </div>
-                    <button class="md:hidden p-2 text-slate-600" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-200 px-4 py-3">
-                <a href="/" class="block py-2 text-slate-600">Home</a>
-                <a href="/#features" class="block py-2 text-slate-600">Features</a>
-                <a href="/#pricing" class="block py-2 text-slate-600">Pricing</a>
-                <hr class="my-2 border-slate-200">
-                <a href="/login" class="block py-2 text-slate-600">Login</a>
-            </div>
-        </nav>
+<style>
+.auth-center{display:flex;align-items:center;justify-content:center;padding:32px 20px}
+.auth-card{max-width:620px;width:100%;padding:32px 36px}
+.auth-card .card-title{font-size:22px;margin-bottom:4px}
+.auth-card .card-sub{font-size:14px;margin-bottom:24px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;margin-bottom:14px}
+.auth-card .field{margin-bottom:0}
+.auth-card .field-hint{font-size:10px;margin-top:4px}
+</style>
 
-        <main>
-            <div class="w-full max-w-md px-4 py-8">
-                <div class="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
-                    <div class="text-center mb-8">
-                        <h1 class="text-2xl font-bold text-slate-800">Create your account</h1>
-                        <p class="text-slate-500 mt-1">Start invoicing in minutes</p>
-                    </div>
+<div class="auth-center">
+  <div class="card auth-card">
+    <div class="card-title">Create your account</div>
+    <p class="card-sub">Start invoicing in minutes</p>
 
-                    <form id="registerForm">
-                        <div class="space-y-5">
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
-                                <input type="text" name="name" id="name" required 
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="John Doe">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Business Name</label>
-                                <input type="text" name="company" id="company" required 
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="Your Business Ltd">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Email</label>
-                                <input type="email" name="email" id="email" required 
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="you@example.com">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Phone (for M-Pesa)</label>
-                                <input type="tel" name="phone" id="phone" required 
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="254712345678">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">KRA PIN (Optional)</label>
-                                <input type="text" name="kra_pin" id="kra_pin" 
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="A0000000000">
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Default Currency</label>
-                                <select name="currency" id="currency" required
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition">
-                                    <option value="KES" selected>KES - Kenyan Shilling</option>
-                                    <option value="USD">USD - US Dollar</option>
-                                    <option value="EUR">EUR - Euro</option>
-                                    <option value="GBP">GBP - British Pound</option>
-                                    <option value="TZS">TZS - Tanzanian Shilling</option>
-                                    <option value="UGX">UGX - Ugandan Shilling</option>
-                                    <option value="NGN">NGN - Nigerian Naira</option>
-                                </select>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
-                                <input type="password" name="password" id="password" required minlength="8"
-                                    class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                    placeholder="Min 8 chars with uppercase, number, special">
-                                <p class="text-xs text-slate-500 mt-1">Must have: uppercase, lowercase, number, special char (!@#$%...)</p>
-                            </div>
-                            
-                            <div id="errorMessage" class="text-red-600 text-sm text-center hidden"></div>
-                            
-                            <button type="submit" id="submitBtn"
-                                class="w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center justify-center disabled:opacity-50">
-                                <span id="btnText">Create Account</span>
-                                <span id="loadingSpinner" class="hidden">
-                                    <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                </span>
-                            </button>
-                        </div>
-                    </form>
+    <form id="registerForm">
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label">Full Name</label>
+          <input type="text" class="field-input" id="name" placeholder="John Doe" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Business Name</label>
+          <input type="text" class="field-input" id="company" placeholder="Your Business Ltd" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label">Email</label>
+          <input type="email" class="field-input" id="email" placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Phone (for M-Pesa)</label>
+          <input type="tel" class="field-input" id="phone" placeholder="254712345678" required>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label class="field-label">KRA PIN <span style="color:var(--faint)">(optional)</span></label>
+          <input type="text" class="field-input" id="kra_pin" placeholder="A0000000000">
+        </div>
+        <div class="field">
+          <label class="field-label">Default Currency</label>
+          <select class="field-select" id="currency" required>
+            <option value="KES">KES — Kenyan Shilling</option>
+            <option value="USD">USD — US Dollar</option>
+            <option value="EUR">EUR — Euro</option>
+            <option value="GBP">GBP — British Pound</option>
+            <option value="TZS">TZS — Tanzanian Shilling</option>
+            <option value="UGX">UGX — Ugandan Shilling</option>
+            <option value="NGN">NGN — Nigerian Naira</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Password</label>
+        <input type="password" class="field-input" id="password" placeholder="Min 8 chars with uppercase, number, special" minlength="8" required>
+        <div class="field-hint">Must have: uppercase, lowercase, number, special char (!@#$%^&*)</div>
+      </div>
 
-                    <script>
-                        function validatePassword(pw) {
-                            if (pw.length < 8) return 'Password must be at least 8 characters';
-                            if (!/[A-Z]/.test(pw)) return 'Password must have an uppercase letter';
-                            if (!/[a-z]/.test(pw)) return 'Password must have a lowercase letter';
-                            if (!/[0-9]/.test(pw)) return 'Password must have a number';
-                            if (!/[!@#$%^&*]/.test(pw)) return 'Password must have a special character (!@#$%^&*)';
-                            return null;
-                        }
-                        
-                        async function handleRegister(e) {
-                            e.preventDefault();
-                            
-                            const name = document.getElementById('name').value.trim();
-                            const company = document.getElementById('company').value.trim();
-                            const email = document.getElementById('email').value.trim();
-                            const phone = document.getElementById('phone').value.trim();
-                            const kra_pin = document.getElementById('kra_pin').value.trim();
-                            const currency = document.getElementById('currency').value;
-                            const password = document.getElementById('password').value;
-                            const errorDiv = document.getElementById('errorMessage');
-                            const submitBtn = document.getElementById('submitBtn');
-                            const btnText = document.getElementById('btnText');
-                            const spinner = document.getElementById('loadingSpinner');
-                            
-                            // Validation
-                            if (!name || !company || !email || !phone || !password) {
-                                errorDiv.textContent = 'Please fill in all required fields';
-                                errorDiv.classList.remove('hidden');
-                                return;
-                            }
-                            
-                            if (!email.includes('@') || !email.includes('.')) {
-                                errorDiv.textContent = 'Please enter a valid email address';
-                                errorDiv.classList.remove('hidden');
-                                return;
-                            }
-                            
-                            if (!/^254/.test(phone) && !/^07/.test(phone)) {
-                                errorDiv.textContent = 'Phone must start with 254 or 07';
-                                errorDiv.classList.remove('hidden');
-                                return;
-                            }
-                            
-                            const pwError = validatePassword(password);
-                            if (pwError) {
-                                errorDiv.textContent = pwError;
-                                errorDiv.classList.remove('hidden');
-                                return;
-                            }
-                            
-                            errorDiv.classList.add('hidden');
-                            submitBtn.disabled = true;
-                            btnText.classList.add('hidden');
-                            spinner.classList.remove('hidden');
-                            
-                            try {
-                                const res = await fetch('/api/v1/auth/register', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        name,
-                                        company_name: company,
-                                        email,
-                                        phone,
-                                        kra_pin,
-                                        currency,
-                                        password
-                                    })
-                                });
-                                
-                                const data = await res.json();
-                                
-                                if (res.ok && data.access_token) {
-                                    localStorage.setItem('accessToken', data.access_token);
-                                    localStorage.setItem('token', data.access_token);
-                                    localStorage.setItem('refreshToken', data.refresh_token);
-                                    if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
-                                    window.location.href = '/dashboard';
-                                    return;
-                                }
-                                
-                                // Handle specific errors
-                                if (res.status === 400) {
-                                    if (data.error) {
-                                        if (data.error.includes('email')) {
-                                            errorDiv.textContent = 'This email is already registered';
-                                        } else if (data.error.includes('password')) {
-                                            errorDiv.textContent = 'Password ' + data.error;
-                                        } else {
-                                            errorDiv.textContent = data.error;
-                                        }
-                                    } else {
-                                        errorDiv.textContent = 'Please check your information and try again';
-                                    }
-                                } else if (res.status === 429) {
-                                    errorDiv.textContent = 'Too many attempts. Please wait and try again.';
-                                } else if (data.error) {
-                                    errorDiv.textContent = data.error;
-                                } else {
-                                    errorDiv.textContent = 'Registration failed. Please try again.';
-                                }
-                                errorDiv.classList.remove('hidden');
-                            } catch(err) {
-                                errorDiv.textContent = 'Network error. Please check your connection and try again.';
-                                errorDiv.classList.remove('hidden');
-                            } finally {
-                                submitBtn.disabled = false;
-                                btnText.classList.remove('hidden');
-                                spinner.classList.add('hidden');
-                            }
-                        }
-                        
-                        document.getElementById('registerForm').addEventListener('submit', handleRegister);
-                    </script>
-                    
-                    <div class="mt-6 text-center">
-                        <p class="text-slate-600">Already have an account? 
-                            <a href="/login" class="text-trust font-medium hover:underline">Sign in</a>
-                        </p>
-                    </div>
-                </div>
-                
-                <div class="mt-6 text-center">
-                    <a href="/" class="text-slate-500 hover:text-trust text-sm">← Back to home</a>
-                </div>
-            </div>
-        </main>
+      <div id="errorMessage" class="error-msg hidden" style="margin-bottom:12px"></div>
 
-        <footer class="bg-slate-900 text-slate-300">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-                    <p class="text-sm text-slate-400">&copy; 2026 InvoiceFast. All rights reserved.</p>
-                    <div class="flex items-center gap-4">
-                        <a href="/privacy" class="text-slate-400 hover:text-white text-sm">Privacy</a>
-                        <a href="/terms" class="text-slate-400 hover:text-white text-sm">Terms</a>
-                    </div>
-                </div>
-            </div>
-        </footer>
+      <button type="submit" id="submitBtn" class="btn-primary">
+        <span id="btnText">Create Account</span>
+        <svg id="loadingSpinner" class="hidden spinner" width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity=".25"/>
+          <path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </form>
+
+    <div class="footer-link">
+      <span>Already have an account? <a href="/login">Sign in</a></span>
     </div>
-</body>
-</html>
+    <div class="footer-link"><a href="/">← Back to home</a></div>
+  </div>
+</div>
+
+<script>
+function validatePassword(pw) {
+  if (pw.length < 8) return 'Password must be at least 8 characters';
+  if (!/[A-Z]/.test(pw)) return 'Password must have an uppercase letter';
+  if (!/[a-z]/.test(pw)) return 'Password must have a lowercase letter';
+  if (!/[0-9]/.test(pw)) return 'Password must have a number';
+  if (!/[!@#$%^&*]/.test(pw)) return 'Password must have a special character (!@#$%^&*)';
+  return null;
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const company = document.getElementById('company').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  const kra_pin = document.getElementById('kra_pin').value.trim();
+  const currency = document.getElementById('currency').value;
+  const password = document.getElementById('password').value;
+  const errorDiv = document.getElementById('errorMessage');
+  const submitBtn = document.getElementById('submitBtn');
+  const btnText = document.getElementById('btnText');
+  const spinner = document.getElementById('loadingSpinner');
+
+  if (!name || !company || !email || !phone || !password) {
+    errorDiv.textContent = 'Please fill in all required fields';
+    errorDiv.classList.remove('hidden'); return;
+  }
+  if (!email.includes('@') || !email.includes('.')) {
+    errorDiv.textContent = 'Please enter a valid email address';
+    errorDiv.classList.remove('hidden'); return;
+  }
+  if (!/^254/.test(phone) && !/^07/.test(phone)) {
+    errorDiv.textContent = 'Phone must start with 254 or 07';
+    errorDiv.classList.remove('hidden'); return;
+  }
+  const pwError = validatePassword(password);
+  if (pwError) { errorDiv.textContent = pwError; errorDiv.classList.remove('hidden'); return; }
+
+  errorDiv.classList.add('hidden');
+  submitBtn.disabled = true;
+  btnText.classList.add('hidden');
+  spinner.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, company_name: company, email, phone, kra_pin, currency, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.access_token) {
+      localStorage.setItem('accessToken', data.access_token);
+      localStorage.setItem('token', data.access_token);
+      localStorage.setItem('refreshToken', data.refresh_token);
+      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+      window.location.href = '/dashboard';
+      return;
+    }
+    if (res.status === 400) {
+      if (data.error && data.error.includes('email')) errorDiv.textContent = 'This email is already registered';
+      else errorDiv.textContent = data.error || 'Please check your information and try again';
+    } else if (res.status === 429) errorDiv.textContent = 'Too many attempts. Please wait and try again.';
+    else errorDiv.textContent = data.error || 'Registration failed. Please try again.';
+    errorDiv.classList.remove('hidden');
+  } catch {
+    errorDiv.textContent = 'Network error. Please check your connection and try again.';
+    errorDiv.classList.remove('hidden');
+  } finally {
+    submitBtn.disabled = false;
+    btnText.classList.remove('hidden');
+    spinner.classList.add('hidden');
+  }
+}
+document.getElementById('registerForm').addEventListener('submit', handleRegister);
+</script>

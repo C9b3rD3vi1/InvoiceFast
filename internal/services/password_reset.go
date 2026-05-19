@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -8,12 +9,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"golang.org/x/crypto/bcrypt"
@@ -54,7 +55,7 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 	if err := s.db.First(&user, "email = ? AND is_active = ?", email, true).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// Return success even if user doesn't exist (security: don't reveal)
-			log.Printf("[SECURITY] Password reset attempted for non-existent email (masked: ***@%s)", extractDomain(email))
+			logger.Get().Info(context.Background(), "Password reset attempted for non-existent email", "category", "security", "domain", extractDomain(email))
 			return nil, nil
 		}
 		return nil, fmt.Errorf("database error: %w", err)
@@ -70,14 +71,14 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 	}
 
 	if recentCount >= 3 {
-		log.Printf("[SECURITY] Rate limited password reset for user: %s", user.ID)
+		logger.Get().Warn(context.Background(), "Rate limited password reset", "category", "security", "user_id", user.ID)
 		return nil, ErrRateLimited
 	}
 
 	// 3. Invalidate any existing tokens for this user
 	if err := s.db.Where("user_id = ? AND used_at IS NULL", user.ID).
 		Delete(&models.PasswordResetToken{}).Error; err != nil {
-		log.Printf("Warning: failed to invalidate old tokens: %v", err)
+		logger.Get().Warn(context.Background(), "Failed to invalidate old tokens", "error", err)
 	}
 
 	// 4. Generate new secure token
@@ -108,7 +109,7 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("Panic in send reset email: %v", r)
+					logger.Get().Error(context.Background(), "Panic in send reset email", "error", r)
 				}
 			}()
 
@@ -124,7 +125,7 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 			}
 
 			if err := s.emailService.SendPasswordResetEmail(emailData); err != nil {
-				log.Printf("Failed to send password reset email: %v", err)
+				logger.Get().Error(context.Background(), "Failed to send password reset email", "error", err)
 			}
 		}()
 	}
@@ -133,7 +134,7 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 	// The token is sent via email, never expose it in API response
 	resetToken.RawToken = ""
 
-	log.Printf("[AUDIT] Password reset initiated for user %s from IP %s", user.ID, ipAddress)
+	logger.Get().Info(context.Background(), "Password reset initiated", "category", "audit", "user_id", user.ID, "ip_address", ipAddress)
 
 	return resetToken, nil
 }
@@ -228,12 +229,12 @@ func (s *PasswordResetService) CompletePasswordReset(token, newPassword, confirm
 				IPAddress: resetToken.IPAddress,
 			}
 			if err := s.emailService.SendPasswordChangedEmail(emailData); err != nil {
-				log.Printf("Failed to send password changed email: %v", err)
+				logger.Get().Error(context.Background(), "Failed to send password changed email", "error", err)
 			}
 		}()
 	}
 
-	log.Printf("[AUDIT] Password reset completed for user %s", user.ID)
+	logger.Get().Info(context.Background(), "Password reset completed", "category", "audit", "user_id", user.ID)
 
 	return nil
 }
@@ -316,7 +317,7 @@ func (s *PasswordResetService) CleanupExpiredTokens() error {
 	if result.Error != nil {
 		return result.Error
 	}
-	log.Printf("[CLEANUP] Removed %d expired password reset tokens", result.RowsAffected)
+	logger.Get().Info(context.Background(), "Removed expired password reset tokens", "category", "cleanup", "count", result.RowsAffected)
 	return nil
 }
 

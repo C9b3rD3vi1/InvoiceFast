@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
@@ -15,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -23,6 +23,7 @@ import (
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -174,7 +175,7 @@ func (s *KRAService) SubmitInvoice(data *KRAInvoiceData, tenantID, invoiceID str
 	// If no API URL configured, return error so frontend can show sandbox warning
 	if s.cfg.KRA.APIURL == "" || s.cfg.KRA.APIURL == "https://api.kra.go.ke" {
 		if s.isDevMode() {
-			log.Printf("[KRA] Sandbox mode - production API not configured")
+			logger.Get().Info(context.Background(), "Sandbox mode - production API not configured")
 		}
 		return nil, ErrMockMode
 	}
@@ -217,12 +218,12 @@ func (s *KRAService) SubmitInvoice(data *KRAInvoiceData, tenantID, invoiceID str
 	response, err := s.submitToKRA(payloadWithSig)
 	if err != nil {
 		// Queue for retry instead of silent fallback
-		log.Printf("[KRA] API submission failed: %v - queuing for retry", err)
+		logger.Get().Error(context.Background(), "API submission failed - queuing for retry", "error", err)
 
 		if s.db != nil {
 			err = s.QueueFailedSubmission(tenantID, invoiceID, data.InvoiceNumber, payloadWithSig, err.Error())
 			if err != nil {
-				log.Printf("[KRA] Failed to queue failed submission: %v", err)
+				logger.Get().Error(context.Background(), "Failed to queue failed submission", "error", err)
 			}
 		}
 
@@ -286,7 +287,7 @@ func (s *KRAService) signETIMSPayload(payload []byte) (string, error) {
 	rsaPrivateKey, err := s.parsePrivateKey()
 	if err != nil {
 		// Fallback: use mock signing for development
-		log.Printf("[KRA] Using fallback signature method (not RSA)")
+		logger.Get().Warn(context.Background(), "Using fallback signature method (not RSA)")
 		return base64.StdEncoding.EncodeToString(hash[:]), nil
 	}
 
@@ -505,15 +506,15 @@ func (s *KRAService) mockSubmit(data *KRAInvoiceData) (*KRAResponse, error) {
 	maskedSellerPIN := maskPIN(data.Seller.RegistrationNumber)
 	maskedBuyerPIN := maskPIN(data.Buyer.RegistrationNumber)
 
-	log.Printf("[KRA MOCK] Invoice: %s | Seller: %s (PIN: %s) | Buyer: %s (PIN: %s) | Total: %.2f %s | VAT: %.2f",
-		data.InvoiceNumber,
-		data.Seller.BusinessName,
-		maskedSellerPIN,
-		data.Buyer.CustomerName,
-		maskedBuyerPIN,
-		data.TotalIncludingVAT,
-		data.Currency,
-		data.VATAmount,
+	logger.Get().Info(context.Background(), "KRA MOCK Invoice",
+		"invoice_number", data.InvoiceNumber,
+		"seller", data.Seller.BusinessName,
+		"seller_pin", maskedSellerPIN,
+		"buyer", data.Buyer.CustomerName,
+		"buyer_pin", maskedBuyerPIN,
+		"total", data.TotalIncludingVAT,
+		"currency", data.Currency,
+		"vat", data.VATAmount,
 	)
 
 	// Simulate network delay
@@ -624,7 +625,7 @@ func maskPIN(pin string) string {
 // QueueFailedSubmission adds a failed KRA submission to the retry queue
 func (s *KRAService) QueueFailedSubmission(tenantID, invoiceID, invoiceNumber string, payload []byte, errMsg string) error {
 	if s.db == nil {
-		log.Printf("[KRA] Queue unavailable - no database connection")
+		logger.Get().Error(context.Background(), "Queue unavailable - no database connection")
 		return errors.New("KRA queue unavailable")
 	}
 
@@ -644,11 +645,15 @@ func (s *KRAService) QueueFailedSubmission(tenantID, invoiceID, invoiceNumber st
 	}
 
 	if err := s.db.Create(&queueItem).Error; err != nil {
-		log.Printf("[KRA] Failed to queue item: %v", err)
+		logger.Get().Error(context.Background(), "Failed to queue item", "error", err)
 		return err
 	}
 
-	log.Printf("[KRA] Queued failed submission for invoice %s (retry %d/%d)", invoiceNumber, 0, 3)
+	logger.Get().Info(context.Background(), "Queued failed submission for invoice",
+		"invoice_number", invoiceNumber,
+		"retry", 0,
+		"max_retries", 3,
+	)
 	return nil
 }
 
@@ -668,7 +673,7 @@ func (s *KRAService) ProcessRetryQueue() error {
 		return nil
 	}
 
-	log.Printf("[KRA] Processing %d queued items", len(pending))
+	logger.Get().Info(context.Background(), "Processing queued items", "count", len(pending))
 
 	for _, item := range pending {
 		s.processQueueItem(&item)
@@ -688,17 +693,28 @@ func (s *KRAService) processQueueItem(item *models.KRAQueueItem) {
 
 		if item.RetryCount >= item.MaxRetries {
 			item.Status = models.KRAQueueFailed
-			log.Printf("[KRA] Queue item %s failed permanently after %d retries", item.ID, item.RetryCount)
+			logger.Get().Error(context.Background(), "Queue item failed permanently",
+				"item_id", item.ID,
+				"retries", item.RetryCount,
+			)
 		} else {
 			nextRetry := time.Now().Add(time.Duration(item.RetryCount) * 5 * time.Minute)
 			item.NextRetryAt = &nextRetry
-			log.Printf("[KRA] Queue item %s failed, retry %d/%d at %v", item.ID, item.RetryCount, item.MaxRetries, nextRetry)
+			logger.Get().Warn(context.Background(), "Queue item failed, will retry",
+				"item_id", item.ID,
+				"retry_count", item.RetryCount,
+				"max_retries", item.MaxRetries,
+				"next_retry", nextRetry,
+			)
 		}
 	} else {
 		item.Status = models.KRAQueueCompleted
 		now := time.Now()
 		item.CompletedAt = &now
-		log.Printf("[KRA] Queue item %s completed - ICN: %s", item.ID, resp.ICN)
+		logger.Get().Info(context.Background(), "Queue item completed",
+			"item_id", item.ID,
+			"icn", resp.ICN,
+		)
 	}
 
 	item.UpdatedAt = time.Now()

@@ -1,11 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -88,8 +89,11 @@ func (s *PaymentDiscrepancyService) createAlert(payment *models.Payment, invoice
 	}
 
 	s.db.Create(&alert)
-	log.Printf("Payment discrepancy detected: Payment %s has %.2f difference from expected %.2f",
-		payment.Reference, discrepancy, expected)
+	logger.Get().Info(context.Background(), "Payment discrepancy detected",
+		"payment", payment.Reference,
+		"discrepancy", discrepancy,
+		"expected", expected,
+	)
 }
 
 func (s *PaymentDiscrepancyService) GetAlerts(tenantID string) ([]DiscrepancyAlert, error) {

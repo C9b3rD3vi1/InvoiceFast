@@ -8,6 +8,21 @@ import (
 
 var layoutService = services.NewLayoutService()
 
+
+// MetricsRoutes adds Prometheus metrics endpoint
+func MetricsRoutes(app *fiber.App) {
+	app.Get("/metrics", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusOK).SendString("# Metrics endpoint - use /api/v1/metrics for JSON")
+	})
+	
+	app.Get("/api/v1/metrics", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ok",
+			"message": "Use /metrics for Prometheus format",
+		})
+	})
+}
+
 func getLayoutData(c *fiber.Ctx) services.LayoutData {
 	// Default values - will be overridden by Alpine.js client-side
 	return services.LayoutData{
@@ -132,8 +147,17 @@ func StaticRoutes(app *fiber.App) fiber.Router {
 	})
 
 	// Public pages (no auth required)
+	app.Get("/features", func(c *fiber.Ctx) error {
+		return layoutService.RenderPublicWithShell(c, "./views/pages/features.html", "Features")
+	})
+	app.Get("/pricing", func(c *fiber.Ctx) error {
+		return layoutService.RenderPublicWithShell(c, "./views/pages/pricing.html", "Pricing")
+	})
+	app.Get("/faq", func(c *fiber.Ctx) error {
+		return layoutService.RenderPublicWithShell(c, "./views/pages/faq.html", "FAQ")
+	})
 	app.Get("/contact", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/pages/contact.html")
+		return layoutService.RenderPublicWithShell(c, "./views/pages/contact.html", "Contact Support")
 	})
 	app.Get("/success", func(c *fiber.Ctx) error {
 		return c.SendFile("./views/pages/success.html")
@@ -141,10 +165,16 @@ func StaticRoutes(app *fiber.App) fiber.Router {
 
 	// Auth pages (no auth required)
 	app.Get("/login", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/auth/login.html")
+		return layoutService.RenderPublicWithShell(c, "./views/auth/login.html", "Sign In")
 	})
 	app.Get("/register", func(c *fiber.Ctx) error {
-		return c.SendFile("./views/auth/register.html")
+		return layoutService.RenderPublicWithShell(c, "./views/auth/register.html", "Create Account")
+	})
+	app.Get("/forgot-password", func(c *fiber.Ctx) error {
+		return layoutService.RenderPublicWithShell(c, "./views/auth/forgot-password.html", "Forgot Password")
+	})
+	app.Get("/reset-password", func(c *fiber.Ctx) error {
+		return layoutService.RenderPublicWithShell(c, "./views/auth/reset-password.html", "Reset Password")
 	})
 	app.Get("/logout", func(c *fiber.Ctx) error {
 		c.ClearCookie("token")

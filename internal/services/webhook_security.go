@@ -10,11 +10,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/logger"
 )
 
 // WebhookSecurity handles secure webhook processing
@@ -86,13 +86,13 @@ func (ws *WebhookSecurity) VerifyTimestamp(timestamp string, maxAge time.Duratio
 func (ws *WebhookSecurity) ParseWebhookPayload(payload []byte, signature, timestamp string) (*IntasendWebhookEvent, error) {
 	// 1. Verify signature
 	if err := ws.VerifySignature(payload, signature); err != nil {
-		log.Printf("[SECURITY] Webhook signature verification failed: %v", err)
+		logger.Get().Warn(context.Background(), "Webhook signature verification failed", "category", "security", "error", err)
 		return nil, fmt.Errorf("security: %w", err)
 	}
 
 	// 2. Verify timestamp (prevent replay attacks)
 	if err := ws.VerifyTimestamp(timestamp, 5*time.Minute); err != nil {
-		log.Printf("[SECURITY] Webhook timestamp verification failed: %v", err)
+		logger.Get().Warn(context.Background(), "Webhook timestamp verification failed", "category", "security", "error", err)
 		return nil, fmt.Errorf("security: %w", err)
 	}
 
@@ -183,14 +183,14 @@ func WebhookSignatureMiddleware(cfg *config.IntasendConfig) func(http.Handler) h
 
 			// Verify signature
 			if err := ws.VerifySignature(body, signature); err != nil {
-				log.Printf("[SECURITY] Rejected webhook: %v", err)
+				logger.Get().Warn(context.Background(), "Rejected webhook due to invalid signature", "category", "security", "error", err)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// Verify timestamp (prevents replay attacks)
 			if err := ws.VerifyTimestamp(timestamp, 5*time.Minute); err != nil {
-				log.Printf("[SECURITY] Rejected webhook: %v", err)
+				logger.Get().Warn(context.Background(), "Rejected webhook due to expired timestamp", "category", "security", "error", err)
 				http.Error(w, "Request expired", http.StatusUnauthorized)
 				return
 			}

@@ -3,10 +3,10 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -54,7 +54,7 @@ func NewReminderService(db *database.DB, deps *ServiceDependencies) *ReminderSer
 
 // RunReminders checks and sends due reminders
 func (s *ReminderService) RunReminders() error {
-	log.Println("🔔 Running scheduled reminders...")
+	logger.Get().Info(context.Background(), "Running scheduled reminders")
 
 	// Get all sent invoices that are overdue or due soon
 	var invoices []models.Invoice
@@ -71,7 +71,7 @@ func (s *ReminderService) RunReminders() error {
 	// Send "due soon" reminders
 	for _, inv := range invoices {
 		if err := s.sendDueSoonReminder(&inv); err != nil {
-			log.Printf("Error sending reminder for %s: %v", inv.InvoiceNumber, err)
+			logger.Get().Error(context.Background(), "Error sending reminder", "invoice_number", inv.InvoiceNumber, "error", err)
 		}
 	}
 
@@ -89,14 +89,14 @@ func (s *ReminderService) RunReminders() error {
 		// Only remind at specific intervals
 		if daysOverdue == 1 || daysOverdue == 7 || daysOverdue == 14 || daysOverdue == 30 {
 			if err := s.sendOverdueReminder(&inv, daysOverdue); err != nil {
-				log.Printf("Error sending overdue reminder for %s: %v", inv.InvoiceNumber, err)
+				logger.Get().Error(context.Background(), "Error sending overdue reminder", "invoice_number", inv.InvoiceNumber, "error", err)
 			}
 		}
 
 		// Apply late fee after grace period
 		if daysOverdue > defaultReminderConfig.GracePeriodDays && defaultReminderConfig.LateFeePercent > 0 {
 			if err := s.applyLateFee(&inv, daysOverdue); err != nil {
-				log.Printf("Error applying late fee for %s: %v", inv.InvoiceNumber, err)
+				logger.Get().Error(context.Background(), "Error applying late fee", "invoice_number", inv.InvoiceNumber, "error", err)
 			}
 		}
 	}
@@ -108,7 +108,7 @@ func (s *ReminderService) RunReminders() error {
 			now.AddDate(0, 0, -60),
 		).Update("status", models.InvoiceStatusOverdue)
 
-	log.Println("✅ Reminders completed")
+	logger.Get().Info(context.Background(), "Reminders completed")
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 		return nil // Already sent
 	}
 
-	log.Printf("📧 Sending due soon reminder for invoice %s", invoice.InvoiceNumber)
+	logger.Get().Info(context.Background(), "Sending due soon reminder for invoice", "invoice_number", invoice.InvoiceNumber)
 
 	// Load client and user (tenant-scoped)
 	var client models.Client
@@ -177,7 +177,7 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 			invoice.Currency,
 			invoice.Total,
 		)
-		log.Printf("📱 [WOULD SEND WHATSAPP]: %s", waMsg)
+		logger.Get().Info(context.Background(), "Would send WhatsApp", "message", waMsg)
 	}
 
 	// Log reminder
@@ -198,19 +198,19 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 		return nil // Already sent
 	}
 
-	log.Printf("📧 Sending overdue reminder for invoice %s (day %d)", invoice.InvoiceNumber, daysOverdue)
+	logger.Get().Info(context.Background(), "Sending overdue reminder for invoice", "invoice_number", invoice.InvoiceNumber, "days_overdue", daysOverdue)
 
 	// Load client with tenant scoping
 	var client models.Client
 	if err := s.db.Where("id = ? AND tenant_id = ?", invoice.ClientID, invoice.TenantID).First(&client).Error; err != nil {
-		log.Printf("⚠️ Client not found for reminder: %v", err)
+		logger.Get().Warn(context.Background(), "Client not found for reminder", "error", err)
 		return nil
 	}
 
 	// Load user with tenant scoping
 	var user models.User
 	if err := s.db.Where("id = ? AND tenant_id = ?", invoice.UserID, invoice.TenantID).First(&user).Error; err != nil {
-		log.Printf("⚠️ User not found for reminder: %v", err)
+		logger.Get().Warn(context.Background(), "User not found for reminder", "error", err)
 		return nil
 	}
 
@@ -263,7 +263,7 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 			invoice.Currency,
 			balanceDue,
 		)
-		log.Printf("📱 [WOULD SEND WHATSAPP]: %s", msg)
+		logger.Get().Info(context.Background(), "Would send WhatsApp", "message", msg)
 	}
 
 	// Log reminder
@@ -290,7 +290,7 @@ func (s *ReminderService) applyLateFee(invoice *models.Invoice, daysOverdue int)
 		return nil
 	}
 
-	log.Printf("💰 Applying late fee of %.2f to invoice %s", lateFee, invoice.InvoiceNumber)
+	logger.Get().Info(context.Background(), "Applying late fee", "amount", lateFee, "invoice_number", invoice.InvoiceNumber)
 
 	// Update invoice
 	invoice.TaxRate = defaultReminderConfig.LateFeePercent // Reuse field for late fee indicator
@@ -333,14 +333,14 @@ func (s *ReminderService) ScheduleReminder(invoiceID, reminderType string, sendA
 	// - invoiceID
 	// - reminderType
 	// - sendAt time
-	log.Printf("📅 Scheduled reminder for invoice %s at %s", invoiceID, sendAt)
+	logger.Get().Info(context.Background(), "Scheduled reminder for invoice", "invoice_id", invoiceID, "send_at", sendAt)
 	return nil
 }
 
 // CancelReminder cancels a scheduled reminder
 func (s *ReminderService) CancelReminder(invoiceID, reminderType string) error {
 	// In production, update database
-	log.Printf("❌ Cancelled reminder for invoice %s (%s)", invoiceID, reminderType)
+	logger.Get().Info(context.Background(), "Cancelled reminder for invoice", "invoice_id", invoiceID, "reminder_type", reminderType)
 	return nil
 }
 
@@ -357,14 +357,14 @@ func (s *ReminderService) GetReminderHistory(invoiceID string) ([]models.Reminde
 // PauseReminders pauses all reminders for a client
 func (s *ReminderService) PauseReminders(clientID string) error {
 	// In production, update client record
-	log.Printf("⏸️ Paused reminders for client %s", clientID)
+	logger.Get().Info(context.Background(), "Paused reminders for client", "client_id", clientID)
 	return nil
 }
 
 // ResumeReminders resumes reminders for a client
 func (s *ReminderService) ResumeReminders(clientID string) error {
 	// In production, update client record
-	log.Printf("▶️ Resumed reminders for client %s", clientID)
+	logger.Get().Info(context.Background(), "Resumed reminders for client", "client_id", clientID)
 	return nil
 }
 
@@ -386,12 +386,12 @@ func (s *ReminderService) BulkSendOverdueReminders(tenantID string) (int, error)
 		}
 
 		if err := s.sendOverdueReminder(&inv, daysOverdue); err != nil {
-			log.Printf("Error sending bulk reminder for %s: %v", inv.InvoiceNumber, err)
+			logger.Get().Error(context.Background(), "Error sending bulk reminder", "invoice_number", inv.InvoiceNumber, "error", err)
 			continue
 		}
 		sent++
 	}
 
-	log.Printf("Bulk sent %d reminders for tenant %s", sent, tenantID)
+	logger.Get().Info(context.Background(), "Bulk sent reminders for tenant", "count", sent, "tenant_id", tenantID)
 	return sent, nil
 }

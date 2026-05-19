@@ -4,16 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 type DB struct {
@@ -35,23 +35,23 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
 		}
-		log.Println("Database connected: PostgreSQL")
+		logger.Get().Info(context.Background(), "Database connected: PostgreSQL")
 
 	case "sqlite", "sqlite3":
 		db, err = newSQLiteDB(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to SQLite: %w", err)
 		}
-		log.Println("Database connected: SQLite")
+		logger.Get().Info(context.Background(), "Database connected: SQLite")
 
 	default:
 		// Default to SQLite for development
-		log.Printf("Unknown driver '%s', defaulting to SQLite", cfg.Driver)
+		logger.Get().Warn(context.Background(), "Unknown driver, defaulting to SQLite", "driver", cfg.Driver)
 		db, err = newSQLiteDB(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to SQLite: %w", err)
 		}
-		log.Println("Database connected: SQLite (default)")
+		logger.Get().Info(context.Background(), "Database connected: SQLite (default)")
 	}
 
 	sqlDB, err := db.DB()
@@ -69,7 +69,7 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 // newPostgresDB creates a new PostgreSQL connection with proper pooling
 func newPostgresDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: gormLogger.Default.LogMode(gormLogger.Info),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -117,8 +117,8 @@ func newPostgresDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	sqlDB.SetConnMaxLifetime(connMaxLifetime)
 	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
 
-	log.Printf("PostgreSQL connection pool: max_open=%d, max_idle=%d, lifetime=%v",
-		maxOpenConns, maxIdleConns, connMaxLifetime)
+	logger.Get().Info(context.Background(), "PostgreSQL connection pool",
+		"max_open", maxOpenConns, "max_idle", maxIdleConns, "lifetime", connMaxLifetime)
 
 	return db, nil
 }
@@ -126,7 +126,7 @@ func newPostgresDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 // newSQLiteDB creates a new SQLite connection (development)
 func newSQLiteDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: gormLogger.Default.LogMode(gormLogger.Info),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -179,19 +179,19 @@ func buildPostgresDSN(cfg *config.DatabaseConfig) string {
 
 // Migrate runs database migrations based on the database type
 func (db *DB) Migrate() error {
-	log.Println("Running database migrations...")
+	logger.Get().Info(context.Background(), "Running database migrations...")
 
 	// PostgreSQL-specific settings
 	if db.isPostgres {
 		// PostgreSQL doesn't need WAL mode
-		log.Println("Using PostgreSQL - migrations ready")
+		logger.Get().Info(context.Background(), "Using PostgreSQL - migrations ready")
 	} else {
 		// SQLite-specific settings
 		if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
-			log.Printf("Warning: failed to set WAL mode: %v", err)
+			logger.Get().Warn(context.Background(), "Failed to set WAL mode", "error", err)
 		}
 		if err := db.Exec("PRAGMA busy_timeout = 5000").Error; err != nil {
-			log.Printf("Warning: failed to set busy timeout: %v", err)
+			logger.Get().Warn(context.Background(), "Failed to set busy timeout", "error", err)
 		}
 	}
 
@@ -254,10 +254,10 @@ func (db *DB) Migrate() error {
 
 	// Fix any incorrect unique constraints
 	if err := db.fixPaymentConstraints(); err != nil {
-		log.Printf("Warning: failed to fix payment constraints: %v", err)
+		logger.Get().Warn(context.Background(), "Failed to fix payment constraints", "error", err)
 	}
 
-	log.Println("Migrations completed successfully")
+	logger.Get().Info(context.Background(), "Migrations completed successfully")
 	return nil
 }
 

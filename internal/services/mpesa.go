@@ -8,8 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+
+	"invoicefast/internal/logger"
 	"strings"
 	"time"
 
@@ -116,7 +117,7 @@ func (s *MPesaService) InitiateSTKPush(ctx context.Context, tenantID, invoiceID,
 
 	token, err := s.getAccessToken(ctx)
 	if err != nil {
-		log.Printf("[M-Pesa] Failed to get access token: %v", err)
+		logger.Get().Error(ctx, "Failed to get access token", "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrMpesaTokenFailed, err)
 	}
 
@@ -172,7 +173,7 @@ func (s *MPesaService) InitiateSTKPush(ctx context.Context, tenantID, invoiceID,
 	}
 
 	if resp.StatusCode >= 400 {
-		log.Printf("[M-Pesa] STK push failed (status %d): %s", resp.StatusCode, string(body))
+		logger.Get().Error(ctx, "STK push failed", "status_code", resp.StatusCode)
 		return nil, fmt.Errorf("%s: HTTP %d", ErrSTKPushFailed, resp.StatusCode)
 	}
 
@@ -182,11 +183,11 @@ func (s *MPesaService) InitiateSTKPush(ctx context.Context, tenantID, invoiceID,
 	}
 
 	if stkResp.ResponseCode != "0" {
-		log.Printf("[M-Pesa] STK push failed: %s - %s", stkResp.ResponseCode, stkResp.ResponseDescription)
+		logger.Get().Error(ctx, "STK push failed", "response_code", stkResp.ResponseCode, "description", stkResp.ResponseDescription)
 		return nil, fmt.Errorf("%s: %s", ErrSTKPushFailed, stkResp.ResponseDescription)
 	}
 
-	log.Printf("[M-Pesa] STK Push initiated: CheckoutRequestID=%s for invoice %s", stkResp.CheckoutRequestID, invoiceNumber)
+	logger.Get().Info(ctx, "STK Push initiated", "checkout_request_id", stkResp.CheckoutRequestID, "invoice", invoiceNumber)
 
 	return &stkResp, nil
 }
@@ -200,7 +201,7 @@ func (s *MPesaService) ProcessSTKCallback(ctx context.Context, callback STKCallb
 	// The verification happens in the middleware BEFORE this is called
 	// This is a safety check
 	if s.webhookVerifier != nil {
-		log.Printf("[M-Pesa] Processing callback: %s", callback.Body.StkCallback.CheckoutRequestID)
+		logger.Get().Info(ctx, "Processing callback", "checkout_request_id", callback.Body.StkCallback.CheckoutRequestID)
 	}
 
 	stkCallback := callback.Body.StkCallback
@@ -208,7 +209,7 @@ func (s *MPesaService) ProcessSTKCallback(ctx context.Context, callback STKCallb
 	checkoutReqID := stkCallback.CheckoutRequestID
 
 	if stkCallback.ResultCode != 0 {
-		log.Printf("[M-Pesa] Payment failed: ResultCode=%d, ResultDesc=%s", stkCallback.ResultCode, stkCallback.ResultDesc)
+		logger.Get().Error(ctx, "Payment failed", "result_code", stkCallback.ResultCode, "result_desc", stkCallback.ResultDesc)
 		return s.markPaymentFailed(ctx, merchantReqID, checkoutReqID, stkCallback.ResultDesc)
 	}
 
@@ -233,7 +234,7 @@ func (s *MPesaService) ProcessSTKCallback(ctx context.Context, callback STKCallb
 		}
 	}
 
-	log.Printf("[M-Pesa] Payment received: Receipt=%s, Phone=%s, Amount=%s", mpesaReceipt, phone, amount)
+	logger.Get().Info(ctx, "Payment received", "receipt", mpesaReceipt, "phone", phone, "amount", amount)
 	return s.markPaymentCompleted(ctx, merchantReqID, checkoutReqID, mpesaReceipt, phone, amount)
 }
 
@@ -244,12 +245,12 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 	if s.cache != nil {
 		exists, err := s.cache.Exists(ctx, idempotencyKey)
 		if err == nil && exists {
-			log.Printf("[M-Pesa] Duplicate callback detected for MerchantRequestID: %s - skipping processing", merchantReqID)
+			logger.Get().Warn(ctx, "Duplicate callback detected - skipping processing", "merchant_request_id", merchantReqID)
 			return nil // Already processed - return success to avoid M-Pesa retry
 		}
 		// Mark as processing to prevent race conditions
 		if err := s.cache.SetString(ctx, idempotencyKey, "processing", 5*time.Minute); err != nil {
-			log.Printf("[M-Pesa] Warning: Failed to set idempotency lock: %v", err)
+			logger.Get().Warn(ctx, "Failed to set idempotency lock", "error", err)
 		}
 	}
 
@@ -265,7 +266,7 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 
 		// Double-check: if payment already marked as completed in DB, skip
 		if payment.Status == models.PaymentStatusCompleted {
-			log.Printf("[M-Pesa] Payment already completed: %s", payment.ID)
+			logger.Get().Info(ctx, "Payment already completed", "payment_id", payment.ID)
 			return nil
 		}
 
@@ -301,14 +302,14 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 		tx.Model(&models.Client{}).Where("id = ?", invoice.ClientID).
 			Update("total_paid", gorm.Expr("total_paid + ?", amountFloat))
 
-		log.Printf("[M-Pesa] Payment completed: %s for invoice %s (amount: %s)", receipt, invoice.InvoiceNumber, amount)
+		logger.Get().Info(ctx, "Payment completed", "receipt", receipt, "invoice", invoice.InvoiceNumber, "amount", amount)
 		return nil
 	})
 
 	// Update idempotency key to completed
 	if s.cache != nil && err == nil {
 		if err := s.cache.SetString(ctx, idempotencyKey, "completed", 24*time.Hour); err != nil {
-			log.Printf("[M-Pesa] Warning: Failed to mark idempotency complete: %v", err)
+			logger.Get().Warn(ctx, "Failed to mark idempotency complete", "error", err)
 		}
 	}
 
@@ -332,7 +333,7 @@ func (s *MPesaService) getAccessToken(ctx context.Context) (string, error) {
 	if s.cache != nil {
 		token, err := s.cache.GetString(ctx, "mpesa:access_token")
 		if err == nil && token != "" {
-			log.Printf("[M-Pesa] Using cached access token")
+			logger.Get().Info(ctx, "Using cached access token")
 			return token, nil
 		}
 	}
@@ -380,7 +381,7 @@ func (s *MPesaService) getAccessToken(ctx context.Context) (string, error) {
 		_ = s.cache.SetString(ctx, "mpesa:access_token", tokenResp.AccessToken, time.Duration(expiresIn)*time.Second)
 	}
 
-	log.Printf("[M-Pesa] Obtained new access token")
+	logger.Get().Info(ctx, "Obtained new access token")
 	return tokenResp.AccessToken, nil
 }
 

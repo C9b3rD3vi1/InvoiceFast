@@ -4,15 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/logger"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 // PostgreSQLDB wraps the GORM DB for PostgreSQL
@@ -24,7 +24,7 @@ type PostgreSQLDB struct {
 // NewPostgreSQL creates a new PostgreSQL database connection
 func NewPostgreSQL(cfg *config.DatabaseConfig) (*DB, error) {
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: gormLogger.Default.LogMode(gormLogger.Info),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -56,8 +56,8 @@ func NewPostgreSQL(cfg *config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping PostgreSQL: %w", err)
 	}
 
-	log.Printf("[PostgreSQL] Connected: max_open=%d, max_idle=%d, lifetime=%v",
-		cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
+	logger.Get().Info(context.Background(), "Connected",
+		"max_open", cfg.MaxOpenConns, "max_idle", cfg.MaxIdleConns, "lifetime", cfg.ConnMaxLifetime)
 
 	return &DB{DB: db, sqlDB: sqlDB}, nil
 }
@@ -74,7 +74,7 @@ func NewMigration(db *DB) *Migration {
 
 // MigrateFromSQLite migrates data from SQLite to PostgreSQL
 func (m *Migration) MigrateFromSQLite(sqlitePath string) error {
-	log.Println("[Migration] Starting migration from SQLite to PostgreSQL...")
+	logger.Get().Info(context.Background(), "Starting migration from SQLite to PostgreSQL")
 
 	// Open SQLite
 	sqliteDB, err := New(&config.DatabaseConfig{
@@ -106,14 +106,14 @@ func (m *Migration) MigrateFromSQLite(sqlitePath string) error {
 	for _, table := range tables {
 		count, err := m.migrateTable(sqliteDB, table)
 		if err != nil {
-			log.Printf("[Migration] Warning: error migrating %s: %v", table, err)
+			logger.Get().Warn(context.Background(), "Error migrating table", "table", table, "error", err)
 			continue
 		}
-		log.Printf("[Migration] Migrated %d records from %s", count, table)
+		logger.Get().Info(context.Background(), "Migrated records", "count", count, "table", table)
 		totalMigrated += count
 	}
 
-	log.Printf("[Migration] Completed! Total records migrated: %d", totalMigrated)
+	logger.Get().Info(context.Background(), "Migration completed", "total_records", totalMigrated)
 	return nil
 }
 
@@ -171,7 +171,7 @@ func (m *Migration) migrateUsers(sqliteDB *DB) (int, error) {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (id) DO NOTHING
 		`, u.ID, u.Email, u.PasswordHash, u.Name, u.Phone, u.CompanyName, u.KRAPIN, u.Plan, u.IsActive, u.CreatedAt, u.UpdatedAt).Error; err != nil {
-			log.Printf("[Migration] Error inserting user %s: %v", u.Email, err)
+			logger.Get().Error(context.Background(), "Error inserting user", "email", u.Email, "error", err)
 		}
 	}
 
@@ -207,7 +207,7 @@ func (m *Migration) migrateClients(sqliteDB *DB) (int, error) {
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (id) DO NOTHING
 		`, c.ID, c.UserID, c.Name, c.Email, c.Phone, c.Address, c.KRAPIN, c.Currency, c.PaymentTerms, c.Notes, c.TotalBilled, c.TotalPaid, c.CreatedAt, c.UpdatedAt).Error; err != nil {
-			log.Printf("[Migration] Error inserting client %s: %v", c.Name, err)
+			logger.Get().Error(context.Background(), "Error inserting client", "name", c.Name, "error", err)
 		}
 	}
 
@@ -236,7 +236,7 @@ func (m *Migration) migrateInvoices(sqliteDB *DB) (int, error) {
 			strings.Join(placeholders, ", "))
 
 		if err := m.db.Exec(query, values...).Error; err != nil {
-			log.Printf("[Migration] Error inserting invoice %v: %v", inv["invoice_number"], err)
+			logger.Get().Error(context.Background(), "Error inserting invoice", "invoice_number", inv["invoice_number"], "error", err)
 		}
 	}
 
@@ -253,7 +253,7 @@ func (m *Migration) migrateInvoiceItems(sqliteDB *DB) (int, error) {
 		if err := m.db.Table("invoice_items").Create(item).Error; err != nil {
 			// Ignore duplicate key errors
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting invoice item: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting invoice item", "error", err)
 			}
 		}
 	}
@@ -270,7 +270,7 @@ func (m *Migration) migratePayments(sqliteDB *DB) (int, error) {
 	for _, p := range payments {
 		if err := m.db.Table("payments").Create(p).Error; err != nil {
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting payment: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting payment", "error", err)
 			}
 		}
 	}
@@ -287,7 +287,7 @@ func (m *Migration) migrateRefreshTokens(sqliteDB *DB) (int, error) {
 	for _, t := range tokens {
 		if err := m.db.Table("refresh_tokens").Create(t).Error; err != nil {
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting refresh token: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting refresh token", "error", err)
 			}
 		}
 	}
@@ -304,7 +304,7 @@ func (m *Migration) migrateAPIKeys(sqliteDB *DB) (int, error) {
 	for _, k := range keys {
 		if err := m.db.Table("api_keys").Create(k).Error; err != nil {
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting API key: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting API key", "error", err)
 			}
 		}
 	}
@@ -321,7 +321,7 @@ func (m *Migration) migrateTemplates(sqliteDB *DB) (int, error) {
 	for _, t := range templates {
 		if err := m.db.Table("templates").Create(t).Error; err != nil {
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting template: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting template", "error", err)
 			}
 		}
 	}
@@ -338,7 +338,7 @@ func (m *Migration) migrateReminders(sqliteDB *DB) (int, error) {
 	for _, r := range reminders {
 		if err := m.db.Table("reminders").Create(r).Error; err != nil {
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting reminder: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting reminder", "error", err)
 			}
 		}
 	}
@@ -355,7 +355,7 @@ func (m *Migration) migrateAuditLogs(sqliteDB *DB) (int, error) {
 	for _, l := range logs {
 		if err := m.db.Table("audit_logs").Create(l).Error; err != nil {
 			if !strings.Contains(err.Error(), "duplicate key") {
-				log.Printf("[Migration] Error inserting audit log: %v", err)
+				logger.Get().Error(context.Background(), "Error inserting audit log", "error", err)
 			}
 		}
 	}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"sort"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 	"invoicefast/internal/utils"
 
@@ -797,7 +797,7 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 
 			kraResp, err := s.kraService.SubmitInvoice(kraData, invoice.TenantID, invoice.ID)
 			if err != nil {
-				log.Printf("[KRA] Failed to submit invoice %s: %v", invoiceNum, err)
+				logger.Get().Error(context.Background(), "KRA submission failed", "category", "kra", "invoice_number", invoiceNum, "error", err)
 				s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
 					"kra_status": "failed",
 					"kra_error":  err.Error(),
@@ -812,7 +812,7 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 				"kra_submitted_at": time.Now(),
 				"kra_error":        "",
 			})
-			log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoiceNum, kraResp.ICN)
+			logger.Get().Info(context.Background(), "KRA invoice submitted", "category", "kra", "invoice_number", invoiceNum, "icn", kraResp.ICN)
 		}()
 	}
 
@@ -894,7 +894,7 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 		}
 
 		if err := s.emailService.SendInvoiceEmail(emailData); err != nil {
-			log.Printf("Failed to send invoice email for %s: %v", invoice.InvoiceNumber, err)
+			logger.Get().Error(context.Background(), "Failed to send invoice email", "invoice_number", invoice.InvoiceNumber, "error", err)
 		}
 	}
 
@@ -907,7 +907,7 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 			"link":    invoiceLink,
 		}
 		if err := s.whatsappService.SendInvoiceNotification(client.Phone, waData); err != nil {
-			log.Printf("Failed to send WhatsApp for %s: %v", invoice.InvoiceNumber, err)
+			logger.Get().Error(context.Background(), "Failed to send WhatsApp notification", "invoice_number", invoice.InvoiceNumber, "error", err)
 		}
 	}
 }
@@ -2110,7 +2110,7 @@ dbItems := make([]models.InvoiceItem, 0)
 			Details:    fmt.Sprintf(`{"invoice_number": "%s", "icn": "%s"}`, invoice.InvoiceNumber, kraResp.ICN),
 		})
 
-		log.Printf("[KRA] Invoice %s submitted - ICN: %s", invoice.InvoiceNumber, kraResp.ICN)
+		logger.Get().Info(context.Background(), "KRA invoice submitted", "category", "kra", "invoice_number", invoice.InvoiceNumber, "icn", kraResp.ICN)
 
 		result = kraResp
 		return nil
@@ -2250,7 +2250,7 @@ func (s *InvoiceService) SubmitAllPendingToKRA(tenantID string) (submitted, fail
 		_, err := s.SubmitInvoiceToKRA(tenantID, inv.ID)
 		if err != nil {
 			failed++
-			log.Printf("[KRA] Failed to submit invoice %s: %v", inv.InvoiceNumber, err)
+			logger.Get().Error(context.Background(), "KRA submission failed", "category", "kra", "invoice_number", inv.InvoiceNumber, "error", err)
 		} else {
 			submitted++
 		}

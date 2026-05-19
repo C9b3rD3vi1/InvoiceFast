@@ -1,11 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -18,7 +19,7 @@ func NewOverdueService(db *database.DB) *OverdueService {
 }
 
 func (s *OverdueService) MarkOverdueInvoices() error {
-	log.Println("Checking for overdue invoices...")
+	logger.Get().Info(context.Background(), "Checking for overdue invoices")
 
 	now := time.Now()
 	result := s.db.Model(&models.Invoice{}).
@@ -32,7 +33,7 @@ func (s *OverdueService) MarkOverdueInvoices() error {
 		return fmt.Errorf("failed to mark overdue invoices: %w", result.Error)
 	}
 
-	log.Printf("Marked %d invoices as overdue", result.RowsAffected)
+	logger.Get().Info(context.Background(), "Marked invoices as overdue", "count", result.RowsAffected)
 	return nil
 }
 

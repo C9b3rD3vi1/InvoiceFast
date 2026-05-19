@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"context"
-	"log"
 
+	"invoicefast/internal/logger"
 	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,7 +32,7 @@ func IdempotencyMiddleware(svc *services.IdempotencyService) fiber.Handler {
 
 		isProcessed, err := svc.IsProcessed(ctx, key)
 		if err == nil && isProcessed {
-			log.Printf("[Idempotency] Key %s already processed - returning cached response", key)
+			logger.Get().Info(ctx, "Key already processed - returning cached response", "key", key)
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"status":          "already_processed",
 				"idempotency_key": key,

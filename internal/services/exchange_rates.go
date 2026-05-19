@@ -1,14 +1,15 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
@@ -117,13 +118,13 @@ func (s *ExchangeRateService) FetchRatesFromCBK() error {
 	s.lastUpdated = time.Now()
 	s.mu.Unlock()
 
-	log.Printf("[ExchangeRates] Updated rates from CBK")
+	logger.Get().Info(context.Background(), "Updated rates from CBK")
 	return nil
 }
 
 func (s *ExchangeRateService) fetchRates() {
 	if err := s.FetchRatesFromCBK(); err != nil {
-		log.Printf("[ExchangeRates] Initial fetch failed: %v", err)
+		logger.Get().Error(context.Background(), "Initial fetch failed", "error", err)
 		// Try to load from database as fallback
 		s.loadFromDB()
 	}
@@ -150,7 +151,7 @@ func (s *ExchangeRateService) loadFromDB() {
 			key := fmt.Sprintf("KES/%s", r.Currency)
 			s.cachedRates[key] = r.Rate
 		}
-		log.Printf("[ExchangeRates] Loaded %d rates from database", len(rates))
+		logger.Get().Info(context.Background(), "Loaded rates from database", "count", len(rates))
 	}
 }
 
@@ -177,10 +178,10 @@ func (s *ExchangeRateService) seedDefaultRates() {
 			CreatedAt:    time.Now(),
 		}
 		if err := s.db.Create(&rate).Error; err != nil {
-			log.Printf("[ExchangeRates] Failed to seed rate %s: %v", r.Currency, err)
+			logger.Get().Error(context.Background(), "Failed to seed rate", "currency", r.Currency, "error", err)
 		}
 	}
-	log.Printf("[ExchangeRates] Seeded default exchange rates")
+	logger.Get().Info(context.Background(), "Seeded default exchange rates")
 }
 
 func (s *ExchangeRateService) StartCronJob() {
@@ -190,7 +191,7 @@ func (s *ExchangeRateService) StartCronJob() {
 
 		for range ticker.C {
 			if err := s.FetchRatesFromCBK(); err != nil {
-				log.Printf("[ExchangeRates] Failed to fetch rates: %v", err)
+				logger.Get().Error(context.Background(), "Failed to fetch rates", "error", err)
 			}
 		}
 	}()

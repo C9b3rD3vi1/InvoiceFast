@@ -1,0 +1,334 @@
+<style>
+/* ━━━━ FEATURES BENTO ━━━━ */
+.features-section{padding:80px 0 60px}
+.features-inner{max-width:1200px;margin:0 auto;padding:0 32px}
+.features-header{text-align:center;margin-bottom:64px}
+.bento{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:auto;gap:16px}
+.ben{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r-xl);
+  padding:40px 36px;overflow:hidden;position:relative;transition:all .35s;
+}
+.ben:hover{border-color:var(--gold-border);box-shadow:0 16px 60px rgba(0,0,0,.5),inset 0 0 0 1px var(--gold-dim)}
+.ben::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;opacity:0;transition:opacity .4s;
+  background:radial-gradient(circle at 50% -10%,var(--gold-dim),transparent 55%);
+}
+.ben:hover::before{opacity:1}
+.b-a{grid-column:span 5}
+.b-b{grid-column:span 7}
+.b-c{grid-column:span 4}
+.b-d{grid-column:span 4}
+.b-e{grid-column:span 4}
+.b-f{grid-column:span 7}
+.b-g{grid-column:span 5}
+@media(max-width:1000px){.ben,.b-a,.b-b,.b-c,.b-d,.b-e,.b-f,.b-g{grid-column:span 12}}
+.ben-eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;
+}
+.ben h3{font-size:24px;font-weight:900;color:var(--bone);letter-spacing:-.02em;margin-bottom:12px}
+.ben p{font-size:14px;color:var(--muted);line-height:1.75;margin-bottom:24px}
+.ben-icon{
+  width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  font-size:22px;margin-bottom:24px;
+}
+.ben-icon.gold{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border)}
+.ben-icon.violet{background:var(--violet-dim);color:var(--violet-3);border:1px solid rgba(91,33,182,.25)}
+.ben-icon.green{background:var(--green-dim);color:var(--green);border:1px solid rgba(16,185,129,.2)}
+.ben-icon.red{background:var(--red-dim);color:var(--red);border:1px solid rgba(244,63,94,.2)}
+.ben-icon.slate{background:var(--ghost);color:var(--muted);border:1px solid var(--border-2)}
+.ben-pills{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.ben-pill{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+  color:var(--muted);transition:all .2s;
+}
+.ben:hover .ben-pill{border-color:var(--gold-border);color:var(--gold)}
+.payment-flow{margin-top:20px;display:flex;flex-direction:column;gap:8px}
+.pf-step{
+  display:flex;align-items:center;gap:12px;
+  background:var(--ink-3);border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;transition:all .3s;
+}
+.pf-step:hover{border-color:var(--gold-border);background:var(--gold-dim)}
+.pf-num{
+  width:26px;height:26px;border-radius:7px;background:var(--gold-dim);border:1px solid var(--gold-border);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold);flex-shrink:0;
+}
+.pf-text{font-size:13px;color:var(--bone-2)}
+.pf-time{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold)}
+.currency-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.curr-card{
+  background:var(--ink-3);border:1px solid var(--border);border-radius:10px;
+  padding:14px;transition:all .3s;
+}
+.curr-card:hover{border-color:var(--gold-border)}
+.curr-flag{font-size:20px;margin-bottom:6px}
+.curr-code{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--bone)}
+.curr-rate{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px}
+.auto-timeline{display:flex;flex-direction:column;gap:0;margin-top:16px}
+.at-item{
+  display:flex;align-items:flex-start;gap:14px;padding:12px 0;
+  border-bottom:1px solid var(--border);position:relative;
+}
+.at-item:last-child{border-bottom:none}
+.at-icon{
+  width:32px;height:32px;border-radius:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.at-icon.whatsapp{background:rgba(37,211,102,.1);color:#25D366}
+.at-icon.sms{background:var(--violet-dim);color:var(--violet-3)}
+.at-icon.mail{background:var(--gold-dim);color:var(--gold)}
+.at-label{font-size:13px;color:var(--bone-2);flex:1}
+.at-label span{display:block;font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.at-status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green)}
+.how-section{padding:80px 0;background:var(--ink-1)}
+.how-inner{max-width:1200px;margin:0 auto;padding:0 32px}
+.how-header{text-align:center;margin-bottom:80px}
+.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;position:relative}
+.steps-grid::before{
+  content:'';position:absolute;top:60px;left:calc(16.6% + 32px);right:calc(16.6% + 32px);
+  height:1px;background:linear-gradient(90deg,transparent,var(--gold-border),var(--gold-border),transparent);
+  z-index:0;
+}
+@media(max-width:768px){.steps-grid{grid-template-columns:1fr}.steps-grid::before{display:none}}
+.step-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r-xl);
+  padding:44px 36px;text-align:center;position:relative;z-index:1;transition:all .3s;
+}
+.step-card:hover{border-color:var(--gold-border);transform:translateY(-6px);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.step-circle{
+  width:80px;height:80px;border-radius:50%;
+  background:linear-gradient(135deg,var(--gold-dim),rgba(240,180,41,.05));
+  border:1px solid var(--gold-border);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 28px;font-size:28px;position:relative;
+}
+.step-circle::after{
+  content:attr(data-n);
+  position:absolute;top:-8px;right:-8px;
+  width:26px;height:26px;border-radius:50%;
+  background:var(--gold);color:var(--void);
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;
+}
+.step-card h3{font-size:22px;font-weight:900;color:var(--bone);margin-bottom:12px;letter-spacing:-.02em}
+.step-card p{font-size:14px;color:var(--muted);line-height:1.75}
+.step-tags{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin-top:18px}
+.step-tag{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  padding:4px 10px;border:1px solid var(--border);border-radius:5px;color:var(--muted);
+}
+.int-section{
+  padding:80px 0;
+  background:radial-gradient(ellipse 80% 60% at 50% 100%,rgba(91,33,182,.08),transparent),var(--void);
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+}
+.int-inner{max-width:1200px;margin:0 auto;padding:0 32px;text-align:center}
+.int-grid{
+  display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin-top:60px;
+}
+.int-chip{
+  display:flex;align-items:center;gap:10px;
+  background:var(--card);border:1px solid var(--border);border-radius:100px;
+  padding:12px 20px;transition:all .3s;cursor:default;
+}
+.int-chip:hover{border-color:var(--gold-border);background:var(--gold-dim);transform:translateY(-3px)}
+.int-chip-icon{font-size:20px}
+.int-chip-name{font-size:13px;font-weight:700;color:var(--bone)}
+.int-chip-type{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
+</style>
+
+<!-- ━━━━ HOW IT WORKS ━━━━ -->
+<section class="how-section">
+  <div class="how-inner">
+    <div class="how-header">
+      <div class="section-eyebrow">How It Works</div>
+      <h2 class="section-title">Invoice to <em style="font-style:italic;color:var(--gold)">Paid</em> in 3 Steps</h2>
+      <p class="section-sub">No training required. First invoice in under 5 minutes.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-circle" data-n="1"><i class="fas fa-file-invoice" style="color:var(--gold);font-size:28px"></i></div>
+        <h3>Create &amp; Send</h3>
+        <p>Pick a template, add your line items, set the due date. Send via WhatsApp, email, or share a direct link. Takes 90 seconds.</p>
+        <div class="step-tags">
+          <span class="step-tag">10+ Templates</span>
+          <span class="step-tag">Multi-currency</span>
+          <span class="step-tag">WhatsApp delivery</span>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-circle" data-n="2"><i class="fas fa-mobile-alt" style="color:var(--gold);font-size:28px"></i></div>
+        <h3>Client Pays via M-Pesa</h3>
+        <p>Your client taps "Pay Now." An STK Push prompt appears instantly on their phone. One PIN — payment confirmed. No friction, no confusion.</p>
+        <div class="step-tags">
+          <span class="step-tag">M-Pesa STK Push</span>
+          <span class="step-tag">Stripe / Flutterwave</span>
+          <span class="step-tag">Installments</span>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-circle" data-n="3"><i class="fas fa-receipt" style="color:var(--gold);font-size:28px"></i></div>
+        <h3>Receipt &amp; Records</h3>
+        <p>A KRA-compliant receipt with a QR code is auto-generated and sent to both parties. Your dashboard updates. Your accountant is happy.</p>
+        <div class="step-tags">
+          <span class="step-tag">KRA QR Receipt</span>
+          <span class="step-tag">QuickBooks sync</span>
+          <span class="step-tag">7yr retention</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ━━━━ FEATURES BENTO ━━━━ -->
+<section id="features" class="features-section">
+  <div class="features-inner">
+    <div class="features-header">
+      <div class="section-eyebrow">Platform Features</div>
+      <h2 class="section-title">Everything You Need<br>to <em style="font-style:italic;color:var(--gold)">Get Paid</em></h2>
+      <p class="section-sub">One platform handles the complete invoicing cycle — from first draft to final receipt.</p>
+    </div>
+    <div class="bento">
+
+      <!-- M-Pesa (big left) -->
+      <div class="ben b-a">
+        <div class="ben-eyebrow">// mpesa_integration.go</div>
+        <div class="ben-icon gold"><i class="fas fa-mobile-alt"></i></div>
+        <h3>M-Pesa STK Push</h3>
+        <p>Your client receives a payment prompt directly on their phone. No "please send to 0712…" — just one tap and it's done. Fully automated via Safaricom Daraja API with automatic retries, partial payments, and installment plans.</p>
+        <div class="payment-flow">
+          <div class="pf-step"><div class="pf-num">01</div><span class="pf-text">Invoice sent to client via WhatsApp or email</span><span class="pf-time">T+0s</span></div>
+          <div class="pf-step"><div class="pf-num">02</div><span class="pf-text">Client taps "Pay with M-Pesa" — STK Push triggered</span><span class="pf-time">T+2s</span></div>
+          <div class="pf-step"><div class="pf-num">03</div><span class="pf-text">Daraja confirms payment, dashboard updates in real time</span><span class="pf-time">T+12s</span></div>
+          <div class="pf-step"><div class="pf-num">04</div><span class="pf-text">KRA-compliant receipt auto-generated &amp; delivered</span><span class="pf-time">T+15s</span></div>
+        </div>
+      </div>
+
+      <!-- Multi-currency (right) -->
+      <div class="ben b-b">
+        <div class="ben-eyebrow">// currencies.json</div>
+        <div class="ben-icon violet"><i class="fas fa-globe-africa"></i></div>
+        <h3>Pan-African Multi-Currency</h3>
+        <p>Invoice in USD, collect in KES. Work with clients across 5 countries without manual conversions. Live exchange rates from Central Bank of Kenya, automatic calculation, dual display showing both currency and KES equivalent.</p>
+        <div class="currency-grid">
+          <div class="curr-card"><div class="curr-flag">🇰🇪</div><div class="curr-code">KES</div><div class="curr-rate mono">Base currency</div></div>
+          <div class="curr-card"><div class="curr-flag">🇺🇸</div><div class="curr-code">USD</div><div class="curr-rate mono">1 USD = 129.40 KES</div></div>
+          <div class="curr-card"><div class="curr-flag">🇹🇿</div><div class="curr-code">TZS</div><div class="curr-rate mono">1 TZS = 0.050 KES</div></div>
+          <div class="curr-card"><div class="curr-flag">🇳🇬</div><div class="curr-code">NGN</div><div class="curr-rate mono">1 NGN = 0.088 KES</div></div>
+        </div>
+        <div class="ben-pills" style="margin-top:16px">
+          <span class="ben-pill">USD</span><span class="ben-pill">KES</span><span class="ben-pill">TZS</span><span class="ben-pill">UGX</span><span class="ben-pill">NGN</span><span class="ben-pill">EUR</span><span class="ben-pill">GBP</span>
+        </div>
+      </div>
+
+      <!-- Automation -->
+      <div class="ben b-c">
+        <div class="ben-eyebrow">// reminders.go</div>
+        <div class="ben-icon green"><i class="fas fa-robot"></i></div>
+        <h3>Smart Automation</h3>
+        <p>Set it once. InvoiceFast sends perfectly-timed reminders via WhatsApp, SMS, and email — and adds late fees automatically with grace periods and caps.</p>
+        <div class="auto-timeline">
+          <div class="at-item">
+            <div class="at-icon whatsapp"><i class="fab fa-whatsapp"></i></div>
+            <div class="at-label">Invoice sent via WhatsApp <span>7 days before due</span></div>
+            <span class="at-status">sent</span>
+          </div>
+          <div class="at-item">
+            <div class="at-icon sms"><i class="fas fa-sms"></i></div>
+            <div class="at-label">Reminder SMS <span>1 day before due</span></div>
+            <span class="at-status">sent</span>
+          </div>
+          <div class="at-item">
+            <div class="at-icon mail"><i class="fas fa-envelope"></i></div>
+            <div class="at-label">Late fee notice + final email <span>3 days overdue</span></div>
+            <span class="at-status mono" style="color:var(--gold)">scheduled</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- KRA Compliance -->
+      <div class="ben b-d">
+        <div class="ben-eyebrow">// kra_compliance.go</div>
+        <div class="ben-icon red"><i class="fas fa-shield-alt"></i></div>
+        <h3>KRA Compliance</h3>
+        <p>QR-code receipts, 7-year data retention, immutable audit trails, and automatic VAT calculations. e-TIMs integration incoming. Sleep easy.</p>
+        <div class="ben-pills" style="margin-top:16px">
+          <span class="ben-pill">QR RECEIPTS</span>
+          <span class="ben-pill">e-TIMs READY</span>
+          <span class="ben-pill">VAT CALC</span>
+          <span class="ben-pill">7YR STORAGE</span>
+          <span class="ben-pill">AUDIT TRAIL</span>
+        </div>
+      </div>
+
+      <!-- Client Portal -->
+      <div class="ben b-e">
+        <div class="ben-eyebrow">// client_portal.go</div>
+        <div class="ben-icon slate"><i class="fas fa-users"></i></div>
+        <h3>Client Portal</h3>
+        <p>A branded space where clients view all invoices, payment history, and documents. Fewer "did you receive my payment?" messages. Supports white-label and custom domain.</p>
+        <div class="ben-pills" style="margin-top:16px">
+          <span class="ben-pill">WHITE-LABEL</span>
+          <span class="ben-pill">CUSTOM DOMAIN</span>
+          <span class="ben-pill">CREDIT LIMITS</span>
+        </div>
+      </div>
+
+      <!-- Templates (wide) -->
+      <div class="ben b-f">
+        <div class="ben-eyebrow">// templates.html</div>
+        <div class="ben-icon gold"><i class="fas fa-paint-brush"></i></div>
+        <h3>Professional Templates</h3>
+        <p>10+ beautifully designed invoice templates, customisable with your brand colors, logo, font, and footer. Built on Go's html/template — fast, reliable, pixel-perfect PDFs every time.</p>
+        <div class="ben-pills">
+          <span class="ben-pill">10+ DESIGNS</span><span class="ben-pill">LOGO UPLOAD</span>
+          <span class="ben-pill">BRAND COLORS</span><span class="ben-pill">GOOGLE FONTS</span>
+          <span class="ben-pill">PDF EXPORT</span><span class="ben-pill">CUSTOM FOOTER</span>
+        </div>
+      </div>
+
+      <!-- REST API -->
+      <div class="ben b-g" style="background:var(--ink-2)">
+        <div class="ben-eyebrow">// api.go — v1</div>
+        <div class="ben-icon violet"><i class="fas fa-code"></i></div>
+        <h3>Developer API</h3>
+        <p>Full REST API with webhook events and Zapier integration. Build your own billing flow on top of InvoiceFast in hours. Rate limits scale with your plan.</p>
+        <div style="background:var(--void);border:1px solid var(--border);border-radius:var(--r-md);padding:14px;margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:11px;overflow:hidden">
+          <span style="color:var(--muted)">POST</span> <span style="color:var(--gold)">/api/v1/invoices</span><br>
+          <span style="color:var(--faint)">Authorization: Bearer </span><span style="color:var(--violet-3)">YOUR_API_KEY</span><br><br>
+          <span style="color:var(--bone-3)">{</span><br>
+          &nbsp;<span style="color:var(--violet-3)">"client_name"</span><span style="color:var(--bone-3)">: </span><span style="color:var(--green)">"ABC Company Ltd"</span><span style="color:var(--bone-3)">,</span><br>
+          &nbsp;<span style="color:var(--violet-3)">"amount"</span><span style="color:var(--bone-3)">: </span><span style="color:var(--gold)">50000</span><span style="color:var(--bone-3)">,</span><br>
+          &nbsp;<span style="color:var(--violet-3)">"currency"</span><span style="color:var(--bone-3)">: </span><span style="color:var(--green)">"KES"</span><br>
+          <span style="color:var(--bone-3)">}</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ━━━━ INTEGRATIONS ━━━━ -->
+<section class="int-section">
+  <div class="int-inner">
+    <div>
+      <div class="section-eyebrow">Integrations</div>
+      <h2 class="section-title">Works With<br>Your Entire Stack</h2>
+      <p class="section-sub">Pre-built connections to the tools African businesses already use. Plug in and go.</p>
+    </div>
+    <div class="int-grid">
+      <div class="int-chip"><span class="int-chip-icon" style="color:#00C300"><i class="fas fa-mobile-alt"></i></span><div><div class="int-chip-name">M-Pesa</div><div class="int-chip-type">STK Push · C2B · B2C</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#F97316"><i class="fas fa-globe"></i></span><div><div class="int-chip-name">Flutterwave</div><div class="int-chip-type">Cards · Mobile Money</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#6772E5"><i class="fab fa-stripe"></i></span><div><div class="int-chip-name">Stripe</div><div class="int-chip-type">USD / EUR / GBP Cards</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#00457C"><i class="fab fa-paypal"></i></span><div><div class="int-chip-name">PayPal</div><div class="int-chip-type">Global Coverage</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#25D366"><i class="fab fa-whatsapp"></i></span><div><div class="int-chip-name">WhatsApp Business</div><div class="int-chip-type">Invoice Delivery · Reminders</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#2CA01C"><i class="fas fa-calculator"></i></span><div><div class="int-chip-name">QuickBooks</div><div class="int-chip-type">Bi-directional Sync</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#FF4A00"><i class="fas fa-bolt"></i></span><div><div class="int-chip-name">Zapier</div><div class="int-chip-type">5,000+ App Connections</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#4A154B"><i class="fab fa-slack"></i></span><div><div class="int-chip-name">Slack</div><div class="int-chip-type">Payment Notifications</div></div></div>
+      <div class="int-chip"><span class="int-chip-icon" style="color:#4285F4"><i class="fab fa-google"></i></span><div><div class="int-chip-name">Google Calendar</div><div class="int-chip-type">Invoice Due Dates</div></div></div>
+    </div>
+  </div>
+</section>

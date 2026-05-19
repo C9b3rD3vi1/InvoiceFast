@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
 	appLogger "invoicefast/internal/logger"
+	"invoicefast/internal/metrics"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/pdf"
@@ -65,18 +65,23 @@ func main() {
 	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
 		redisCache, err = cache.NewRedisCache(&cache.CacheConfig{URL: redisURL})
 		if err != nil {
-			log.Printf("Redis connection failed: %v (continuing without cache)", err)
+			logSvc.Warn(context.Background(), "Redis connection failed (continuing without cache)", "error", err.Error())
 		} else {
 			defer redisCache.Close()
 		}
 	}
 	defer db.Close()
 
+	// Initialize backup service
+	backupSvc := services.NewBackupService(&cfg.Backup, cfg.Database.DSN)
+	backupSvc.Start()
+	defer backupSvc.Stop()
+
 	// Initialize template engine
 	engine := html.New("./views", ".html")
 
 	if err := db.Migrate(); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		logSvc.Fatal(context.Background(), "Failed to run migrations", "error", err.Error())
 	}
 
 	app := fiber.New(fiber.Config{
@@ -96,6 +101,12 @@ func main() {
 
 	// SECURITY: Security headers middleware
 	app.Use(middleware.SecurityHeadersMiddleware())
+
+	// SECURITY: CSRF protection for state-changing requests
+	app.Use(middleware.CSRF())
+
+	// Prometheus metrics collection
+	app.Use(metrics.PrometheusMiddleware())
 
 	// HTTPS redirect in production
 	if cfg.Server.Mode == "production" {
@@ -232,16 +243,16 @@ func main() {
 		defer ticker.Stop()
 		// Run immediately on startup
 		if err := legacyReminderService.RunReminders(); err != nil {
-			log.Printf("Initial reminder error: %v", err)
+			logSvc.Error(context.Background(), "Initial reminder error", "error", err.Error())
 		}
 		for {
 			select {
 			case <-stopCh:
-				log.Println("Stopping reminder cron...")
+				logSvc.Info(context.Background(), "Stopping reminder cron")
 				return
 			case <-ticker.C:
 				if err := legacyReminderService.RunReminders(); err != nil {
-					log.Printf("Reminder error: %v", err)
+					logSvc.Error(context.Background(), "Reminder error", "error", err.Error())
 				}
 			}
 		}
@@ -254,11 +265,11 @@ func main() {
 		for {
 			select {
 			case <-stopCh:
-				log.Println("Stopping KRA queue processor...")
+				logSvc.Info(context.Background(), "Stopping KRA queue processor")
 				return
 			case <-ticker.C:
 				if err := kraService.ProcessRetryQueue(); err != nil {
-					log.Printf("KRA queue error: %v", err)
+					logSvc.Error(context.Background(), "KRA queue error", "error", err.Error())
 				}
 			}
 		}
@@ -268,20 +279,16 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
-		log.Println("Starting automation scheduler...")
+		logSvc.Info(context.Background(), "Starting automation scheduler")
 		for {
 			select {
 			case <-stopCh:
-				log.Println("Stopping automation scheduler...")
+				logSvc.Info(context.Background(), "Stopping automation scheduler")
 				return
 			case <-ticker.C:
-				// Run active automations (legacy)
-				// if err := runActiveAutomations(nil); err != nil {
-				// 	log.Printf("Automation scheduler error: %v", err)
-				// }
 				// Process recurring invoices
 				if err := recurringInvoiceService.ProcessRecurringInvoices(); err != nil {
-					log.Printf("Recurring invoice scheduler error: %v", err)
+					logSvc.Error(context.Background(), "Recurring invoice scheduler error", "error", err.Error())
 				}
 			}
 		}
@@ -310,7 +317,7 @@ planService := services.NewPlanService(db, exchangeRateService)
 	
 	// Migrate users without subscription to trial plan
 	if err := planService.MigrateUsersWithoutSubscription(); err != nil {
-		log.Printf("Warning: Failed to migrate users without subscription: %v", err)
+		logSvc.Warn(context.Background(), "Failed to migrate users without subscription", "error", err.Error())
 	}
 
 	stripeService := services.NewStripeService(db, cfg.Stripe.SecretKey, cfg.Stripe.PublicKey, cfg.Stripe.WebhookSecret)
@@ -330,7 +337,7 @@ planService := services.NewPlanService(db, exchangeRateService)
 		for {
 			select {
 			case <-stopCh:
-				log.Println("Stopping billing worker...")
+				logSvc.Info(context.Background(), "Stopping billing worker")
 				return
 			case <-ticker.C:
 				billingWorker.RunAllJobs()
@@ -354,7 +361,7 @@ planService := services.NewPlanService(db, exchangeRateService)
 	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService)
 	reportHandler := handlers.NewReportHandler(reportService)
 	automationHandler := handlers.NewAutomationHandler(jobQueue, recurringInvoice, reminderService, workflowService)
-	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService)
+	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService, planService)
 	passwordResetService := services.NewPasswordResetService(db, cfg, emailService)
 	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService, passwordResetService, db)
 	notificationHandler := handlers.NewNotificationHandler(db)
@@ -440,7 +447,7 @@ planService := services.NewPlanService(db, exchangeRateService)
 
 				// Skip if it's just known domains
 				if subdomain != "www" && subdomain != "api" && !strings.HasPrefix(hostname, "localhost") {
-					log.Printf("[Subdomain] Detected: %s -> subdomain: %s", hostname, subdomain)
+					logSvc.Debug(context.Background(), "Subdomain detected", "host", hostname, "subdomain", subdomain)
 
 					// Look up tenant by subdomain
 					var tenant models.Tenant
@@ -473,6 +480,11 @@ planService := services.NewPlanService(db, exchangeRateService)
 		return c.Next()
 	})
 
+	// Prometheus metrics endpoint
+	metricsGroup := app.Group("")
+	metricsGroup.Get("/metrics", metrics.Handler())
+	metricsGroup.Get("/api/v1/metrics", metrics.Handler())
+
 	// Health endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
 		// Check database connection
@@ -498,9 +510,9 @@ planService := services.NewPlanService(db, exchangeRateService)
 	// Start server
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)
-		log.Printf("Starting InvoiceFast on %s (mode: %s)", addr, cfg.Server.Mode)
+		logSvc.Info(context.Background(), "Starting InvoiceFast", "addr", addr, "mode", cfg.Server.Mode)
 		if err := app.Listen(addr); err != nil {
-			log.Fatalf("Server error: %v", err)
+			logSvc.Fatal(context.Background(), "Server error", "error", err.Error())
 		}
 	}()
 
@@ -509,19 +521,11 @@ planService := services.NewPlanService(db, exchangeRateService)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down...")
-
-	// Signal all cron jobs to stop
-	close(stopCh)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := app.ShutdownWithContext(ctx); err != nil {
-		log.Printf("Shutdown error: %v", err)
+	logSvc.Info(context.Background(), "Shutting down")
+	if err := app.ShutdownWithTimeout(30 * time.Second); err != nil {
+		logSvc.Warn(context.Background(), "Shutdown error", "error", err.Error())
 	}
-
-	log.Println("Server exited")
+	logSvc.Info(context.Background(), "Server exited")
 }
 
 // runActiveAutomations executes all active automations with triggers
@@ -536,14 +540,12 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 		code = e.Code
 	}
 
-	// Log the error
-	log.Printf("[ERROR] %s %s: %v", c.Method(), c.Path(), err)
+	appLogger.Get().Error(context.Background(), "Unhandled error", "method", c.Method(), "path", c.Path(), "error", err.Error())
 
-	// JSON error for API endpoints
+	// JSON error for API routes
 	if strings.HasPrefix(c.Path(), "/api/") {
 		return c.Status(code).JSON(fiber.Map{
 			"error": err.Error(),
-			"code":  code,
 		})
 	}
 

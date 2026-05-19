@@ -1,11 +1,11 @@
 package services
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +13,7 @@ import (
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -289,7 +290,7 @@ func (s *QuickBooksService) SyncInvoices(tenantID string) (int, error) {
 	syncedCount := 0
 	for _, inv := range invoices {
 		if err := s.createQuickBooksInvoice(accessToken, realmID, &inv); err != nil {
-			log.Printf("Failed to sync invoice %s to QuickBooks: %v", inv.InvoiceNumber, err)
+			logger.Get().Error(context.Background(), "Failed to sync invoice to QuickBooks", "invoice_number", inv.InvoiceNumber, "error", err)
 			continue
 		}
 		syncedCount++

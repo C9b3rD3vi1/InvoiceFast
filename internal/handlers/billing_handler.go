@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
-	"log"
 	"strings"
 	"time"
 
@@ -79,6 +79,7 @@ func (h *BillingHandler) GetPlans(c *fiber.Ctx) error {
 		Description     string `json:"description"`
 		MonthlyPriceKES int64  `json:"monthly_price_kes"`
 		YearlyPriceKES  int64  `json:"yearly_price_kes"`
+		CustomPrice     bool   `json:"custom_price"`
 		FeaturesJSON    string `json:"features_json"`
 		LimitsJSON      string `json:"limits_json"`
 		Popular         bool   `json:"popular"`
@@ -87,13 +88,16 @@ func (h *BillingHandler) GetPlans(c *fiber.Ctx) error {
 
 	response := make([]PlanResponse, len(plans))
 	for i, plan := range plans {
+		monthly := h.planService.GetMonthlyPriceKES(&plan)
+		yearly := h.planService.GetYearlyPriceKES(&plan)
 		response[i] = PlanResponse{
 			ID:              plan.ID,
 			Name:            plan.Name,
 			Slug:            plan.Slug,
 			Description:     plan.Description,
-			MonthlyPriceKES: h.planService.GetMonthlyPriceKES(&plan),
-			YearlyPriceKES:  h.planService.GetYearlyPriceKES(&plan),
+			MonthlyPriceKES: monthly,
+			YearlyPriceKES:  yearly,
+			CustomPrice:     monthly <= 0 && yearly <= 0,
 			FeaturesJSON:    plan.FeaturesJSON,
 			LimitsJSON:      plan.LimitsJSON,
 			Popular:         plan.SortOrder == 3,
@@ -101,7 +105,10 @@ func (h *BillingHandler) GetPlans(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"plans": response})
+	return c.JSON(fiber.Map{
+		"plans": response,
+		"rates": h.planService.GetAllExchangeRates(),
+	})
 }
 
 func (h *BillingHandler) GetExchangeRates(c *fiber.Ctx) error {
@@ -173,11 +180,11 @@ func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
 	if amount == 0 {
 		sub, err := h.subService.CreateSubscription(tenantID, req.PlanID, "monthly")
 		if err != nil {
-			log.Printf("[CreateCheckoutSession] CreateSubscription failed: %v", err)
+			logger.Get().Error(c.UserContext(), "CreateSubscription failed", "component", "CreateCheckoutSession", "error", err)
 			if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
 				existing, _, getErr := h.subService.GetSubscriptionWithPlan(tenantID)
 				if getErr == nil && existing != nil {
-					log.Printf("[CreateCheckoutSession] Upgrading existing subscription")
+					logger.Get().Info(c.UserContext(), "Upgrading existing subscription", "component", "CreateCheckoutSession")
 					existing.Status = "active"
 					existing.PlanID = req.PlanID
 					sub = existing
@@ -198,7 +205,7 @@ func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
 	}
 	
 	// PAID PLAN - requires payment first
-	log.Printf("[CreateCheckoutSession] plan=%s, amount=%d, stripeSvc=%v, paymentMethod=%s", plan.Name, amount, h.stripeSvc != nil, paymentMethod)
+	logger.Get().Info(c.UserContext(), "Creating checkout session", "component", "CreateCheckoutSession", "plan", plan.Name, "amount", amount, "stripe_svc_available", h.stripeSvc != nil, "payment_method", paymentMethod)
 	
 	if paymentMethod == "mpesa" && h.intasendSvc != nil && amount > 0 {
 		baseURL := c.BaseURL() + "/billing"
@@ -226,8 +233,8 @@ func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
 	if h.stripeSvc != nil && amount > 0 && emailStr != "" {
 		sessionURL, err := h.stripeSvc.CreateBillingSession(plan.Name, amount, emailStr, successURL, cancelURL)
 		if err != nil {
-			log.Printf("Failed to create stripe billing session: %v", err)
-			log.Printf("Creating direct subscription instead (fallback)")
+			logger.Get().Error(c.UserContext(), "Failed to create stripe billing session", "error", err)
+			logger.Get().Info(c.UserContext(), "Creating direct subscription instead (fallback)")
 		} else {
 			return c.JSON(fiber.Map{"url": sessionURL})
 		}
@@ -504,7 +511,7 @@ func (h *BillingHandler) HandleMpesaWebhook(c *fiber.Ctx) error {
 	if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok {
 		isProcessed, _ := svc.IsProcessed(c.Context(), "billing_mpesa:"+payload.CheckoutRequestID)
 		if isProcessed {
-			log.Printf("[BILLING] Already processed: %s", payload.CheckoutRequestID)
+			logger.Get().Info(c.UserContext(), "Already processed", "component", "BILLING", "checkout_request_id", payload.CheckoutRequestID)
 			return c.JSON(fiber.Map{"success": true, "status": "already_processed"})
 		}
 	}
@@ -553,7 +560,7 @@ func (h *BillingHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok {
 			isProcessed, _ := svc.IsProcessed(c.Context(), "billing:"+iduKey)
 			if isProcessed {
-				log.Printf("[BILLING] Already processed: %s", iduKey)
+				logger.Get().Info(c.UserContext(), "Already processed", "component", "BILLING", "idempotency_key", iduKey)
 				return c.JSON(fiber.Map{"success": true, "status": "already_processed"})
 			}
 		}
@@ -577,14 +584,14 @@ func (h *BillingHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 			}
 			
 			if err := h.billingSvc.RecordBillingPayment(tx); err != nil {
-				log.Printf("[BILLING] Failed to record payment: %v", err)
+				logger.Get().Error(c.UserContext(), "Failed to record payment", "component", "BILLING", "error", err)
 			} else {
 				sub, err := h.subService.GetActiveSubscription(payload.TenantID)
 				if err != nil || sub == nil {
-					log.Printf("[BILLING] Creating subscription for tenant: %s", payload.TenantID)
+					logger.Get().Info(c.UserContext(), "Creating subscription for tenant", "component", "BILLING", "tenant_id", payload.TenantID)
 					_, _ = h.subService.CreateSubscriptionWithTrial(payload.TenantID)
 				} else {
-					log.Printf("[BILLING] Subscription already active for tenant: %s", payload.TenantID)
+					logger.Get().Info(c.UserContext(), "Subscription already active for tenant", "component", "BILLING", "tenant_id", payload.TenantID)
 				}
 			}
 			
@@ -597,7 +604,7 @@ func (h *BillingHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 			}
 		}
 	} else if payload.Event == "checkout.failed" || payload.Status == "failed" {
-		log.Printf("[BILLING] Payment failed: %s", payload.Message)
+		logger.Get().Warn(c.UserContext(), "Payment failed", "component", "BILLING", "message", payload.Message)
 	}
 
 	return c.JSON(fiber.Map{"success": true})

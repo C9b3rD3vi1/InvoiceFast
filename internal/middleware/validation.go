@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"html"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -214,4 +217,198 @@ func validateItemsArray(value interface{}) error {
 		return fiber.NewError(fiber.StatusBadRequest, "maximum 1000 items allowed")
 	}
 	return nil
+}
+
+// ============================================================
+// Test Helper Functions - Exported for test packages
+// ============================================================
+
+// ValidateEmail exports email validation logic
+func ValidateEmail(email string) error {
+	if email == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "email is required")
+	}
+	// Strip whitespace
+	email = strings.TrimSpace(email)
+	if !emailRegex.MatchString(email) {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid email format")
+	}
+	return nil
+}
+
+// ValidatePhone exports phone validation logic
+func ValidatePhone(phone string) error {
+	if phone == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "phone is required")
+	}
+	// Normalize phone for validation
+	normalized := normalizePhoneNumber(phone)
+	if !phoneRegex.MatchString(normalized) {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid phone number format")
+	}
+	return nil
+}
+
+// ValidateUUID exports UUID validation logic
+func ValidateUUID(uuid string) error {
+	if uuid == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "UUID is required")
+	}
+	// Strip whitespace
+	uuid = strings.TrimSpace(uuid)
+	if !uuidRegex.MatchString(strings.ToLower(uuid)) {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid UUID format")
+	}
+	return nil
+}
+
+// ValidateCurrency exports currency validation logic
+func ValidateCurrency(currency string) error {
+	if currency == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "currency is required")
+	}
+	// Normalize currency (uppercase, trim)
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	validCurrencies := map[string]bool{
+		"KES": true, "USD": true, "EUR": true, "GBP": true,
+		"TZS": true, "UGX": true, "NGN": true, "ZAR": true,
+	}
+	if !validCurrencies[currency] {
+		return fiber.NewError(fiber.StatusBadRequest, "unsupported currency")
+	}
+	return nil
+}
+
+// ValidateNumber exports number validation logic
+func ValidateNumber(input string) error {
+	if input == "" {
+		return nil // Empty is valid (optional field)
+	}
+	_, err := strconv.ParseFloat(input, 64)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid number format")
+	}
+	return nil
+}
+
+// ValidateRequired exports required validation
+func ValidateRequired(value, fieldName string) error {
+	if strings.TrimSpace(value) == "" {
+		return fiber.NewError(fiber.StatusBadRequest, fieldName+" is required")
+	}
+	return nil
+}
+
+// ValidateMinLength exports min length validation
+func ValidateMinLength(value string, minLen int) error {
+	if len(value) < minLen {
+		return fiber.NewError(fiber.StatusBadRequest, "minimum length is "+strconv.Itoa(minLen))
+	}
+	return nil
+}
+
+// ValidateMaxLength exports max length validation
+func ValidateMaxLength(value string, maxLen int) error {
+	if maxLen > 0 && len(value) > maxLen {
+		return fiber.NewError(fiber.StatusBadRequest, "maximum length is "+strconv.Itoa(maxLen))
+	}
+	return nil
+}
+
+// ValidateRange exports range validation
+func ValidateRange(value string, min, max float64) error {
+	if value == "" {
+		return nil
+	}
+	num, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid number")
+	}
+	if num < min {
+		return fiber.NewError(fiber.StatusBadRequest, "value below minimum")
+	}
+	if num > max {
+		return fiber.NewError(fiber.StatusBadRequest, "value exceeds maximum")
+	}
+	return nil
+}
+
+// ValidateURL exports URL validation
+func ValidateURL(url string) error {
+	if url == "" {
+		return nil
+	}
+	uu := strings.ToLower(url)
+	if !strings.HasPrefix(uu, "http://") && !strings.HasPrefix(uu, "https://") {
+		return fiber.NewError(fiber.StatusBadRequest, "URL must start with http:// or https://")
+	}
+	return nil
+}
+
+// ValidateDate exports date validation
+func ValidateDate(dateStr, format string) error {
+	if dateStr == "" {
+		return nil
+	}
+	if format == "" {
+		format = "2006-01-02"
+	}
+	_, err := time.Parse(format, dateStr)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid date format")
+	}
+	return nil
+}
+
+// ValidateDateRange exports date range validation
+func ValidateDateRange(dateStr, startStr, endStr string) error {
+	format := "2006-01-02"
+	date, err := time.Parse(format, dateStr)
+	if err != nil {
+		return err
+	}
+	start, _ := time.Parse(format, startStr)
+	end, _ := time.Parse(format, endStr)
+	if date.Before(start) || date.After(end) {
+		return fiber.NewError(fiber.StatusBadRequest, "date must be between range")
+	}
+	return nil
+}
+
+// HasRoleForTest checks role hierarchy
+func HasRoleForTest(userRole, required string) bool {
+	userLevel := roleHierarchy[userRole]
+	requiredLevel := roleHierarchy[required]
+	if userLevel == 0 || requiredLevel == 0 {
+		return false
+	}
+	return userLevel >= requiredLevel
+}
+
+// GetRoleValueForTest returns role hierarchy value
+func GetRoleValueForTest(role string) int {
+	return roleHierarchy[role]
+}
+
+// SanitizeInputForTest sanitizes HTML input
+func SanitizeInputForTest(input string) string {
+	return html.EscapeString(input)
+}
+
+// ContainsSQLInjectionForTest detects SQL injection attempts
+func ContainsSQLInjectionForTest(input string) bool {
+	input = strings.ToLower(input)
+	sqlPatterns := []string{
+		"drop table", "drop view",
+		"union select", "union all",
+		"insert into", "update ", "delete from",
+		"select from", "create table",
+		"' or '", "--", ";",
+	}
+	for _, pattern := range sqlPatterns {
+		if strings.Contains(input, pattern) {
+			return true
+		}
+	}
+	return false
 }

@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
 	"invoicefast/internal/cache"
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 	"invoicefast/internal/pdf"
 
@@ -57,16 +57,16 @@ func NewPDFWorker(redisCache *cache.RedisCache, db *database.DB, cfg *config.Con
 }
 
 func (w *PDFWorker) Start(ctx context.Context) {
-	log.Println("[PDFWorker] Starting worker...")
+	logger.Get().Info(ctx, "Starting worker")
 
 	go w.processLoop(ctx)
 	go w.monitorQueue(ctx)
 
-	log.Println("[PDFWorker] Worker started successfully")
+	logger.Get().Info(ctx, "Worker started successfully")
 }
 
 func (w *PDFWorker) Stop() {
-	log.Println("[PDFWorker] Stopping worker...")
+	logger.Get().Info(context.Background(), "Stopping worker")
 	close(w.stopChan)
 }
 
@@ -90,7 +90,7 @@ func (w *PDFWorker) EnqueueTask(ctx context.Context, task *PDFTask) error {
 		return fmt.Errorf("failed to enqueue task: %w", err)
 	}
 
-	log.Printf("[PDFWorker] Enqueued PDF task for invoice %s", task.InvoiceID)
+	logger.Get().Info(ctx, "Enqueued PDF task for invoice", "invoice_id", task.InvoiceID)
 	return nil
 }
 
@@ -118,7 +118,7 @@ func (w *PDFWorker) processNextTask(ctx context.Context) {
 
 	var task PDFTask
 	if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
-		log.Printf("[PDFWorker] Failed to unmarshal task: %v", err)
+		logger.Get().Error(ctx, "Failed to unmarshal task", "error", err)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (w *PDFWorker) executeTask(ctx context.Context, task *PDFTask) {
 		StartedAt: startTime,
 	}
 
-	log.Printf("[PDFWorker] Processing PDF for invoice %s", task.InvoiceID)
+	logger.Get().Info(ctx, "Processing PDF for invoice", "invoice_id", task.InvoiceID)
 
 	var invoice models.Invoice
 	err := w.db.Preload("Client").Preload("Items").Preload("User").
@@ -223,28 +223,26 @@ func (w *PDFWorker) executeTask(ctx context.Context, task *PDFTask) {
 }
 
 func (w *PDFWorker) savePDF(dir, filename string, content []byte) error {
-	// Ensure tenant directory exists
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		log.Printf("[PDFWorker] Failed to create directory: %v", err)
+		logger.Get().Error(context.Background(), "Failed to create directory", "error", err)
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Write file to disk
 	path := fmt.Sprintf("%s/%s", dir, filename)
 	if err := os.WriteFile(path, content, 0644); err != nil {
-		log.Printf("[PDFWorker] Failed to save PDF: %v", err)
+		logger.Get().Error(context.Background(), "Failed to save PDF", "error", err)
 		return fmt.Errorf("failed to save PDF: %w", err)
 	}
 
-	log.Printf("[PDFWorker] PDF saved successfully: %s", path)
+	logger.Get().Info(context.Background(), "PDF saved successfully", "path", path)
 	return nil
 }
 
 func (w *PDFWorker) completeTask(ctx context.Context, task *PDFTask, result PDFTaskResult) {
 	result.EndedAt = time.Now()
 
-	log.Printf("[PDFWorker] Task completed: invoice=%s status=%s duration=%v",
-		result.InvoiceID, result.Status, result.EndedAt.Sub(result.StartedAt))
+	logger.Get().Info(ctx, "Task completed",
+		"invoice_id", result.InvoiceID, "status", result.Status, "duration", result.EndedAt.Sub(result.StartedAt))
 
 	w.db.Model(&models.Invoice{}).Where("id = ?", task.InvoiceID).Updates(map[string]interface{}{
 		"pdf_url": result.PDFURL,
@@ -265,7 +263,7 @@ func (w *PDFWorker) monitorQueue(ctx context.Context) {
 		case <-ticker.C:
 			count, err := w.redis.ZCard(ctx, w.queueName)
 			if err == nil && count > 0 {
-				log.Printf("[PDFWorker] Queue depth: %d pending tasks", count)
+				logger.Get().Info(ctx, "Queue depth", "pending_tasks", count)
 			}
 		}
 	}

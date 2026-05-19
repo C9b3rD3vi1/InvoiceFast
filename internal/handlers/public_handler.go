@@ -1,10 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
@@ -19,6 +20,7 @@ type PublicHandler struct {
 	mpesaService         *services.MPesaService
 	intasendService      *services.IntasendService
 	emailTrackingService *services.EmailTrackingService
+	planService          *services.PlanService
 }
 
 // NewPublicHandler creates a new PublicHandler
@@ -28,6 +30,7 @@ func NewPublicHandler(
 	payment *services.PaymentService,
 	mpesa *services.MPesaService,
 	intasend *services.IntasendService,
+	planSvc *services.PlanService,
 ) *PublicHandler {
 	return &PublicHandler{
 		invoiceService:  invoice,
@@ -35,6 +38,7 @@ func NewPublicHandler(
 		paymentService:  payment,
 		mpesaService:    mpesa,
 		intasendService: intasend,
+		planService:     planSvc,
 	}
 }
 
@@ -45,6 +49,7 @@ func NewPublicHandlerWithTracking(
 	mpesa *services.MPesaService,
 	intasend *services.IntasendService,
 	emailTracking *services.EmailTrackingService,
+	planSvc *services.PlanService,
 ) *PublicHandler {
 	return &PublicHandler{
 		invoiceService:       invoice,
@@ -53,6 +58,7 @@ func NewPublicHandlerWithTracking(
 		mpesaService:         mpesa,
 		intasendService:      intasend,
 		emailTrackingService: emailTracking,
+		planService:          planSvc,
 	}
 }
 
@@ -203,11 +209,51 @@ func (h *PublicHandler) CheckPaymentStatus(c *fiber.Ctx) error {
 
 // GetPricing - get pricing info
 func (h *PublicHandler) GetPricing(c *fiber.Ctx) error {
+	if h.planService == nil {
+		return c.JSON(fiber.Map{"plans": []fiber.Map{}})
+	}
+
+	plans, err := h.planService.GetAllPlans()
+	if err != nil {
+		return c.JSON(fiber.Map{"plans": []fiber.Map{}})
+	}
+
+	type PlanResponse struct {
+		ID              string   `json:"id"`
+		Name            string   `json:"name"`
+		Slug            string   `json:"slug"`
+		Description     string   `json:"description"`
+		MonthlyPriceKES int64    `json:"monthly_price_kes"`
+		YearlyPriceKES  int64    `json:"yearly_price_kes"`
+		CustomPrice     bool     `json:"custom_price"`
+		Features        []string `json:"features"`
+		Popular         bool     `json:"popular"`
+	}
+
+	response := make([]PlanResponse, len(plans))
+	for i, plan := range plans {
+		features := []string{}
+		if plan.FeaturesJSON != "" {
+			_ = json.Unmarshal([]byte(plan.FeaturesJSON), &features)
+		}
+		monthly := h.planService.GetMonthlyPriceKES(&plan)
+		yearly := h.planService.GetYearlyPriceKES(&plan)
+		response[i] = PlanResponse{
+			ID:              plan.ID,
+			Name:            plan.Name,
+			Slug:            plan.Slug,
+			Description:     plan.Description,
+			MonthlyPriceKES: monthly,
+			YearlyPriceKES:  yearly,
+			CustomPrice:     monthly <= 0 && yearly <= 0,
+			Features:        features,
+			Popular:         plan.SortOrder == 3,
+		}
+	}
+
 	return c.JSON(fiber.Map{
-		"plans": []fiber.Map{
-			{"name": "Free", "price": 0, "features": []string{"50 invoices/month", "Email support"}},
-			{"name": "Pro", "price": 2900, "features": []string{"Unlimited invoices", "Priority support", "KRA integration"}},
-		},
+		"plans": response,
+		"rates": h.planService.GetAllExchangeRates(),
 	})
 }
 
@@ -226,7 +272,7 @@ func (h *PublicHandler) TrackOpen(c *fiber.Ctx) error {
 	ipAddress := c.IP()
 
 	if err := h.emailTrackingService.TrackOpen(trackingID, userAgent, ipAddress); err != nil {
-		log.Printf("Email open tracking error: %v", err)
+		logger.Get().Error(c.UserContext(), "Email open tracking error", "error", err)
 	}
 
 	// Return 1x1 transparent GIF
@@ -250,7 +296,7 @@ func (h *PublicHandler) TrackClick(c *fiber.Ctx) error {
 
 	originalURL, err := h.emailTrackingService.TrackClick(linkID, trackingID)
 	if err != nil {
-		log.Printf("Email click tracking error: %v", err)
+		logger.Get().Error(c.UserContext(), "Email click tracking error", "error", err)
 		return c.Status(fiber.StatusNotFound).Redirect("/")
 	}
 

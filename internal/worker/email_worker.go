@@ -2,10 +2,10 @@ package worker
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -62,7 +62,7 @@ func (w *EmailQueueWorker) Enqueue(job *EmailJob) {
 }
 
 func (w *EmailQueueWorker) processJob(ctx context.Context, job *EmailJob) {
-	log.Printf("Processing email job: %s to %s", job.Type, job.To)
+	logger.Get().Info(ctx, "Processing email job", "type", job.Type, "to", job.To)
 	// Email sending would be implemented here with actual SMTP service
 }
 
@@ -84,7 +84,7 @@ func (w *EmailQueueWorker) startReminderCron(ctx context.Context) {
 func (w *EmailQueueWorker) sendDueReminders(ctx context.Context) {
 	// Find invoices due in 3, 7, 14, 30 days
 	// Send reminder emails
-	log.Println("Checking for due invoices...")
+	logger.Get().Info(ctx, "Checking for due invoices")
 }
 
 // ReminderWorker handles automated payment reminders
@@ -108,12 +108,12 @@ func (w *ReminderWorker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 	
-	log.Println("Reminder worker started")
+	logger.Get().Info(ctx, "Reminder worker started")
 	
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Reminder worker stopping")
+			logger.Get().Info(ctx, "Reminder worker stopping")
 			return
 		case <-ticker.C:
 			w.processReminders(ctx)
@@ -127,7 +127,7 @@ func (w *ReminderWorker) Stop() {
 }
 
 func (w *ReminderWorker) processReminders(ctx context.Context) {
-	log.Println("Processing reminders...")
+	logger.Get().Info(ctx, "Processing reminders")
 	// Implementation would query for overdue invoices and send reminders
 }
 

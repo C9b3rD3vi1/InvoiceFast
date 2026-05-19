@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
@@ -117,7 +117,10 @@ func (s *KRAQueueService) QueueInvoiceForKRASubmission(invoice *models.Invoice) 
 		return fmt.Errorf("failed to queue invoice for KRA: %w", err)
 	}
 
-	log.Printf("[KRA] Queued invoice %s for submission (queue_id: %s)", invoice.InvoiceNumber, queueItem.ID)
+	logger.Get().Info(context.Background(), "Queued invoice for submission",
+		"invoice_number", invoice.InvoiceNumber,
+		"queue_id", queueItem.ID,
+	)
 	return nil
 }
 
@@ -145,7 +148,11 @@ func (s *KRAQueueService) ProcessQueue() error {
 
 // processQueueItem processes a single KRA queue item
 func (s *KRAQueueService) processQueueItem(item models.KRAQueueItem) {
-	log.Printf("[KRA] Processing queue item %s (attempt %d/%d)", item.ID, item.RetryCount+1, item.MaxRetries)
+	logger.Get().Info(context.Background(), "Processing queue item",
+		"item_id", item.ID,
+		"attempt", item.RetryCount+1,
+		"max_retries", item.MaxRetries,
+	)
 
 	// Parse payload
 	var kraData KRAInvoiceData
@@ -167,12 +174,18 @@ func (s *KRAQueueService) processQueueItem(item models.KRAQueueItem) {
 		"kra_qr_code": kraResp.QRCode,
 	}).Error
 	if err != nil {
-		log.Printf("[KRA] Warning: failed to update invoice %s with KRA ICN: %v", item.InvoiceNumber, err)
+		logger.Get().Warn(context.Background(), "Failed to update invoice with KRA ICN",
+			"invoice_number", item.InvoiceNumber,
+			"error", err,
+		)
 	}
 
 	// Mark as completed
 	s.markCompleted(&item, kraResp.ICN)
-	log.Printf("[KRA] Invoice %s submitted successfully - ICN: %s", item.InvoiceNumber, kraResp.ICN)
+	logger.Get().Info(context.Background(), "Invoice submitted successfully",
+		"invoice_number", item.InvoiceNumber,
+		"icn", kraResp.ICN,
+	)
 }
 
 // handleRetry handles retry logic with exponential backoff
@@ -198,11 +211,19 @@ func (s *KRAQueueService) handleRetry(item *models.KRAQueueItem, err error) {
 
 	err = s.db.Save(item).Error
 	if err != nil {
-		log.Printf("[KRA] Failed to update retry count for %s: %v", item.ID, err)
+		logger.Get().Error(context.Background(), "Failed to update retry count",
+			"item_id", item.ID,
+			"error", err,
+		)
 	}
 
-	log.Printf("[KRA] Item %s failed (attempt %d/%d), retry in %v: %v",
-		item.ID, item.RetryCount, item.MaxRetries, delay, err)
+	logger.Get().Warn(context.Background(), "Item failed, retry scheduled",
+		"item_id", item.ID,
+		"attempt", item.RetryCount,
+		"max_retries", item.MaxRetries,
+		"delay", delay,
+		"error", err,
+	)
 }
 
 // markCompleted marks a queue item as completed
@@ -213,7 +234,10 @@ func (s *KRAQueueService) markCompleted(item *models.KRAQueueItem, icn string) {
 	item.LastError = ""
 
 	if err := s.db.Save(item).Error; err != nil {
-		log.Printf("[KRA] Failed to mark item %s as completed: %v", item.ID, err)
+		logger.Get().Error(context.Background(), "Failed to mark item as completed",
+			"item_id", item.ID,
+			"error", err,
+		)
 	}
 }
 
@@ -223,10 +247,16 @@ func (s *KRAQueueService) markFailed(item *models.KRAQueueItem, errMsg string) {
 	item.LastError = errMsg
 
 	if err := s.db.Save(item).Error; err != nil {
-		log.Printf("[KRA] Failed to mark item %s as failed: %v", item.ID, err)
+		logger.Get().Error(context.Background(), "Failed to mark item as failed",
+			"item_id", item.ID,
+			"error", err,
+		)
 	}
 
-	log.Printf("[KRA] KRA submission permanently failed for invoice %s: %s", item.InvoiceNumber, errMsg)
+	logger.Get().Error(context.Background(), "KRA submission permanently failed",
+		"invoice_number", item.InvoiceNumber,
+		"error", errMsg,
+	)
 }
 
 // StartKRAWorker starts the background KRA queue processor
@@ -234,16 +264,16 @@ func (s *KRAQueueService) StartKRAWorker(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	log.Println("[KRA] Starting KRA queue worker")
+	logger.Get().Info(ctx, "Starting KRA queue worker")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[KRA] Stopping KRA queue worker")
+			logger.Get().Info(ctx, "Stopping KRA queue worker")
 			return
 		case <-ticker.C:
 			if err := s.ProcessQueue(); err != nil {
-				log.Printf("[KRA] Queue processing error: %v", err)
+				logger.Get().Error(ctx, "Queue processing error", "error", err)
 			}
 		}
 	}

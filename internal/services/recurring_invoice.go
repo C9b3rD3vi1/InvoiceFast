@@ -1,11 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
@@ -28,7 +29,7 @@ func NewRecurringInvoiceService(db *database.DB, invoiceSvc *InvoiceService, ema
 
 // ProcessRecurringInvoices checks and processes due recurring invoices
 func (s *RecurringInvoiceService) ProcessRecurringInvoices() error {
-	log.Println("Processing recurring invoices...")
+	logger.Get().Info(context.Background(), "Processing recurring invoices")
 
 	var invoices []models.Invoice
 	now := time.Now()
@@ -40,12 +41,12 @@ func (s *RecurringInvoiceService) ProcessRecurringInvoices() error {
 
 	for _, parent := range invoices {
 		if err := s.createRecurringInvoice(&parent); err != nil {
-			log.Printf("Error creating recurring invoice from %s: %v", parent.ID, err)
+			logger.Get().Error(context.Background(), "Error creating recurring invoice from parent", "parent_id", parent.ID, "error", err)
 			continue
 		}
 	}
 
-	log.Printf("Processed %d recurring invoices", len(invoices))
+	logger.Get().Info(context.Background(), "Processed recurring invoices", "count", len(invoices))
 	return nil
 }
 
@@ -102,10 +103,10 @@ func (s *RecurringInvoiceService) createRecurringInvoice(parent *models.Invoice)
 	if err := s.db.Model(parent).Updates(map[string]interface{}{
 		"recurring_next_date": nextDate,
 	}).Error; err != nil {
-		log.Printf("Failed to update next date for %s: %v", parent.ID, err)
+		logger.Get().Error(context.Background(), "Failed to update next date", "parent_id", parent.ID, "error", err)
 	}
 
-	log.Printf("Created recurring invoice %s from parent %s", newInvoice.ID, parent.ID)
+	logger.Get().Info(context.Background(), "Created recurring invoice from parent", "invoice_id", newInvoice.ID, "parent_id", parent.ID)
 	return nil
 }
 

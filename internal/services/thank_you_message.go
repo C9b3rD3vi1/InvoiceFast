@@ -1,10 +1,11 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"log"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 )
 
@@ -44,7 +45,7 @@ func (s *ThankYouMessageService) SendThankYou(invoice *models.Invoice) error {
 		s.sendEmailThankYou(client.Email, invoice, companyName)
 	}
 
-	log.Printf("Thank you message sent for invoice %s to client %s", invoice.InvoiceNumber, client.Name)
+	logger.Get().Info(context.Background(), "Thank you message sent for invoice", "invoice_number", invoice.InvoiceNumber, "client_name", client.Name)
 	return nil
 }
 

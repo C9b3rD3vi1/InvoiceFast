@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
@@ -27,16 +27,16 @@ type PaymentWebhookRequest struct {
 func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *services.IdempotencyService) error {
 	var req PaymentWebhookRequest
 	if err := c.BodyParser(&req); err != nil {
-		log.Printf("[Webhook] Parse error: %v", err)
+		logger.Get().Error(c.Context(), "Parse error", "error", err)
 		return fiber.NewError(fiber.StatusBadRequest, "invalid payload")
 	}
 
-	log.Printf("[Webhook] Received: event=%s checkout=%s invoice=%s amount=%s",
-		req.Event, req.CheckoutID, req.InvoiceNumber, req.Amount)
+	logger.Get().Info(c.Context(), "Webhook received",
+		"event", req.Event, "checkout_id", req.CheckoutID, "invoice", req.InvoiceNumber, "amount", req.Amount)
 
 	// Validate required fields
 	if req.InvoiceNumber == "" && req.CheckoutID == "" {
-		log.Printf("[Webhook] Missing invoice_number and checkout_id")
+		logger.Get().Warn(c.Context(), "Missing invoice_number and checkout_id")
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ignored", "reason": "no_identifier"})
 	}
 
@@ -50,11 +50,11 @@ func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *servic
 		// Acquire distributed lock to prevent race conditions
 		isNew, err := idempotencySvc.HandlePaymentCallback(c.Context(), idemKey, nil)
 		if err != nil {
-			log.Printf("[Webhook] Idempotency error: %v", err)
+			logger.Get().Error(c.Context(), "Idempotency error", "error", err)
 			// Continue without lock - best effort
 		} else if !isNew {
 			// Already processed or being processed by another worker
-			log.Printf("[Webhook] Already processing or processed: %s", idemKey)
+			logger.Get().Info(c.Context(), "Already processing or processed", "idem_key", idemKey)
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"status":          "already_processed",
 				"idempotency_key": idemKey,
@@ -72,8 +72,8 @@ func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *servic
 	tenantID := middleware.GetTenantID(c)
 	if tenantID == "" {
 		// Log security event for potential attack
-		log.Printf("[SECURITY] Payment webhook attempted without tenant_id from IP: %s, Reference: %s",
-			c.IP(), req.Reference)
+		logger.Get().Warn(c.Context(), "Payment webhook attempted without tenant_id",
+			"ip", c.IP(), "reference", req.Reference)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "tenant context required",
 			"code":  "TENANT_REQUIRED",
@@ -90,7 +90,7 @@ func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *servic
 		First(&invoice, "invoice_number = ?", req.InvoiceNumber).Error
 
 	if err != nil {
-		log.Printf("[Webhook] Invoice not found: %s (tenant: %s)", req.InvoiceNumber, tenantID)
+		logger.Get().Info(c.Context(), "Invoice not found", "invoice_number", req.InvoiceNumber, "tenant_id", tenantID)
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "ignored", "reason": "not_found"})
 	}
 
@@ -103,7 +103,7 @@ func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *servic
 		return processReversedPayment(c, db, &invoice)
 
 	default:
-		log.Printf("[Webhook] Unhandled event: %s", req.Event)
+		logger.Get().Warn(c.Context(), "Unhandled webhook event", "event", req.Event)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "received"})
@@ -126,7 +126,7 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 		var existingPayment models.Payment
 		err := db.DB.Where("reference = ? AND tenant_id = ?", req.Reference, invoice.TenantID).First(&existingPayment).Error
 		if err == nil {
-			log.Printf("[Webhook] Payment with reference %s already exists for tenant %s - skipping", maskRef(req.Reference), invoice.TenantID)
+			logger.Get().Info(c.Context(), "Payment with reference already exists, skipping", "reference", maskRef(req.Reference), "tenant_id", invoice.TenantID)
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"status":    "duplicate_reference",
 				"reference": req.Reference,
@@ -153,10 +153,10 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 	payment.CompletedAt = &now
 
 		if err := tx.Create(&payment).Error; err != nil {
-			log.Printf("[Webhook] Failed to create payment: %v", err)
+			logger.Get().Error(c.Context(), "Failed to create payment", "error", err)
 			return fmt.Errorf("failed to create payment: %w", err)
 		}
-		log.Printf("[Webhook] Payment created: %s for invoice %s", payment.ID, invoice.InvoiceNumber)
+		logger.Get().Info(c.Context(), "Payment created", "payment_id", payment.ID, "invoice_number", invoice.InvoiceNumber)
 
 		// 2. Update invoice status
 		// Check if partial payment or full
@@ -170,17 +170,17 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 			"paid_amount": gorm.Expr("paid_amount + ?", amount),
 			"paid_at":     time.Now(),
 		}).Error; err != nil {
-			log.Printf("[Webhook] Failed to update invoice: %v", err)
+			logger.Get().Error(c.Context(), "Failed to update invoice", "error", err)
 			return fmt.Errorf("failed to update invoice: %w", err)
 		}
-		log.Printf("[Webhook] Invoice %s updated to %s", invoice.InvoiceNumber, newStatus)
+		logger.Get().Info(c.Context(), "Invoice updated", "invoice_number", invoice.InvoiceNumber, "status", newStatus)
 
 		// 3. Update client total paid (with tenant filter for extra safety)
 		if err := tx.Model(&models.Client{}).
 			Scopes(database.TenantFilter(invoice.TenantID)).
 			Where("id = ?", invoice.ClientID).
 			Update("total_paid", gorm.Expr("total_paid + ?", amount)).Error; err != nil {
-			log.Printf("[Webhook] Failed to update client: %v", err)
+			logger.Get().Error(c.Context(), "Failed to update client", "error", err)
 			return fmt.Errorf("failed to update client: %w", err)
 		}
 
@@ -189,7 +189,7 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 
 	// Check transaction result
 	if err != nil {
-		log.Printf("[Webhook] Transaction failed: %v", err)
+		logger.Get().Error(c.Context(), "Transaction failed", "error", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "payment processing failed")
 	}
 
@@ -207,7 +207,7 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 		}
 	}
 
-	log.Printf("[Webhook] Payment completed for invoice %s: amount=%f", invoice.InvoiceNumber, amount)
+	logger.Get().Info(c.Context(), "Payment completed", "invoice_number", invoice.InvoiceNumber, "amount", amount)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":         "processed",
@@ -235,11 +235,11 @@ func processReversedPayment(c *fiber.Ctx, db *database.DB, invoice *models.Invoi
 	})
 
 	if err != nil {
-		log.Printf("[Webhook] Reverse failed: %v", err)
+		logger.Get().Error(c.Context(), "Reverse failed", "error", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "reversal failed")
 	}
 
-	log.Printf("[Webhook] Payment reversed for invoice %s", invoice.InvoiceNumber)
+	logger.Get().Info(c.Context(), "Payment reversed", "invoice_number", invoice.InvoiceNumber)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":     "reversed",

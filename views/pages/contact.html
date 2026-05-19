@@ -1,389 +1,199 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Support | InvoiceFast</title>
-    <meta name="description" content="Contact InvoiceFast support for M-Pesa, KRA e-TIMS, and billing inquiries">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        trust: { DEFAULT: '#0277BD', light: '#039BE5', dark: '#01579B' },
-                        success: '#2E7D32',
-                        success_light: '#4CAF50',
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        .page-wrapper { min-height: 100vh; display: flex; flex-direction: column; }
-        main { flex: 1; }
-        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-        .accordion-content.open { max-height: 200px; }
-    </style>
-</head>
-<body class="bg-slate-50">
-    <div class="page-wrapper">
-        <!-- Status Badge -->
-        <div class="bg-success_light/10 border-b border-success/20">
-            <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-center gap-2">
-                <span class="w-2 h-2 bg-success rounded-full animate-pulse"></span>
-                <span class="text-sm text-success font-medium">System Status: All Systems Operational (KRA & M-Pesa Live)</span>
-            </div>
+<style>
+.page-header{text-align:center;margin-bottom:60px;padding-top:20px}
+.page-header h1{font-size:clamp(36px,4vw,48px);font-weight:900;color:var(--bone);letter-spacing:-.03em;line-height:1.1;margin-bottom:14px}
+.page-header p{font-size:17px;color:var(--muted);max-width:540px;margin:0 auto;line-height:1.7}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:40px;max-width:1100px;margin:0 auto}
+@media(max-width:860px){.grid-2{grid-template-columns:1fr}}
+.contact-method{display:flex;align-items:flex-start;gap:16px;margin-bottom:24px}
+.cm-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.cm-icon.gold{background:var(--gold-dim);color:var(--gold)}
+.cm-icon.green{background:var(--green-dim);color:var(--green)}
+.cm-icon.muted{background:var(--ghost);color:var(--muted)}
+.cm-label h3{font-size:15px;font-weight:700;color:var(--bone);margin-bottom:2px}
+.cm-label p{font-size:13px;color:var(--muted);line-height:1.5}
+.cm-label a{color:var(--gold);font-weight:600;font-size:14px;transition:color .2s}
+.cm-label a:hover{color:var(--gold-2)}
+.wa-btn{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  width:100%;padding:16px;margin-top:12px;
+  background:var(--green-dim);border:1px solid rgba(16,185,129,.25);
+  color:var(--green);border-radius:var(--r-md);
+  font-size:15px;font-weight:700;transition:all .25s;
+}
+.wa-btn:hover{background:rgba(16,185,129,.18);transform:translateY(-2px)}
+textarea.field-input{resize:vertical;min-height:120px}
+.feedback-msg{padding:14px;border-radius:var(--r);font-size:14px;margin-bottom:16px}
+.feedback-msg.success{background:var(--green-dim);border:1px solid rgba(16,185,129,.25);color:var(--green)}
+.feedback-msg.error{background:var(--red-dim);border:1px solid rgba(244,63,94,.25);color:var(--red)}
+.faq-section{max-width:760px;margin:80px auto 0;padding:0 32px}
+.faq-section h2{font-size:28px;font-weight:700;color:var(--bone);text-align:center;letter-spacing:-.02em;margin-bottom:32px}
+.faq-item{border-bottom:1px solid var(--border)}
+.faq-q{
+  display:flex;justify-content:space-between;align-items:center;gap:16px;
+  padding:20px 0;cursor:pointer;font-size:15px;font-weight:600;color:var(--bone-2);
+  transition:color .2s;border:none;background:none;width:100%;text-align:left;
+  font-family:'Nunito Sans',sans-serif;
+}
+.faq-q:hover{color:var(--gold)}
+.faq-q i{color:var(--muted);transition:transform .3s;font-size:14px;flex-shrink:0}
+.faq-item.open .faq-q i{transform:rotate(45deg);color:var(--gold)}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .35s ease}
+.faq-item.open .faq-a{max-height:300px}
+.faq-a-inner{padding:0 0 20px;font-size:14px;color:var(--muted);line-height:1.75}
+</style>
+
+<div class="page-section">
+  <div class="page-header">
+    <h1>Contact Support</h1>
+    <p>We're here to help with M-Pesa, KRA compliance, billing, or any questions about InvoiceFast.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Get in Touch</h2>
+      <div class="contact-method">
+        <div class="cm-icon gold"><i class="fas fa-envelope"></i></div>
+        <div class="cm-label">
+          <h3>Email Support</h3>
+          <p>For all inquiries, expect response within 24 hours</p>
+          <a href="mailto:support@invoicefast.co.ke">support@invoicefast.co.ke</a>
         </div>
-
-        <!-- Navigation -->
-        <nav class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center justify-between h-16">
-                    <a href="/" class="flex items-center gap-2">
-                        <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-10 w-auto">
-                    </a>
-                    <div class="hidden md:flex items-center gap-6">
-                        <a href="/" class="text-slate-600 hover:text-trust transition-colors font-medium">Home</a>
-                        <a href="/#features" class="text-slate-600 hover:text-trust transition-colors font-medium">Features</a>
-                        <a href="/#pricing" class="text-slate-600 hover:text-trust transition-colors font-medium">Pricing</a>
-                        <a href="/contact" class="text-trust font-medium">Contact</a>
-                    </div>
-                    <div class="hidden md:flex items-center gap-3">
-                        <a href="/login" class="text-slate-600 hover:text-trust font-medium px-4 py-2">Login</a>
-                        <a href="/register" class="bg-trust text-white px-5 py-2 rounded-lg font-semibold hover:bg-trust-dark transition-all">Get Started</a>
-                    </div>
-                    <button class="md:hidden p-2 text-slate-600" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-slate-200 px-4 py-3">
-                <a href="/" class="block py-2 text-slate-600 hover:text-trust">Home</a>
-                <a href="/#features" class="block py-2 text-slate-600 hover:text-trust">Features</a>
-                <a href="/#pricing" class="block py-2 text-slate-600 hover:text-trust">Pricing</a>
-                <a href="/contact" class="block py-2 text-trust font-semibold">Contact</a>
-                <hr class="my-2 border-slate-200">
-                <a href="/login" class="block py-2 text-slate-600">Login</a>
-                <a href="/register" class="block py-2 text-trust font-semibold">Get Started</a>
-            </div>
-        </nav>
-
-        <!-- Main Content -->
-        <main class="py-12">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <!-- Page Header -->
-                <div class="text-center mb-12">
-                    <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">Contact Support</h1>
-                    <p class="text-lg text-slate-600 max-w-2xl mx-auto">We're here to help with M-Pesa integration, KRA compliance, billing, or any questions about InvoiceFast.</p>
-                </div>
-
-                <!-- Two Column Layout -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                    
-                    <!-- Left Column: Trust Signals -->
-                    <div class="space-y-8">
-                        <!-- Contact Methods -->
-                        <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200">
-                            <h2 class="text-xl font-bold text-slate-900 mb-6">Get in Touch</h2>
-                            
-                            <div class="space-y-6">
-                                <!-- Email -->
-                                <div class="flex items-start gap-4">
-                                    <div class="w-12 h-12 bg-trust/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                                        <svg class="w-6 h-6 text-trust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h3 class="font-semibold text-slate-900">Email Support</h3>
-                                        <p class="text-slate-600 text-sm mt-1">For all inquiries, expect response within 24 hours</p>
-                                        <a href="mailto:support@invoicefast.co.ke" class="text-trust font-medium hover:underline">support@invoicefast.co.ke</a>
-                                    </div>
-                                </div>
-
-                                <!-- WhatsApp -->
-                                <div class="flex items-start gap-4">
-                                    <div class="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                                        <svg class="w-6 h-6 text-success" fill="currentColor" viewBox="0 0 24 24">
-                                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h3 class="font-semibold text-slate-900">WhatsApp Business</h3>
-                                        <p class="text-slate-600 text-sm mt-1">Quick responses during business hours</p>
-                                        <a href="https://wa.me/254712345678" target="_blank" class="text-success font-medium hover:underline">Chat on WhatsApp</a>
-                                    </div>
-                                </div>
-
-                                <!-- Location -->
-                                <div class="flex items-start gap-4">
-                                    <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                                        <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <h3 class="font-semibold text-slate-900">Office Location</h3>
-                                        <p class="text-slate-600 text-sm mt-1">Based in Nairobi, Kenya</p>
-                                        <p class="text-slate-700">Victoria Towers, Upper Hill</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- WhatsApp Floating Button -->
-                        <a href="https://wa.me/254712345678?text=Hi%20InvoiceFast%20Support,%20I%20need%20help%20with..." 
-                           target="_blank"
-                           class="flex items-center justify-center gap-3 bg-success text-white px-6 py-4 rounded-xl font-semibold hover:bg-success/90 transition-all shadow-lg hover:shadow-xl">
-                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                            </svg>
-                            Chat with Support on WhatsApp
-                        </a>
-                    </div>
-
-                    <!-- Right Column: Contact Form -->
-                    <div class="bg-white rounded-2xl p-8 shadow-sm border border-slate-200">
-                        <h2 class="text-xl font-bold text-slate-900 mb-6">Send us a Message</h2>
-                        
-                        <!-- Honeypot field for anti-spam -->
-                        <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" style="position: absolute; left: -9999px;">
-
-                        <form id="contactForm">
-                            <div id="contact-response" class="space-y-5">
-                                <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">Name *</label>
-                                    <input type="text" name="name" id="name" required 
-                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                        placeholder="Your full name">
-                                </div>
-
-                                <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">Business Name</label>
-                                    <input type="text" name="business_name" id="business" 
-                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                        placeholder="Your business (optional)">
-                                </div>
-
-                                <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">Work Email *</label>
-                                    <input type="email" name="email" id="email" required 
-                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition"
-                                        placeholder="you@company.com">
-                                </div>
-
-                                <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">Category *</label>
-                                    <select name="category" id="category" required 
-                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition">
-                                        <option value="">Select a category</option>
-                                        <option value="technical">Technical Issue</option>
-                                        <option value="billing">Billing</option>
-                                        <option value="kra">KRA/Compliance</option>
-                                        <option value="partnership">Partnership</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label class="block text-sm font-medium text-slate-700 mb-2">Message *</label>
-                                    <textarea name="message" id="message" required rows="5" 
-                                        class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-trust focus:border-transparent transition resize-none"
-                                        placeholder="How can we help you?"></textarea>
-                                </div>
-
-                                <div id="formFeedback" class="hidden p-4 rounded-lg"></div>
-
-                                <button type="submit" id="submitBtn"
-                                    class="w-full bg-trust text-white py-3 rounded-lg font-semibold hover:bg-trust-dark transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                    <span id="btnText">Send Message</span>
-                                    <span id="spinner" class="hidden">
-                                        <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                    </span>
-                                </button>
-                            </div>
-                        </form>
-
-                        <script>
-                        document.getElementById('contactForm').addEventListener('submit', async function(e) {
-                            e.preventDefault();
-                            
-                            const name = document.getElementById('name').value.trim();
-                            const business = document.getElementById('business').value.trim();
-                            const email = document.getElementById('email').value.trim();
-                            const category = document.getElementById('category').value;
-                            const message = document.getElementById('message').value.trim();
-                            const feedback = document.getElementById('formFeedback');
-                            const submitBtn = document.getElementById('submitBtn');
-                            const btnText = document.getElementById('btnText');
-                            const spinner = document.getElementById('spinner');
-                            
-                            if (!name || !email || !category || !message) {
-                                feedback.textContent = 'Please fill in all required fields';
-                                feedback.className = 'p-4 rounded-lg bg-red-50 text-red-700';
-                                feedback.classList.remove('hidden');
-                                return;
-                            }
-                            
-                            feedback.classList.add('hidden');
-                            submitBtn.disabled = true;
-                            btnText.textContent = 'Sending...';
-                            spinner.classList.remove('hidden');
-                            
-                            try {
-                                const res = await fetch('/api/v1/contact', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        name: name,
-                                        business_name: business,
-                                        email: email,
-                                        category: category,
-                                        message: message
-                                    })
-                                });
-                                
-                                const data = await res.json();
-                                
-                                if (res.ok) {
-                                    feedback.textContent = 'Thank you! We\'ll get back to you soon.';
-                                    feedback.className = 'p-4 rounded-lg bg-green-50 text-green-700';
-                                    feedback.classList.remove('hidden');
-                                    document.getElementById('contactForm').reset();
-                                } else {
-                                    feedback.textContent = data.error || 'Failed to send message. Please try again.';
-                                    feedback.className = 'p-4 rounded-lg bg-red-50 text-red-700';
-                                    feedback.classList.remove('hidden');
-                                }
-                            } catch(err) {
-                                feedback.textContent = 'Network error. Please check your connection.';
-                                feedback.className = 'p-4 rounded-lg bg-red-50 text-red-700';
-                                feedback.classList.remove('hidden');
-                            } finally {
-                                submitBtn.disabled = false;
-                                btnText.textContent = 'Send Message';
-                                spinner.classList.add('hidden');
-                            }
-                        });
-                        </script>
-                    </div>
-                </div>
-
-                <!-- FAQ Section -->
-                <div class="mt-16">
-                    <h2 class="text-2xl font-bold text-slate-900 mb-8 text-center">Frequently Asked Questions</h2>
-                    <div class="max-w-3xl mx-auto space-y-4">
-                        <!-- FAQ 1 -->
-                        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                            <button class="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-slate-50 transition" onclick="this.nextElementSibling.classList.toggle('open'); this.querySelector('svg').classList.toggle('rotate-180')">
-                                <span class="font-medium text-slate-900">How long does M-Pesa reconciliation take?</span>
-                                <svg class="w-5 h-5 text-slate-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                </svg>
-                            </button>
-                            <div class="accordion-content px-6 pb-4 text-slate-600">
-                                M-Pesa payments are typically reconciled within 5-15 minutes. During high traffic periods, it may take up to 30 minutes. You can view real-time payment status in your dashboard.
-                            </div>
-                        </div>
-
-                        <!-- FAQ 2 -->
-                        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                            <button class="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-slate-50 transition" onclick="this.nextElementSibling.classList.toggle('open'); this.querySelector('svg').classList.toggle('rotate-180')">
-                                <span class="font-medium text-slate-900">How do I get KRA e-TIMS certified?</span>
-                                <svg class="w-5 h-5 text-slate-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                </svg>
-                            </button>
-                            <div class="accordion-content px-6 pb-4 text-slate-600">
-                                InvoiceFast handles the KRA OSCP integration automatically. Simply enable KRA compliance in your settings and we'll manage the tax invoice submissions for you.
-                            </div>
-                        </div>
-
-                        <!-- FAQ 3 -->
-                        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                            <button class="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-slate-50 transition" onclick="this.nextElementSibling.classList.toggle('open'); this.querySelector('svg').classList.toggle('rotate-180')">
-                                <span class="font-medium text-slate-900">What are your support hours?</span>
-                                <svg class="w-5 h-5 text-slate-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                </svg>
-                            </button>
-                            <div class="accordion-content px-6 pb-4 text-slate-600">
-                                Our support team is available Monday-Friday 8am-6pm EAT. WhatsApp support is available during these hours. Email inquiries are responded to within 24 hours.
-                            </div>
-                        </div>
-
-                        <!-- FAQ 4 -->
-                        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                            <button class="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-slate-50 transition" onclick="this.nextElementSibling.classList.toggle('open'); this.querySelector('svg').classList.toggle('rotate-180')">
-                                <span class="font-medium text-slate-900">Can I integrate with my existing ERP?</span>
-                                <svg class="w-5 h-5 text-slate-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                </svg>
-                            </button>
-                            <div class="accordion-content px-6 pb-4 text-slate-600">
-                                Yes! We offer API access on the Agency plan. Contact our partnership team for custom integration support and technical documentation.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <!-- Footer -->
-        <footer class="bg-slate-900 text-slate-300">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-                    <div>
-                        <div class="flex items-center gap-2 mb-4">
-                            <img src="/images/logo/logo.png" alt="InvoiceFast" class="h-10 w-auto">
-                        </div>
-                        <p class="text-sm text-slate-400">Professional invoicing for Kenyan businesses with M-Pesa integration and KRA e-TIMS compliance.</p>
-                    </div>
-                    <div>
-                        <h4 class="text-white font-semibold mb-4">Product</h4>
-                        <ul class="space-y-2 text-sm">
-                            <li><a href="/#features" class="hover:text-white transition-colors">Features</a></li>
-                            <li><a href="/#pricing" class="hover:text-white transition-colors">Pricing</a></li>
-                            <li><a href="#" class="hover:text-white transition-colors">Integrations</a></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h4 class="text-white font-semibold mb-4">Company</h4>
-                        <ul class="space-y-2 text-sm">
-                            <li><a href="/about" class="hover:text-white transition-colors">About</a></li>
-                            <li><a href="/contact" class="hover:text-white transition-colors">Contact</a></li>
-                            <li><a href="/blog" class="hover:text-white transition-colors">Blog</a></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h4 class="text-white font-semibold mb-4">Legal</h4>
-                        <ul class="space-y-2 text-sm">
-                            <li><a href="/privacy" class="hover:text-white transition-colors">Privacy Policy</a></li>
-                            <li><a href="/terms" class="hover:text-white transition-colors">Terms of Service</a></li>
-                            <li><a href="/compliance" class="hover:text-white transition-colors">KRA Compliance</a></li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="border-t border-slate-800 mt-8 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <p class="text-sm text-slate-400">&copy; 2026 InvoiceFast. All rights reserved.</p>
-                    <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full">
-                            <svg class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                            </svg>
-                            <span class="text-xs font-medium">KRA OSCP Verified</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </footer>
+      </div>
+      <div class="contact-method">
+        <div class="cm-icon green"><i class="fab fa-whatsapp"></i></div>
+        <div class="cm-label">
+          <h3>WhatsApp Business</h3>
+          <p>Quick responses during business hours</p>
+          <a href="https://wa.me/254712345678">Chat on WhatsApp</a>
+        </div>
+      </div>
+      <div class="contact-method">
+        <div class="cm-icon muted"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="cm-label">
+          <h3>Office Location</h3>
+          <p>Based in Nairobi, Kenya</p>
+          <p style="color:var(--bone-2);font-size:14px;margin-top:2px">Victoria Towers, Upper Hill</p>
+        </div>
+      </div>
+      <a href="https://wa.me/254712345678?text=Hi%20InvoiceFast%20Support,%20I%20need%20help%20with..." target="_blank" class="wa-btn">
+        <i class="fab fa-whatsapp"></i> Chat with Support on WhatsApp
+      </a>
     </div>
-</body>
-</html>
+
+    <div class="card">
+      <h2>Send us a Message</h2>
+      <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px">
+      <form id="contactForm">
+        <div class="field">
+          <label class="field-label">Name *</label>
+          <input type="text" class="field-input" id="name" placeholder="Your full name" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Business Name</label>
+          <input type="text" class="field-input" id="business" placeholder="Your business (optional)">
+        </div>
+        <div class="field">
+          <label class="field-label">Work Email *</label>
+          <input type="email" class="field-input" id="email" placeholder="you@company.com" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Category *</label>
+          <select class="field-select" id="category" required>
+            <option value="">Select a category</option>
+            <option value="technical">Technical Issue</option>
+            <option value="billing">Billing</option>
+            <option value="kra">KRA/Compliance</option>
+            <option value="partnership">Partnership</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Message *</label>
+          <textarea class="field-input" id="message" placeholder="How can we help you?" required></textarea>
+        </div>
+        <div id="formFeedback" class="hidden"></div>
+        <button type="submit" id="submitBtn" class="btn-primary">
+          <span id="btnText">Send Message</span>
+          <svg id="spinner" class="hidden spinner" width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity=".25"/>
+            <path d="M12 2a10 10 0 0110 10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="faq-section">
+    <h2>Frequently Asked Questions</h2>
+    <div class="faq-item" onclick="toggleFAQ(this)">
+      <button class="faq-q"><span>How long does M-Pesa reconciliation take?</span><i class="fas fa-plus"></i></button>
+      <div class="faq-a"><div class="faq-a-inner">M-Pesa payments are typically reconciled within 5–15 minutes. During high traffic periods, it may take up to 30 minutes. You can view real-time payment status in your dashboard.</div></div>
+    </div>
+    <div class="faq-item" onclick="toggleFAQ(this)">
+      <button class="faq-q"><span>How do I get KRA e-TIMS certified?</span><i class="fas fa-plus"></i></button>
+      <div class="faq-a"><div class="faq-a-inner">InvoiceFast handles the KRA OSCP integration automatically. Simply enable KRA compliance in your settings and we'll manage the tax invoice submissions for you.</div></div>
+    </div>
+    <div class="faq-item" onclick="toggleFAQ(this)">
+      <button class="faq-q"><span>What are your support hours?</span><i class="fas fa-plus"></i></button>
+      <div class="faq-a"><div class="faq-a-inner">Our support team is available Monday–Friday 8am–6pm EAT. WhatsApp support is available during these hours. Email inquiries are responded to within 24 hours.</div></div>
+    </div>
+    <div class="faq-item" onclick="toggleFAQ(this)">
+      <button class="faq-q"><span>Can I integrate with my existing ERP?</span><i class="fas fa-plus"></i></button>
+      <div class="faq-a"><div class="faq-a-inner">Yes! We offer API access on the Agency plan. Contact our partnership team for custom integration support and technical documentation.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('contactForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const business = document.getElementById('business').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const category = document.getElementById('category').value;
+  const message = document.getElementById('message').value.trim();
+  const feedback = document.getElementById('formFeedback');
+  const submitBtn = document.getElementById('submitBtn');
+  const btnText = document.getElementById('btnText');
+  const spinner = document.getElementById('spinner');
+
+  if (!name || !email || !category || !message) {
+    feedback.textContent = 'Please fill in all required fields';
+    feedback.className = 'feedback-msg error'; return;
+  }
+  feedback.classList.add('hidden');
+  submitBtn.disabled = true;
+  btnText.textContent = 'Sending...';
+  spinner.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/v1/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, business_name: business, email, category, message })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      feedback.textContent = 'Thank you! We\'ll get back to you soon.';
+      feedback.className = 'feedback-msg success';
+      document.getElementById('contactForm').reset();
+    } else {
+      feedback.textContent = data.error || 'Failed to send message. Please try again.';
+      feedback.className = 'feedback-msg error';
+    }
+  } catch {
+    feedback.textContent = 'Network error. Please check your connection.';
+    feedback.className = 'feedback-msg error';
+  } finally {
+    submitBtn.disabled = false;
+    btnText.textContent = 'Send Message';
+    spinner.classList.add('hidden');
+  }
+});
+
+window.toggleFAQ = function(item) {
+  const open = item.classList.contains('open');
+  document.querySelectorAll('.faq-item.open').forEach(x => x.classList.remove('open'));
+  if (!open) item.classList.add('open');
+};
+</script>

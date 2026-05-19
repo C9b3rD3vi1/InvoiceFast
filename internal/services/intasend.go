@@ -7,8 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+
+	"invoicefast/internal/logger"
 	"time"
 
 	"invoicefast/internal/config"
@@ -184,7 +185,7 @@ func (s *IntasendService) InitiatePayment(req *InitiatePaymentRequest) (*Intasen
 
 func (s *IntasendService) HandleWebhook(payload []byte, signature string, sourceIP string) error {
 	if !s.IsConfigured() {
-		log.Println("[IntaSend] Webhook received but service not configured")
+		logger.Get().Warn(context.Background(), "Webhook received but service not configured")
 		return nil
 	}
 
@@ -198,7 +199,7 @@ func (s *IntasendService) HandleWebhook(payload []byte, signature string, source
 
 	alreadyProcessed, err := s.isAlreadyProcessed(checkoutID)
 	if err == nil && alreadyProcessed {
-		log.Printf("[IntaSend] Duplicate webhook for checkout %s - skipping", checkoutID)
+		logger.Get().Info(context.Background(), "Duplicate webhook for checkout - skipping", "checkout_id", checkoutID)
 		return nil
 	}
 
@@ -211,7 +212,7 @@ func (s *IntasendService) HandleWebhook(payload []byte, signature string, source
 		return s.handlePaymentPending(checkoutID, tenantID, event)
 	}
 
-	log.Printf("[IntaSend] Unhandled webhook event: %s", event.Event)
+	logger.Get().Warn(context.Background(), "Unhandled webhook event", "event", event.Event)
 	return nil
 }
 
@@ -222,7 +223,7 @@ func (s *IntasendService) handlePaymentSuccess(checkoutID, tenantID string, even
 	existingPayment, err := s.findPaymentByRef(checkoutID)
 	if err == nil && existingPayment != nil {
 		if existingPayment.Status == models.PaymentStatusCompleted {
-			log.Printf("[IntaSend] Payment already processed for checkout %s", checkoutID)
+			logger.Get().Info(context.Background(), "Payment already processed for checkout", "checkout_id", checkoutID)
 			return nil
 		}
 	}
@@ -264,12 +265,12 @@ func (s *IntasendService) handlePaymentSuccess(checkoutID, tenantID string, even
 	s.recordIdempotency(tenantID, checkoutID, "payment", payment.ID)
 	s.sendNotification(tenantID, EventPaymentReceived, fmt.Sprintf("Payment of %.2f %s received via M-Pesa", amount, currency))
 
-	log.Printf("[IntaSend] Payment succeeded: checkout=%s amount=%s %s", checkoutID, currency, fmt.Sprintf("%.2f", amount))
+	logger.Get().Info(context.Background(), "Payment succeeded", "checkout_id", checkoutID, "currency", currency, "amount", amount)
 	return nil
 }
 
 func (s *IntasendService) handlePaymentFailed(checkoutID, tenantID string, event IntasendWebhookPayload) error {
-	log.Printf("[IntaSend] Payment failed for checkout %s", checkoutID)
+	logger.Get().Warn(context.Background(), "Payment failed for checkout", "checkout_id", checkoutID)
 
 	existingPayment, _ := s.findPaymentByRef(checkoutID)
 	if existingPayment != nil {
@@ -282,7 +283,7 @@ func (s *IntasendService) handlePaymentFailed(checkoutID, tenantID string, event
 }
 
 func (s *IntasendService) handlePaymentPending(checkoutID, tenantID string, event IntasendWebhookPayload) error {
-	log.Printf("[IntaSend] Payment pending for checkout %s", checkoutID)
+	logger.Get().Info(context.Background(), "Payment pending for checkout", "checkout_id", checkoutID)
 	return nil
 }
 

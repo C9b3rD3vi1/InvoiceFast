@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
+
+	"invoicefast/internal/logger"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -66,7 +67,7 @@ func NewRedisCache(cfg *CacheConfig) (*RedisCache, error) {
 		prefix = "invoicefast"
 	}
 
-	log.Printf("[Redis] Connected successfully with prefix: %s", prefix)
+	logger.Get().Info(context.Background(), "Connected successfully", "prefix", prefix)
 
 	return &RedisCache{
 		client: client,
@@ -204,7 +205,7 @@ func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{},
 
 	// Store in cache
 	if err := c.Set(ctx, key, value, expiration); err != nil {
-		log.Printf("Warning: failed to cache value for key %s: %v", key, err)
+		logger.Get().Warn(ctx, "Failed to cache value", "key", key, "error", err)
 	}
 
 	// Set destination

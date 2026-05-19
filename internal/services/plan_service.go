@@ -1,11 +1,14 @@
 package services
 
 import (
+	"context"
 	"fmt"
-	"invoicefast/internal/database"
-	"invoicefast/internal/models"
-	"log"
+	"strings"
 	"time"
+
+	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
+	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
 )
@@ -55,14 +58,41 @@ func (s *PlanService) GetExchangeRate() float64 {
 	return 150.0 // Fallback default
 }
 
+func (s *PlanService) GetAllExchangeRates() map[string]float64 {
+	rates := map[string]float64{"KES": 1.0}
+	if s.exchangeRateSvc == nil {
+		return rates
+	}
+	raw := s.exchangeRateSvc.GetAllRates()
+	for key, rate := range raw {
+		parts := strings.Split(key, "/")
+		if len(parts) != 2 {
+			continue
+		}
+		rates[parts[1]] = rate
+	}
+	return rates
+}
+
 func (s *PlanService) GetMonthlyPriceKES(plan *models.SubscriptionPlan) int64 {
+	if plan.MonthlyPriceUSD <= 0 {
+		return 0
+	}
 	rate := s.GetExchangeRate()
 	return int64(float64(plan.MonthlyPriceUSD) * rate)
 }
 
 func (s *PlanService) GetYearlyPriceKES(plan *models.SubscriptionPlan) int64 {
+	if plan.YearlyPriceUSD > 0 {
+		rate := s.GetExchangeRate()
+		return int64(float64(plan.YearlyPriceUSD) * rate)
+	}
+	if plan.MonthlyPriceUSD <= 0 {
+		return 0
+	}
 	rate := s.GetExchangeRate()
-	return int64(float64(plan.YearlyPriceUSD) * rate)
+	annualTotal := float64(plan.MonthlyPriceUSD) * 12 * 0.8
+	return int64(annualTotal * rate)
 }
 
 func (s *PlanService) SeedDefaultPlans() error {
@@ -174,7 +204,7 @@ func (s *PlanService) MigrateUsersWithoutSubscription() error {
 		}
 
 		if err := s.db.Create(subscription).Error; err != nil {
-			log.Printf("[Migrate] Failed to create trial for tenant %s: %v", tenant.ID, err)
+			logger.Get().Error(context.Background(), "Failed to create trial for tenant", "category", "migrate", "tenant_id", tenant.ID, "error", err)
 			continue
 		}
 
@@ -192,10 +222,10 @@ func (s *PlanService) MigrateUsersWithoutSubscription() error {
 		}
 
 		migrated++
-		log.Printf("[Migrate] Assigned trial subscription to tenant: %s", tenant.ID)
+		logger.Get().Info(context.Background(), "Assigned trial subscription to tenant", "category", "migrate", "tenant_id", tenant.ID)
 	}
 
-	log.Printf("[Migrate] Total users migrated to trial: %d", migrated)
+	logger.Get().Info(context.Background(), "Total users migrated to trial", "category", "migrate", "count", migrated)
 	return nil
 }
 

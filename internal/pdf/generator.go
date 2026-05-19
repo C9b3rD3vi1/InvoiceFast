@@ -2,16 +2,18 @@ package pdf
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"html/template"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"invoicefast/internal/logger"
 
 	"github.com/skip2/go-qrcode"
 )
@@ -34,7 +36,7 @@ func NewPDFGenerator(templatePath, outputPath string) *PDFGenerator {
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
-		log.Printf("Warning: could not create output directory: %v", err)
+		logger.Get().Warn(context.Background(), "Could not create output directory", "error", err)
 	}
 
 	// Load templates
@@ -124,7 +126,7 @@ func (p *PDFGenerator) GenerateInvoicePDF(data *InvoiceData) (*PDFOutput, error)
 	if data.PaymentLink != "" {
 		qrCode, err := p.generateQRCode(data.PaymentLink)
 		if err != nil {
-			log.Printf("Warning: could not generate QR code: %v", err)
+			logger.Get().Warn(context.Background(), "Could not generate QR code", "error", err)
 		} else {
 			data.PaymentQR = qrCode
 		}
@@ -134,7 +136,7 @@ func (p *PDFGenerator) GenerateInvoicePDF(data *InvoiceData) (*PDFOutput, error)
 	if data.KRACompliant && data.ControlNumber != "" {
 		kraQR, err := p.generateKRAQRCode(data)
 		if err != nil {
-			log.Printf("Warning: could not generate KRA QR: %v", err)
+			logger.Get().Warn(context.Background(), "Could not generate KRA QR", "error", err)
 		} else {
 			data.QRCodeData = kraQR
 		}
@@ -150,7 +152,7 @@ func (p *PDFGenerator) GenerateInvoicePDF(data *InvoiceData) (*PDFOutput, error)
 	pdf, err := p.htmlToPDF(html)
 	if err != nil {
 		// Fallback: return HTML if PDF conversion fails
-		log.Printf("Warning: PDF conversion failed, returning HTML: %v", err)
+		logger.Get().Warn(context.Background(), "PDF conversion failed, returning HTML", "error", err)
 		return &PDFOutput{
 			Content:     []byte(html),
 			ContentType: "text/html",
@@ -178,7 +180,7 @@ func (p *PDFGenerator) GenerateReceiptPDF(data *InvoiceData) (*PDFOutput, error)
 
 	qrCode, err := p.generateQRCode(receiptQRData)
 	if err != nil {
-		log.Printf("Warning: could not generate receipt QR: %v", err)
+		logger.Get().Warn(context.Background(), "Could not generate receipt QR", "error", err)
 	} else {
 		data.QRCodeData = qrCode
 	}
@@ -227,7 +229,7 @@ func (p *PDFGenerator) loadTemplates() {
 	// Load invoice template
 	tmpl, err := template.New("invoice").Funcs(funcMap).Parse(defaultInvoiceTemplate)
 	if err != nil {
-		log.Printf("Warning: could not parse invoice template: %v", err)
+		logger.Get().Warn(context.Background(), "Could not parse invoice template", "error", err)
 	} else {
 		p.templates["invoice"] = tmpl
 	}
@@ -235,7 +237,7 @@ func (p *PDFGenerator) loadTemplates() {
 	// Load receipt template
 	tmpl, err = template.New("receipt").Funcs(funcMap).Parse(defaultReceiptTemplate)
 	if err != nil {
-		log.Printf("Warning: could not parse receipt template: %v", err)
+		logger.Get().Warn(context.Background(), "Could not parse receipt template", "error", err)
 	} else {
 		p.templates["receipt"] = tmpl
 	}

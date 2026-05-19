@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
@@ -40,7 +40,7 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&payload); err != nil {
-		log.Printf("[Webhook] Parse error: %v", err)
+		logger.Get().Error(c.UserContext(), "Parse error", "component", "Webhook", "error", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid payload"})
 	}
 
@@ -52,7 +52,7 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 	if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok && key != "" {
 		isProcessed, _ := svc.IsProcessed(c.Context(), key)
 		if isProcessed {
-			log.Printf("[Webhook] Already processed: %s", key)
+			logger.Get().Info(c.UserContext(), "Already processed", "component", "Webhook", "key", key)
 			return c.JSON(fiber.Map{"status": "already_processed"})
 		}
 	}
@@ -62,7 +62,7 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		tenantID := middleware.GetTenantID(c)
 		invoice, err := h.invoiceService.GetInvoiceByNumber(tenantID, payload.InvoiceNumber)
 		if err != nil {
-			log.Printf("[Webhook] Invoice not found: %s", payload.InvoiceNumber)
+			logger.Get().Warn(c.UserContext(), "Invoice not found", "component", "Webhook", "invoice_number", payload.InvoiceNumber)
 			return c.JSON(fiber.Map{"status": "ignored"})
 		}
 
@@ -86,7 +86,7 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
 
 		if err := h.invoiceService.RotateMagicToken(invoice.ID); err != nil {
-			log.Printf("[Webhook] Warning: Failed to rotate magic token for invoice %s: %v", invoice.InvoiceNumber, err)
+			logger.Get().Warn(c.UserContext(), "Failed to rotate magic token", "component", "Webhook", "invoice_number", invoice.InvoiceNumber, "error", err)
 		}
 
 		if svc, ok := c.Locals("idempotency_svc").(*services.IdempotencyService); ok && key != "" {
@@ -96,10 +96,10 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 			})
 		}
 
-		log.Printf("[Webhook] Payment recorded: %s = %f", invoice.InvoiceNumber, amount)
+		logger.Get().Info(c.UserContext(), "Payment recorded", "component", "Webhook", "invoice_number", invoice.InvoiceNumber, "amount", amount)
 
 	default:
-		log.Printf("[Webhook] Unhandled event: %s", payload.Event)
+		logger.Get().Warn(c.UserContext(), "Unhandled event", "component", "Webhook", "event", payload.Event)
 	}
 
 	return c.JSON(fiber.Map{"status": "received"})
@@ -118,7 +118,7 @@ func (h *PaymentHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 	if h.mpesaService != nil {
 		err := h.mpesaService.ProcessSTKCallback(c.Context(), *callback)
 		if err != nil {
-			log.Printf("[M-Pesa] Callback processing error: %v", err)
+			logger.Get().Error(c.UserContext(), "Callback processing error", "component", "M-Pesa", "error", err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "callback processing failed",
 				"code":  "PROCESSING_ERROR",
@@ -127,7 +127,7 @@ func (h *PaymentHandler) HandleMpesaCallback(c *fiber.Ctx) error {
 
 		checkoutReqID := callback.Body.StkCallback.CheckoutRequestID
 		if checkoutReqID != "" {
-			log.Printf("[M-Pesa] Payment completed, rotating magic token for checkout: %s", checkoutReqID)
+			logger.Get().Info(c.UserContext(), "Payment completed, rotating magic token for checkout", "component", "M-Pesa", "checkout_request_id", checkoutReqID)
 		}
 	}
 

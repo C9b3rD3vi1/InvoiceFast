@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
+
+	"invoicefast/internal/logger"
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
@@ -113,11 +114,11 @@ func (s *BillingService) HandleStripeWebhook(payload []byte, signature string) e
 
 	event, err := webhook.ConstructEvent(payload, signature, s.cfg.Stripe.WebhookSecret)
 	if err != nil {
-		log.Printf("[Billing] Stripe webhook signature verification failed: %v", err)
+		logger.Get().Error(context.Background(), "Stripe webhook signature verification failed", "error", err)
 		return ErrWebhookUnauthorized
 	}
 
-	log.Printf("[Billing] Stripe webhook received: %s", event.Type)
+	logger.Get().Info(context.Background(), "Stripe webhook received", "event_type", event.Type)
 	return nil
 }
 
@@ -161,9 +162,9 @@ func (s *BillingService) ChangePlan(tenantID, newPlanID, billingCycle string) er
 	}
 
 	if newPlan.Tier <= oldPlan.Tier {
-		log.Printf("[Billing] Downgrade plan from %s to %s", oldPlan.Name, newPlan.Name)
+		logger.Get().Info(context.Background(), "Downgrade plan", "from", oldPlan.Name, "to", newPlan.Name)
 	} else {
-		log.Printf("[Billing] Upgrade plan from %s to %s", oldPlan.Name, newPlan.Name)
+		logger.Get().Info(context.Background(), "Upgrade plan", "from", oldPlan.Name, "to", newPlan.Name)
 	}
 
 	// Update subscription with new plan
@@ -325,7 +326,7 @@ func (s *BillingService) UpdateSubscriptionPaymentMethod(tenantID, paymentMethod
 }
 
 func (s *BillingService) ProcessMpesaCallback(checkoutID, status string) error {
-	log.Printf("[Billing] M-Pesa callback received: checkout=%s status=%s", checkoutID, status)
+	logger.Get().Info(context.Background(), "M-Pesa callback received", "checkout_id", checkoutID, "status", status)
 	// Note: M-Pesa callbacks should be handled via M-Pesa service directly
 	// This is a placeholder for backward compatibility
 	return nil

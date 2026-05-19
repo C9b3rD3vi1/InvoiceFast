@@ -12,8 +12,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
+
+	"invoicefast/internal/logger"
 	"time"
 
 	"invoicefast/internal/config"
@@ -97,7 +98,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "email = ?", email).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// SECURITY: Return nil, nil to prevent email enumeration
-			log.Printf("[SECURITY] Password reset attempted for non-existent email: %s", email)
+			logger.Get().Info(context.Background(), "Password reset attempted for non-existent email", "email", email)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("database error: %w", err)
@@ -112,7 +113,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 	}
 
 	if recentCount >= 3 {
-		log.Printf("[SECURITY] Rate limited password reset for user: %s", user.ID)
+		logger.Get().Warn(context.Background(), "Rate limited password reset for user", "user_id", user.ID)
 		return nil, errors.New("rate limit exceeded: too many reset requests")
 	}
 
@@ -144,7 +145,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 	// SECURITY: Clear raw token before returning - never expose in API response
 	resetToken.RawToken = ""
 
-	log.Printf("[AUDIT] Password reset initiated for user %s from IP %s", user.ID, ipAddress)
+	logger.Get().Info(context.Background(), "Password reset initiated", "user_id", user.ID, "ip_address", ipAddress)
 
 	return resetToken, nil
 }
@@ -214,7 +215,7 @@ func (s *AuthService) CompletePasswordReset(tenantID, token, newPassword, confir
 	}
 
 	if err := s.db.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
-		log.Printf("[AUTH] Warning: Failed to invalidate refresh tokens: %v", err)
+		logger.Get().Warn(context.Background(), "Failed to invalidate refresh tokens", "error", err)
 	}
 
 	return nil
@@ -385,9 +386,9 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 			UpdatedAt:          now,
 		}
 		if err := s.db.Create(subscription).Error; err != nil {
-			log.Printf("[Register] Failed to create trial subscription: %v", err)
+			logger.Get().Error(context.Background(), "Failed to create trial subscription", "error", err)
 		} else {
-			log.Printf("[Register] Trial subscription created for tenant: %s, plan: %s", tenant.ID, starterPlan.Name)
+			logger.Get().Info(context.Background(), "Trial subscription created", "tenant_id", tenant.ID, "plan", starterPlan.Name)
 		}
 
 		usage := &models.UsageTracking{
@@ -399,10 +400,10 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 			UpdatedAt:    time.Now(),
 		}
 		if err := s.db.Create(usage).Error; err != nil {
-			log.Printf("[Register] Failed to create usage tracking: %v", err)
+			logger.Get().Error(context.Background(), "Failed to create usage tracking", "error", err)
 		}
 	} else {
-		log.Printf("[Register] Starter plan not found, skipping trial creation: %v", err)
+		logger.Get().Warn(context.Background(), "Starter plan not found, skipping trial creation", "error", err)
 	}
 
 	if err := s.db.Create(user).Error; err != nil {

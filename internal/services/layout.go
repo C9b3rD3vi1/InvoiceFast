@@ -57,6 +57,25 @@ func (s *LayoutService) RenderWithShell(c *fiber.Ctx, contentFile string, data L
 	return c.SendString(result)
 }
 
+// RenderPublicWithShell wraps public page content with the public shell
+func (s *LayoutService) RenderPublicWithShell(c *fiber.Ctx, contentFile string, title string) error {
+	content, err := os.ReadFile(contentFile)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("Cannot read content: " + err.Error())
+	}
+
+	shell, err := os.ReadFile("./views/layouts/public-shell.html")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("Cannot read shell: " + err.Error())
+	}
+
+	result := strings.Replace(string(shell), "{{embed}}", string(content), 1)
+	result = strings.ReplaceAll(result, "{{.Title}}", title)
+
+	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
+	return c.SendString(result)
+}
+
 // Helper to get user initials from name
 func GetInitials(name string) string {
 	if name == "" {
