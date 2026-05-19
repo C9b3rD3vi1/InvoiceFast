@@ -16,6 +16,8 @@ func AuthRoutes(app fiber.Router, h *handlers.AuthHandler) fiber.Router {
 	group.Post("/register", h.Register)
 	group.Post("/login", h.Login)
 	group.Post("/refresh", h.RefreshToken)
+	group.Post("/forgot-password", h.ForgotPassword)
+	group.Post("/reset-password", h.ResetPassword)
 
 	return group
 }
@@ -43,6 +45,8 @@ func TenantRoutes(app fiber.Router, h *handlers.AuthHandler, authService *servic
 	group.Get("/security-status", h.GetSecurityStatus)
 
 	group.Get("/search", h.Search)
+	
+	group.Put("/currency", h.UpdateTenantCurrency)
 
 	return group
 }

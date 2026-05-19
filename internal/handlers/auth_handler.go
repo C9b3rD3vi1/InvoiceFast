@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 
+	"invoicefast/internal/database"
 	"invoicefast/internal/middleware"
+	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
@@ -11,10 +13,12 @@ import (
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	authService    *services.AuthService
-	auditService   *services.AuditService
-	invoiceService *services.InvoiceService
-	clientService  *services.ClientService
+	authService         *services.AuthService
+	auditService        *services.AuditService
+	invoiceService      *services.InvoiceService
+	clientService       *services.ClientService
+	passwordResetService *services.PasswordResetService
+	db                  *database.DB
 }
 
 // NewAuthHandler creates a new AuthHandler
@@ -26,12 +30,14 @@ func NewAuthHandler(authSvc *services.AuthService, auditSvc *services.AuditServi
 }
 
 // NewAuthHandlerWithDeps creates a new AuthHandler with dependencies
-func NewAuthHandlerWithDeps(authSvc *services.AuthService, auditSvc *services.AuditService, invSvc *services.InvoiceService, clientSvc *services.ClientService) *AuthHandler {
+func NewAuthHandlerWithDeps(authSvc *services.AuthService, auditSvc *services.AuditService, invSvc *services.InvoiceService, clientSvc *services.ClientService, pwResetSvc *services.PasswordResetService, db *database.DB) *AuthHandler {
 	return &AuthHandler{
-		authService:    authSvc,
-		auditService:   auditSvc,
-		invoiceService: invSvc,
-		clientService:  clientSvc,
+		authService:          authSvc,
+		auditService:         auditSvc,
+		invoiceService:       invSvc,
+		clientService:        clientSvc,
+		passwordResetService: pwResetSvc,
+		db:                   db,
 	}
 }
 
@@ -178,6 +184,37 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "Password changed successfully"})
+}
+
+// UpdateTenantCurrency - update tenant's default currency
+func (h *AuthHandler) UpdateTenantCurrency(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	var req struct {
+		Currency string `json:"currency"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	// Validate currency
+	validCurrencies := map[string]bool{
+		"KES": true, "USD": true, "EUR": true, "GBP": true,
+		"TZS": true, "UGX": true, "NGN": true,
+	}
+	if !validCurrencies[req.Currency] {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid currency"})
+	}
+
+	// Update tenant
+	if err := h.db.Model(&models.Tenant{}).Where("id = ?", tenantID).Update("currency", req.Currency).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to update currency"})
+	}
+
+	return c.JSON(fiber.Map{"message": "Currency updated", "currency": req.Currency})
 }
 
 // Logout - invalidate refresh token
@@ -434,4 +471,73 @@ func (h *AuthHandler) GetSecurityStatus(c *fiber.Ctx) error {
 		"active_sessions":   len(sessions),
 		"recent_logins":     loginHistory,
 	})
+}
+
+// ForgotPassword initiates a password reset
+func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+	if req.Email == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "email is required"})
+	}
+
+	if h.passwordResetService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "password reset not available"})
+	}
+
+	ip := c.IP()
+	userAgent := c.Get("User-Agent")
+	_, err := h.passwordResetService.InitiatePasswordReset(req.Email, ip, userAgent)
+	if err != nil {
+		if err == services.ErrRateLimited {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": "too many requests, please try again later"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Always return success to prevent email enumeration
+	return c.JSON(fiber.Map{"message": "If the email exists, a password reset link has been sent"})
+}
+
+// ResetPassword completes a password reset
+func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
+	var req struct {
+		Token           string `json:"token"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+	if req.Token == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "token is required"})
+	}
+	if req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "password is required"})
+	}
+
+	if h.passwordResetService == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "password reset not available"})
+	}
+
+	if err := h.passwordResetService.CompletePasswordReset(req.Token, req.Password, req.ConfirmPassword); err != nil {
+		switch {
+		case err == services.ErrTokenExpired:
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "reset token has expired"})
+		case err == services.ErrTokenUsed:
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "reset token has already been used"})
+		case err == services.ErrTokenInvalid:
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid reset token"})
+		case err.Error() == "passwords do not match":
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "passwords do not match"})
+		default:
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+	}
+
+	return c.JSON(fiber.Map{"message": "Password has been reset successfully"})
 }

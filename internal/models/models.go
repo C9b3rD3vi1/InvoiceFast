@@ -22,6 +22,7 @@ type Tenant struct {
 	Website   string    `json:"website"`
 	Country   string    `json:"country" gorm:"default:'KE'"`
 	Timezone  string    `json:"timezone" gorm:"default:'Africa/Nairobi'"`
+	Currency  string    `json:"currency" gorm:"default:'KES'"` // Default currency for the tenant
 	Settings  string    `json:"settings" gorm:"type:text"`    // JSON settings
 	IsActive  bool      `json:"is_active" gorm:"default:true"`
 	CreatedAt time.Time `json:"created_at"`

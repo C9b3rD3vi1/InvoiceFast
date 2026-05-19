@@ -306,6 +306,9 @@ planService := services.NewPlanService(db)
 	if err := planService.MigrateUsersWithoutSubscription(); err != nil {
 		log.Printf("Warning: Failed to migrate users without subscription: %v", err)
 	}
+	
+	// Migrate subscriptions to use KES (single-time migration)
+	db.Exec("UPDATE subscriptions SET currency = 'KES', amount = amount * 150 WHERE currency = 'USD'")
 
 	stripeService := services.NewStripeService(db, cfg.Stripe.SecretKey, cfg.Stripe.PublicKey, cfg.Stripe.WebhookSecret)
 
@@ -349,11 +352,12 @@ planService := services.NewPlanService(db)
 	reportHandler := handlers.NewReportHandler(reportService)
 	automationHandler := handlers.NewAutomationHandler(jobQueue, recurringInvoice, reminderService, workflowService)
 	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService)
-	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService)
+	passwordResetService := services.NewPasswordResetService(db, cfg, emailService)
+	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService, passwordResetService, db)
 	notificationHandler := handlers.NewNotificationHandler(db)
 
 	// Billing handler
-	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService, stripeService, intasendService)
+	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService, stripeService, intasendService, exchangeRateService, db)
 
 	// Late fee handler
 	lateFeeHandler := handlers.NewLateFeeHandler(lateFeeService)
@@ -582,7 +586,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.SettingsRoutes(app, settingsHandler, authService, db)
 	routes.DashboardRoutes(app, dashboardHandler, authService, db)
 	routes.PaymentRoutes(app, paymentHandler, idempotencySvc, webhookVerifier)
-	routes.PaymentAPIRoutes(app, paymentHandler)
 	routes.TenantPaymentRoutes(app, paymentHandler, authService, db)
 	routes.ReportRoutes(app, reportHandler, authService, db)
 	routes.TeamRoutes(app, teamHandler, authService, db)

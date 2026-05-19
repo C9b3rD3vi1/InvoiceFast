@@ -16,6 +16,7 @@ type WhatsAppService struct {
 	metaPhoneID    string
 	metaToken      string
 	metaBusinessID string
+	baseURL       string
 }
 
 // WhatsAppResult contains the result of sending WhatsApp message
@@ -31,6 +32,10 @@ type WhatsAppResult struct {
 
 // NewWhatsAppService creates a new WhatsApp service
 func NewWhatsAppService() *WhatsAppService {
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://invoice.simuxtech.com"
+	}
 	return &WhatsAppService{
 		fromNumber:     os.Getenv("TWILIO_PHONE_NUMBER"),
 		useTwilio:      os.Getenv("WHATSAPP_PROVIDER") == "twilio",
@@ -39,6 +44,7 @@ func NewWhatsAppService() *WhatsAppService {
 		metaPhoneID:    os.Getenv("META_PHONE_NUMBER_ID"),
 		metaToken:      os.Getenv("META_ACCESS_TOKEN"),
 		metaBusinessID: os.Getenv("META_BUSINESS_ACCOUNT_ID"),
+		baseURL:       baseURL,
 	}
 }
 
@@ -177,9 +183,10 @@ func (s *WhatsAppService) Send(to, message string) *WhatsAppResult {
 func (s *WhatsAppService) SendWithPDF(to, message string, pdfData []byte, pdfName string) *WhatsAppResult {
 	formattedPhone := formatPhoneNumber(to)
 
+	pdfDownloadURL := fmt.Sprintf("%s/api/invoices/download/%s.pdf", s.baseURL, pdfName)
+
 	// If not configured, return wa.me URL with PDF download note
 	if !s.IsConfigured() {
-		pdfDownloadURL := fmt.Sprintf("https://invoice.simuxtech.com/api/invoices/download/%s.pdf", pdfName)
 		return &WhatsAppResult{
 			Sent:    false,
 			URL:     s.GetWaMeURLWithPDF(to, message, pdfDownloadURL),
@@ -200,7 +207,7 @@ func (s *WhatsAppService) SendWithPDF(to, message string, pdfData []byte, pdfNam
 	}
 
 	if sendErr != nil {
-		pdfDownloadURL := fmt.Sprintf("https://invoice.simuxtech.com/api/invoices/download/%s.pdf", pdfName)
+		pdfDownloadURL = fmt.Sprintf("%s/api/invoices/download/%s.pdf", s.baseURL, pdfName)
 		return &WhatsAppResult{
 			Sent:    false,
 			URL:     s.GetWaMeURLWithPDF(to, message, pdfDownloadURL),

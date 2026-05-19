@@ -845,10 +845,10 @@ func (h *InvoiceHandler) SendWhatsApp(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "client has no phone number"})
 	}
 
-	// Build payment link
+	baseURL := h.invoiceService.BaseURL()
 	paymentLink := ""
 	if invoice.MagicToken != "" {
-		paymentLink = fmt.Sprintf("https://invoice.simuxtech.com/pay/%s", invoice.MagicToken)
+		paymentLink = fmt.Sprintf("%s/pay/%s", baseURL, invoice.MagicToken)
 	}
 
 	// Build message
@@ -891,7 +891,7 @@ Thank you for your business!`,
 		result = h.whatsappService.SendWithPDF(invoice.Client.Phone, message, pdfData, pdfName)
 	} else {
 		// WhatsApp service not initialized, create result with wa.me URL and PDF download link
-		pdfDownloadURL := fmt.Sprintf("https://invoice.simuxtech.com/api/invoices/%s/pdf", invoiceID)
+		pdfDownloadURL := fmt.Sprintf("%s/api/invoices/%s/pdf", baseURL, invoiceID)
 		waMeURL := fmt.Sprintf("https://wa.me/%s?text=%s", invoice.Client.Phone, url.QueryEscape(message+"\n\n📎 Download Invoice PDF: "+pdfDownloadURL))
 		result = &services.WhatsAppResult{
 			Sent:    false,

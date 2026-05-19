@@ -208,10 +208,10 @@ func (h *PaymentMatchingHandler) RequestPayment(c *fiber.Ctx) error {
 		}
 	}
 
-	// Generate payment link
+	baseURL := h.invoiceService.BaseURL()
 	paymentLink := ""
 	if invoice != nil && invoice.MagicToken != "" {
-		paymentLink = "https://invoice.simuxtech.com/pay/" + invoice.MagicToken
+		paymentLink = baseURL + "/pay/" + invoice.MagicToken
 	}
 
 	// Build message

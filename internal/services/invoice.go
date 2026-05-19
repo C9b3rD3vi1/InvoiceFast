@@ -110,21 +110,21 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 	}
 
 	// Calculate totals
-	var subtotal float64
+	var totalPreTax float64
+	var totalItemTax float64
+	var invoiceTaxAmount float64
 	var kraPayloadItems []models.InvoiceItem
 	for i, item := range req.Items {
-		// Validate individual item
 		if item.Quantity < 0 {
 			return nil, ErrInvalidQuantity
 		}
 		if item.UnitPrice < 0 {
-			item.UnitPrice = 0 // Default negative to zero
+			item.UnitPrice = 0
 		}
 		if strings.TrimSpace(item.Description) == "" {
-			item.Description = "Item" // Default empty description
+			item.Description = "Item"
 		}
 
-		// Get item-level tax and discount rates (default to invoice level if not specified)
 		itemTaxRate := item.TaxRate
 		if itemTaxRate < 0 {
 			itemTaxRate = 0
@@ -140,19 +140,20 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 			itemDiscountRate = 100
 		}
 
-		// Calculate line totals
 		lineSubtotal := item.Quantity * item.UnitPrice
 		itemDiscountAmt := lineSubtotal * (itemDiscountRate / 100)
 		lineSubtotalAfterDiscount := lineSubtotal - itemDiscountAmt
 		itemTaxAmt := lineSubtotalAfterDiscount * (itemTaxRate / 100)
 		lineTotal := lineSubtotalAfterDiscount + itemTaxAmt
 
-		subtotal += lineTotal
+		totalPreTax += lineSubtotal
+		totalItemTax += itemTaxAmt
 		kraPayloadItems = append(kraPayloadItems, models.InvoiceItem{
 			ID:           uuid.New().String(),
 			Description:  strings.TrimSpace(item.Description),
 			Quantity:     item.Quantity,
 			UnitPrice:    item.UnitPrice,
+			Subtotal:     math.Round(lineSubtotal*100) / 100,
 			Unit:         item.Unit,
 			TaxRate:      itemTaxRate,
 			TaxAmount:    math.Round(itemTaxAmt*100) / 100,
@@ -163,20 +164,24 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		})
 	}
 
-	// Validate currency - default to KES if invalid
 	currency := strings.ToUpper(req.Currency)
 	if currency == "" {
 		currency = "KES"
 	}
 	if !validCurrencies[currency] {
-		currency = "KES" // Default to KES
+		currency = "KES"
 	}
 
-	// Calculate tax and discount (ensure non-negative)
-	taxRate := math.Max(0, math.Min(100, req.TaxRate)) // Clamp between 0-100
-	taxAmount := subtotal * (taxRate / 100)
-	discount := math.Max(0, req.Discount) // Ensure non-negative
-	total := subtotal + taxAmount - discount
+	taxRate := math.Max(0, math.Min(100, req.TaxRate))
+	discount := math.Max(0, req.Discount)
+	subtotal := totalPreTax
+
+	// Apply invoice-level tax rate to items without their own tax rate
+	if taxRate > 0 {
+		invoiceTaxAmount = (totalPreTax - totalItemTax) * (taxRate / 100)
+	}
+	totalTax := totalItemTax + invoiceTaxAmount
+	total := subtotal + totalTax - discount
 
 	// Handle edge case: total cannot be negative
 	if total < 0 {
@@ -219,11 +224,12 @@ magicTokenExpires := time.Now().AddDate(0, 3, 0)
 		ExchangeRate:      exchangeRate,
 		ExchangeRateAt:    time.Now(),
 		Subtotal:          math.Round(subtotal*100) / 100,
-		TaxRate:          taxRate,
-		TotalTax:          math.Round(taxAmount*100) / 100,
-		Discount:         math.Round(discount*100) / 100,
-		Total:            math.Round(total*100) / 100,
-		BalanceDue:       math.Round(total*100) / 100,
+		TaxRate:           taxRate,
+		TotalTax:          math.Round(totalTax*100) / 100,
+		TaxAmount:         math.Round(totalTax*100) / 100,
+		Discount:          math.Round(discount*100) / 100,
+		Total:             math.Round(total*100) / 100,
+		BalanceDue:        math.Round(total*100) / 100,
 		TaxType:          models.TaxTypeStandard,
 		Status:           models.InvoiceStatusDraft,
 		DueDate:         req.DueDate,
@@ -288,6 +294,11 @@ magicTokenExpires := time.Now().AddDate(0, 3, 0)
 func (s *InvoiceService) validateCreateRequest(userID, clientID string, req *CreateInvoiceRequest) error {
 	if strings.TrimSpace(userID) == "" {
 		return errors.New("user ID is required")
+	}
+
+	// Validate due date is not in the past
+	if !req.DueDate.IsZero() && req.DueDate.Before(time.Now().Truncate(24*time.Hour)) {
+		return errors.New("due date cannot be in the past")
 	}
 
 	// Validate buyer type if provided
@@ -657,15 +668,18 @@ func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, kraPaylo
 	return invoice, nil
 }
 
-// recalculateInvoiceTotals recalculates invoice totals
+// recalculateInvoiceTotals recalculates invoice totals from line items
 func (s *InvoiceService) recalculateInvoiceTotals(invoice *models.Invoice) {
 	var subtotal float64
+	var totalTax float64
 	for _, item := range invoice.Items {
 		subtotal += item.Total
+		totalTax += item.TaxAmount
 	}
 	invoice.Subtotal = math.Round(subtotal*100) / 100
-	invoice.TaxAmount = math.Round(subtotal*(invoice.TaxRate/100)*100) / 100
-	invoice.Total = math.Round((subtotal+invoice.TaxAmount-invoice.Discount)*100) / 100
+	invoice.TotalTax = math.Round(totalTax*100) / 100
+	invoice.TaxAmount = invoice.TotalTax
+	invoice.Total = math.Round((subtotal-invoice.Discount)*100) / 100
 
 	// Ensure total is not negative
 	if invoice.Total < 0 {
@@ -824,7 +838,7 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&user, "id = ?", userID)
 
 	// Build notification data
-	invoiceLink := fmt.Sprintf("%s/invoice/%s", s.getBaseURL(), invoice.MagicToken)
+	invoiceLink := fmt.Sprintf("%s/invoice/%s", s.BaseURL(), invoice.MagicToken)
 	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
 	
 	// Use NotificationService if available
@@ -886,9 +900,9 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 	}
 }
 
-// getBaseURL returns the base URL for the application
-func (s *InvoiceService) getBaseURL() string {
-	if s.cfg != nil {
+// BaseURL returns the base URL for the application
+func (s *InvoiceService) BaseURL() string {
+	if s.cfg != nil && s.cfg.Server.BaseURL != "" {
 		return s.cfg.Server.BaseURL
 	}
 	return "https://invoice.simuxtech.com"
@@ -1982,25 +1996,8 @@ dbItems := make([]models.InvoiceItem, 0)
 			return fmt.Errorf("failed to fetch invoice items: %w", err)
 		}
 
-		// Convert to KRAItem format inline
-		kraPayloadItems := make([]KRAItem, len(dbItems))
-		for i, item := range dbItems {
-			kraPayloadItems[i] = KRAItem{
-				ItemCode:        item.ItemCode,
-				ItemDescription: item.Description,
-				Quantity:      item.Quantity,
-				UnitOfMeasure:  item.Unit,
-				UnitPrice:    item.UnitPrice,
-				Discount:     item.DiscountAmt,
-				DiscountRate: item.DiscountRate,
-				VATRate:      item.TaxRate,
-				VATAmount:    item.TaxAmount,
-				Total:       item.Total,
-			}
-		}
-
 		// Convert to KRAItem format for KRA payload
-		kraPayloadItems = make([]KRAItem, len(dbItems))
+		kraPayloadItems := make([]KRAItem, len(dbItems))
 		for i, item := range dbItems {
 			kraPayloadItems[i] = KRAItem{
 				ItemCode:        item.ItemCode,
