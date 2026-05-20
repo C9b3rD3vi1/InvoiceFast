@@ -1185,9 +1185,12 @@ func (s *AuthService) SendVerificationCode(userID, email string) error {
 	}
 
 	if s.emailService != nil {
+		noreplyName, noreplyEmail := s.emailService.sender("noreply")
 		go s.emailService.Send(EmailRequest{
-			To:      []string{email},
-			Subject: "Your InvoiceFast verification code",
+			FromName:  noreplyName,
+			FromEmail: noreplyEmail,
+			To:        []string{email},
+			Subject:   "Your InvoiceFast verification code",
 			Body: fmt.Sprintf(`
 				<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
 					<h2 style="color: #1a1a2e;">Verify your email</h2>
@@ -1235,9 +1238,12 @@ func (s *AuthService) SendVerificationLink(userID string) error {
 	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.Server.BaseURL, rawToken)
 
 	if s.emailService != nil {
+		noreplyName, noreplyEmail := s.emailService.sender("noreply")
 		go s.emailService.Send(EmailRequest{
-			To:      []string{user.Email},
-			Subject: "Verify your InvoiceFast account",
+			FromName:  noreplyName,
+			FromEmail: noreplyEmail,
+			To:        []string{user.Email},
+			Subject:   "Verify your InvoiceFast account",
 			Body: fmt.Sprintf(`
 				<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
 					<div style="text-align: center; padding: 24px 0;">

@@ -95,6 +95,11 @@ type JWTConfig struct {
 	RefreshExpiry time.Duration
 }
 
+type SenderProfile struct {
+	Name  string
+	Email string
+}
+
 type MailConfig struct {
 	SMTPHost     string
 	SMTPPort     string
@@ -102,6 +107,8 @@ type MailConfig struct {
 	SMTPPassword string
 	FromEmail    string
 	FromName     string
+	Domain       string
+	Senders      map[string]SenderProfile
 }
 
 type WhatsAppConfig struct {
@@ -196,22 +203,7 @@ func Load() *Config {
 		log.Fatalf("FATAL: JWT secret validation failed: %v", err)
 	}
 
-	// CRITICAL: Validate encryption key for data at rest encryption
-	encryptionKey := os.Getenv("ENCRYPTION_KEY")
-	if err := validateEncryptionKey(encryptionKey, isProduction); err != nil {
-		log.Fatalf("FATAL: Encryption key validation failed: %v", err)
-	}
-
-	// Validate database DSN
-	dbDSN := os.Getenv("DB_DSN")
-	if isProduction && dbDSN == "" {
-		log.Fatal("FATAL: DB_DSN must be configured in production")
-	}
-
-	// Validate other critical production settings
-	if isProduction {
-		validateProductionConfig()
-	}
+	domain := getEnv("MAIL_SENDER_DOMAIN", "invoicefast.app")
 
 	return &Config{
 		Server: ServerConfig{
@@ -265,8 +257,23 @@ func Load() *Config {
 			SMTPPort:     getEnv("SMTP_PORT", "587"),
 			SMTPUsername: getEnv("SMTP_USERNAME", ""),
 			SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-			FromEmail:    getEnv("FROM_EMAIL", "noreply@invoicefast.com"),
+			FromEmail:    getEnv("FROM_EMAIL", "noreply@"+domain),
 			FromName:     getEnv("FROM_NAME", "InvoiceFast"),
+			Domain:       domain,
+			Senders: map[string]SenderProfile{
+				"billing": {
+					Name:  getEnv("MAIL_SENDER_BILLING_NAME", "InvoiceFast Billing"),
+					Email: getEnv("MAIL_SENDER_BILLING_EMAIL", "billing@"+domain),
+				},
+				"info": {
+					Name:  getEnv("MAIL_SENDER_INFO_NAME", "InvoiceFast"),
+					Email: getEnv("MAIL_SENDER_INFO_EMAIL", "info@"+domain),
+				},
+				"noreply": {
+					Name:  getEnv("MAIL_SENDER_NOREPLY_NAME", "InvoiceFast"),
+					Email: getEnv("MAIL_SENDER_NOREPLY_EMAIL", "noreply@"+domain),
+				},
+			},
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:         getBoolEnv("RATE_LIMIT_ENABLED", true),

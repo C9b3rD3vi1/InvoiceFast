@@ -22,6 +22,8 @@ type EmailRequest struct {
 	Subject     string
 	Body        string
 	IsHTML      bool
+	FromName    string
+	FromEmail   string
 	Attachments []Attachment
 }
 
@@ -37,15 +39,35 @@ func NewEmailService(cfg *config.Config) *EmailService {
 	return &EmailService{cfg: cfg}
 }
 
+// sender returns the From name and email for a given profile key.
+func (s *EmailService) sender(profile string) (name, email string) {
+	if s.cfg.Mail.Senders != nil {
+		if p, ok := s.cfg.Mail.Senders[profile]; ok {
+			return p.Name, p.Email
+		}
+	}
+	return s.cfg.Mail.FromName, s.cfg.Mail.FromEmail
+}
+
 // Send sends an email
 func (s *EmailService) Send(req EmailRequest) error {
 	if s.cfg.Mail.SMTPHost == "" {
 		return fmt.Errorf("SMTP not configured")
 	}
 
+	// Use per-request From fields, fall back to config defaults
+	fromName := req.FromName
+	fromEmail := req.FromEmail
+	if fromName == "" {
+		fromName = s.cfg.Mail.FromName
+	}
+	if fromEmail == "" {
+		fromEmail = s.cfg.Mail.FromEmail
+	}
+
 	// Build email headers
 	var msg bytes.Buffer
-	msg.WriteString(fmt.Sprintf("From: %s <%s>\n", s.cfg.Mail.FromName, s.cfg.Mail.FromEmail))
+	msg.WriteString(fmt.Sprintf("From: %s <%s>\n", fromName, fromEmail))
 	msg.WriteString(fmt.Sprintf("To: %s\n", strings.Join(req.To, ",")))
 	msg.WriteString(fmt.Sprintf("Subject: %s\n", req.Subject))
 	msg.WriteString("MIME-Version: 1.0\n")
@@ -101,11 +123,14 @@ func (s *EmailService) SendInvoiceEmail(invoice *InvoiceEmailData) error {
 		return err
 	}
 
+	billingName, billingEmail := s.sender("billing")
 	req := EmailRequest{
-		To:      []string{invoice.ClientEmail},
-		Subject: fmt.Sprintf("Invoice %s from %s", invoice.InvoiceNumber, invoice.CompanyName),
-		Body:    body,
-		IsHTML:  true,
+		FromName:  billingName,
+		FromEmail: billingEmail,
+		To:        []string{invoice.ClientEmail},
+		Subject:   fmt.Sprintf("Invoice %s from %s", invoice.InvoiceNumber, invoice.CompanyName),
+		Body:      body,
+		IsHTML:    true,
 	}
 
 	return s.Send(req)
@@ -118,11 +143,14 @@ func (s *EmailService) SendPaymentReminder(reminder *ReminderEmailData) error {
 		return err
 	}
 
+	billingName, billingEmail := s.sender("billing")
 	req := EmailRequest{
-		To:      []string{reminder.ClientEmail},
-		Subject: fmt.Sprintf("Payment Reminder: Invoice %s", reminder.InvoiceNumber),
-		Body:    body,
-		IsHTML:  true,
+		FromName:  billingName,
+		FromEmail: billingEmail,
+		To:        []string{reminder.ClientEmail},
+		Subject:   fmt.Sprintf("Payment Reminder: Invoice %s", reminder.InvoiceNumber),
+		Body:      body,
+		IsHTML:    true,
 	}
 
 	return s.Send(req)
@@ -135,11 +163,14 @@ func (s *EmailService) SendPaymentReceipt(receipt *ReceiptEmailData) error {
 		return err
 	}
 
+	billingName, billingEmail := s.sender("billing")
 	req := EmailRequest{
-		To:      []string{receipt.ClientEmail},
-		Subject: fmt.Sprintf("Payment Receipt for Invoice %s", receipt.InvoiceNumber),
-		Body:    body,
-		IsHTML:  true,
+		FromName:  billingName,
+		FromEmail: billingEmail,
+		To:        []string{receipt.ClientEmail},
+		Subject:   fmt.Sprintf("Payment Receipt for Invoice %s", receipt.InvoiceNumber),
+		Body:      body,
+		IsHTML:    true,
 	}
 
 	return s.Send(req)
@@ -165,11 +196,14 @@ func (s *EmailService) SendTeamInvite(to, inviterName, companyName, inviteLink s
 		</div>
 	`, companyName, inviterName, inviteLink)
 
+	infoName, infoEmail := s.sender("info")
 	req := EmailRequest{
-		To:      []string{to},
-		Subject: fmt.Sprintf("You're invited to join %s on InvoiceFast", companyName),
-		Body:    body,
-		IsHTML:  true,
+		FromName:  infoName,
+		FromEmail: infoEmail,
+		To:        []string{to},
+		Subject:   fmt.Sprintf("You're invited to join %s on InvoiceFast", companyName),
+		Body:      body,
+		IsHTML:    true,
 	}
 
 	return s.Send(req)

@@ -159,11 +159,14 @@ func (s *ReminderSequenceService) sendSequenceMessage(seq *models.ReminderSequen
 		switch channel {
 		case "email":
 			if s.emailService != nil && client.Email != "" {
+				billingName, billingEmail := s.emailService.sender("billing")
 				err = s.emailService.Send(EmailRequest{
-					To:      []string{client.Email},
-					Subject: fmt.Sprintf("Reminder: Invoice %s", invoice.InvoiceNumber),
-					Body:    seq.EmailTemplate,
-					IsHTML:  true,
+					FromName:  billingName,
+					FromEmail: billingEmail,
+					To:        []string{client.Email},
+					Subject:   fmt.Sprintf("Reminder: Invoice %s", invoice.InvoiceNumber),
+					Body:      seq.EmailTemplate,
+					IsHTML:    true,
 				})
 			}
 		case "sms":

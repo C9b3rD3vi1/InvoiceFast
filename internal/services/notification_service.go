@@ -187,11 +187,14 @@ func (s *NotificationService) sendEmail(to, subject, body string, vars map[strin
 		return "", "email service not configured"
 	}
 
+	infoName, infoEmail := s.emailSvc.sender("info")
 	err := s.emailSvc.Send(EmailRequest{
-		To:      []string{to},
-		Subject: subject,
-		Body:    body,
-		IsHTML:  true,
+		FromName:  infoName,
+		FromEmail: infoEmail,
+		To:        []string{to},
+		Subject:   subject,
+		Body:      body,
+		IsHTML:    true,
 	})
 
 	if err != nil {

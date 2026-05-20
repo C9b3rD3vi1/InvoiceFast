@@ -413,11 +413,14 @@ func (s *EmailService) SendPasswordResetEmail(data *PasswordResetEmailData) erro
 	body = strings.ReplaceAll(body, "{{.RequestTime}}", data.RequestTime)
 	body = strings.ReplaceAll(body, "{{.UserEmail}}", data.UserEmail)
 
+	noreplyName, noreplyEmail := s.sender("noreply")
 	req := EmailRequest{
-		To:      []string{data.UserEmail},
-		Subject: "Reset Your InvoiceFast Password",
-		Body:    body,
-		IsHTML:  true,
+		FromName:  noreplyName,
+		FromEmail: noreplyEmail,
+		To:        []string{data.UserEmail},
+		Subject:   "Reset Your InvoiceFast Password",
+		Body:      body,
+		IsHTML:    true,
 	}
 
 	return s.Send(req)
@@ -479,11 +482,14 @@ func (s *EmailService) SendPasswordChangedEmail(data *PasswordChangedEmailData) 
 	body = strings.ReplaceAll(body, "{{.ChangedAt}}", data.ChangedAt.Format("Jan 02, 2006 at 15:04 MST"))
 	body = strings.ReplaceAll(body, "{{.IPAddress}}", data.IPAddress)
 
+	noreplyName, noreplyEmail := s.sender("noreply")
 	req := EmailRequest{
-		To:      []string{data.UserEmail},
-		Subject: "Your InvoiceFast Password Has Been Changed",
-		Body:    body,
-		IsHTML:  true,
+		FromName:  noreplyName,
+		FromEmail: noreplyEmail,
+		To:        []string{data.UserEmail},
+		Subject:   "Your InvoiceFast Password Has Been Changed",
+		Body:      body,
+		IsHTML:    true,
 	}
 
 	return s.Send(req)
