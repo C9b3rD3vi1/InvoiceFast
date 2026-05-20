@@ -13,15 +13,8 @@ import (
 func ExpenseRoutes(app *fiber.App, h *handlers.ExpenseHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/expenses")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
-	// Specific routes first (before /:id)
-	group.Get("/categories", h.GetCategories)
-	group.Post("/categories", h.CreateCategory)
-	group.Get("/summary", h.GetExpenseSummary)
-	group.Post("/bulk-actions", h.BulkExpenseAction)
-
-	// Then ID-based routes
-	group.Post("/", h.CreateExpense)
 	group.Get("/", h.GetExpenses)
 	group.Get("/:id", h.GetExpense)
 	group.Put("/:id", h.UpdateExpense)

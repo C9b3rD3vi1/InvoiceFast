@@ -13,6 +13,7 @@ import (
 func TeamRoutes(app *fiber.App, h *handlers.TeamHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/team")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/members", h.GetTeamMembers)
 	group.Post("/invite", h.InviteMember)

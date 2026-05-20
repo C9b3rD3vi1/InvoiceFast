@@ -54,9 +54,11 @@ func (h *SettingsHandler) SaveSettings(c *fiber.Ctx) error {
 
 	// Build settings from flexible input (frontend sends nested like {invoice: {...}}, {business: {...}})
 	settings := &services.TenantSettings{}
+	hasBusinessData := false
 
 	// Handle business/branding
 	if business, ok := reqBody["business"].(map[string]interface{}); ok {
+		hasBusinessData = true
 		settings.Branding = &services.BrandingSettings{}
 		if name, ok := business["name"].(string); ok {
 			settings.Branding.CompanyName = name
@@ -198,6 +200,18 @@ func (h *SettingsHandler) SaveSettings(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// Mark business_profile in onboarding progress if business data was saved
+	if hasBusinessData || settings.Branding != nil {
+		cur, err := h.settingsService.GetSettings(tenantID)
+		if err == nil {
+			if cur.Onboarding == nil {
+				cur.Onboarding = &services.OnboardingProgress{}
+			}
+			cur.Onboarding.BusinessProfile = true
+			h.settingsService.SaveSettings(tenantID, cur)
+		}
+	}
+
 	return c.JSON(fiber.Map{"status": "saved"})
 }
 
@@ -242,6 +256,16 @@ func (h *SettingsHandler) SaveSettingsMpesa(c *fiber.Ctx) error {
 
 	if err := h.settingsService.SaveMpesaSettings(tenantID, settings); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	// Mark mpesa_setup in onboarding progress
+	cur, err := h.settingsService.GetSettings(tenantID)
+	if err == nil {
+		if cur.Onboarding == nil {
+			cur.Onboarding = &services.OnboardingProgress{}
+		}
+		cur.Onboarding.MpesaSetup = true
+		h.settingsService.SaveSettings(tenantID, cur)
 	}
 
 	return c.JSON(fiber.Map{"status": "saved"})

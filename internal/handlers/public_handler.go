@@ -97,7 +97,7 @@ func (h *PublicHandler) ServeSuccess(c *fiber.Ctx) error {
 
 // Deprecated: use routes
 func (h *PublicHandler) ServeLogin(c *fiber.Ctx) error    { return c.Redirect("/login") }
-func (h *PublicHandler) ServeRegister(c *fiber.Ctx) error { return c.Redirect("/register") }
+func (h *PublicHandler) ServeRegister(c *fiber.Ctx) error { return c.Redirect("/onboarding") }
 func (h *PublicHandler) ServeContact(c *fiber.Ctx) error  { return c.Redirect("/contact") }
 
 // HandleContact - contact form JSON (non-auth public)

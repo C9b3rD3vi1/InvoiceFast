@@ -28,10 +28,11 @@ type InvoiceHandler struct {
 	emailService      *services.EmailService
 	whatsappService   *services.WhatsAppService
 	pdfWorker         *worker.PDFWorker
+	settingsService   *services.SettingsService
 }
 
 // NewInvoiceHandler creates InvoiceHandler
-func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, whatsappSvc *services.WhatsAppService, pdfWorker *worker.PDFWorker) *InvoiceHandler {
+func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, whatsappSvc *services.WhatsAppService, pdfWorker *worker.PDFWorker, settingsSvc *services.SettingsService) *InvoiceHandler {
 	return &InvoiceHandler{
 		invoiceService:    invoiceSvc,
 		kraService:        kraSvc,
@@ -42,6 +43,7 @@ func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRA
 		pdfGenerator:      pdfGen,
 		whatsappService:   whatsappSvc,
 		pdfWorker:         pdfWorker,
+		settingsService:   settingsSvc,
 	}
 }
 
@@ -86,6 +88,18 @@ func (h *InvoiceHandler) CreateInvoice(c *fiber.Ctx) error {
 			CreatedAt:  time.Now(),
 		}
 		h.pdfWorker.EnqueueTask(c.Context(), task)
+	}
+
+	// Mark first_invoice in onboarding progress
+	if h.settingsService != nil {
+		settings, err := h.settingsService.GetSettings(tenantID)
+		if err == nil {
+			if settings.Onboarding == nil {
+				settings.Onboarding = &services.OnboardingProgress{}
+			}
+			settings.Onboarding.FirstInvoice = true
+			h.settingsService.SaveSettings(tenantID, settings)
+		}
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(invoice)

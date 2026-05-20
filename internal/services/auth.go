@@ -31,12 +31,15 @@ import (
 )
 
 var (
-	ErrEmailExists         = errors.New("email already registered")
-	ErrInvalidEmail        = errors.New("invalid email format")
-	ErrWeakPassword        = errors.New("password must be at least 8 characters with uppercase, lowercase, number and special character")
-	ErrWrongPassword       = errors.New("incorrect password")
-	ErrInvalidToken        = errors.New("invalid or expired token")
-	ErrPasswordCompromised = errors.New("this password has been found in a data breach. please choose a different password")
+	ErrEmailExists          = errors.New("email already registered")
+	ErrInvalidEmail         = errors.New("invalid email format")
+	ErrWeakPassword         = errors.New("password must be at least 8 characters with uppercase, lowercase, number and special character")
+	ErrWrongPassword        = errors.New("incorrect password")
+	ErrInvalidToken         = errors.New("invalid or expired token")
+	ErrPasswordCompromised  = errors.New("this password has been found in a data breach. please choose a different password")
+	ErrVerificationInvalid  = errors.New("invalid verification code")
+	ErrVerificationExpired  = errors.New("verification code has expired")
+	ErrEmailAlreadyVerified = errors.New("email already verified")
 )
 
 var commonPasswords = map[string]bool{
@@ -404,10 +407,6 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		}
 	} else {
 		logger.Get().Warn(context.Background(), "Starter plan not found, skipping trial creation", "error", err)
-	}
-
-	if err := s.db.Create(user).Error; err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	accessToken, err := s.generateAccessToken(user)
@@ -1153,4 +1152,173 @@ func (s *AuthService) decryptSecret(encoded string) string {
 	cfb := cipher.NewCFBDecrypter(block2, iv)
 	cfb.XORKeyStream(plaintext, ciphertext)
 	return string(plaintext)
+}
+
+// SendVerificationCode generates a 6-digit code, stores it, and emails it.
+func (s *AuthService) SendVerificationCode(userID, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	var user models.User
+	if err := s.db.First(&user, "id = ? AND email = ?", userID, email).Error; err != nil {
+		return errors.New("user not found")
+	}
+
+	// Invalidate any previous unused codes
+	_ = s.db.Where("user_id = ? AND used_at IS NULL", userID).
+		Delete(&models.EmailVerificationToken{}).Error
+
+	var b [3]byte
+	rand.Read(b[:])
+	code := fmt.Sprintf("%06d", int(b[0])<<12|int(b[1])<<6|int(b[2])%1000000)
+	hashed := fmt.Sprintf("%x", sha256.Sum256([]byte(code)))
+
+	token := &models.EmailVerificationToken{
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		Token:     hashed,
+		RawToken:  code,
+		Email:     email,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}
+	if err := s.db.Create(token).Error; err != nil {
+		return fmt.Errorf("failed to create verification token: %w", err)
+	}
+
+	if s.emailService != nil {
+		go s.emailService.Send(EmailRequest{
+			To:      []string{email},
+			Subject: "Your InvoiceFast verification code",
+			Body: fmt.Sprintf(`
+				<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+					<h2 style="color: #1a1a2e;">Verify your email</h2>
+					<p style="color: #666; font-size: 14px;">Enter this code to verify your email address:</p>
+					<div style="background: #f5f5f5; border-radius: 8px; padding: 20px; text-align: center; margin: 16px 0;">
+						<span style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #1a1a2e; font-family: monospace;">%s</span>
+					</div>
+					<p style="color: #999; font-size: 12px;">This code expires in 10 minutes.</p>
+				</div>`, code),
+			IsHTML: true,
+		})
+	}
+
+	return nil
+}
+
+// SendVerificationLink generates a token and sends an email with a verification link.
+func (s *AuthService) SendVerificationLink(userID string) error {
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		return errors.New("user not found")
+	}
+
+	// Invalidate any previous unused tokens
+	_ = s.db.Where("user_id = ? AND used_at IS NULL", userID).
+		Delete(&models.EmailVerificationToken{}).Error
+
+	var b [16]byte
+	rand.Read(b[:])
+	rawToken := hex.EncodeToString(b[:])
+	hashed := fmt.Sprintf("%x", sha256.Sum256([]byte(rawToken)))
+
+	token := &models.EmailVerificationToken{
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		Token:     hashed,
+		RawToken:  rawToken,
+		Email:     user.Email,
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	if err := s.db.Create(token).Error; err != nil {
+		return fmt.Errorf("failed to create verification token: %w", err)
+	}
+
+	verifyURL := fmt.Sprintf("%s/verify-email?token=%s", s.cfg.Server.BaseURL, rawToken)
+
+	if s.emailService != nil {
+		go s.emailService.Send(EmailRequest{
+			To:      []string{user.Email},
+			Subject: "Verify your InvoiceFast account",
+			Body: fmt.Sprintf(`
+				<div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+					<div style="text-align: center; padding: 24px 0;">
+						<img src="https://invoicefast.app/images/logo/logo.png" alt="InvoiceFast" style="height: 40px;">
+					</div>
+					<h2 style="color: #1a1a2e; text-align: center;">Verify your email address</h2>
+					<p style="color: #666; font-size: 14px; text-align: center;">Click the button below to verify your email and unlock all InvoiceFast features:</p>
+					<div style="text-align: center; margin: 24px 0;">
+						<a href="%s" style="display: inline-block; background: #0277BD; color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">Verify email</a>
+					</div>
+					<p style="color: #999; font-size: 12px; text-align: center;">This link expires in 24 hours.</p>
+					<p style="color: #999; font-size: 12px; text-align: center;">If you didn't create an InvoiceFast account, ignore this email.</p>
+				</div>`, verifyURL),
+			IsHTML: true,
+		})
+	}
+
+	return nil
+}
+
+// VerifyEmailLink validates a link-based verification token and marks the user verified.
+func (s *AuthService) VerifyEmailLink(rawToken string) (*models.User, error) {
+	rawToken = strings.TrimSpace(rawToken)
+	if rawToken == "" {
+		return nil, errors.New("invalid token")
+	}
+
+	hashed := fmt.Sprintf("%x", sha256.Sum256([]byte(rawToken)))
+
+	var token models.EmailVerificationToken
+	if err := s.db.Where("token = ? AND used_at IS NULL", hashed).
+		Order("created_at DESC").Limit(1).First(&token).Error; err != nil {
+		return nil, ErrVerificationInvalid
+	}
+
+	if time.Now().After(token.ExpiresAt) {
+		return nil, ErrVerificationExpired
+	}
+
+	now := time.Now()
+	token.UsedAt = &now
+	if err := s.db.Save(&token).Error; err != nil {
+		return nil, fmt.Errorf("failed to mark token used: %w", err)
+	}
+
+	var user models.User
+	if err := s.db.First(&user, "id = ?", token.UserID).Error; err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	return &user, nil
+}
+
+// VerifyEmailCode validates a 6-digit verification code for the given user.
+func (s *AuthService) VerifyEmailCode(userID, code string) error {
+	code = strings.TrimSpace(code)
+
+	var tokens []models.EmailVerificationToken
+	if err := s.db.Where("user_id = ? AND used_at IS NULL", userID).
+		Order("created_at DESC").Limit(1).Find(&tokens).Error; err != nil {
+		return fmt.Errorf("failed to query tokens: %w", err)
+	}
+	if len(tokens) == 0 {
+		return ErrVerificationInvalid
+	}
+
+	tok := tokens[0]
+	if time.Now().After(tok.ExpiresAt) {
+		return ErrVerificationExpired
+	}
+
+	hashed := fmt.Sprintf("%x", sha256.Sum256([]byte(code)))
+	if hashed != tok.Token {
+		return ErrVerificationInvalid
+	}
+
+	now := time.Now()
+	tok.UsedAt = &now
+	if err := s.db.Save(&tok).Error; err != nil {
+		return fmt.Errorf("failed to mark token used: %w", err)
+	}
+
+	return nil
 }

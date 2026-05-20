@@ -12,6 +12,7 @@ import (
 func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *services.AuthService, db *database.DB, webhookVerifier *middleware.WebhookVerifierMiddleware, idempotencySvc *services.IdempotencyService) fiber.Router {
 	group := app.Group("/api/v1/tenant/billing")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/subscription", h.GetSubscription)
 	group.Post("/subscription", h.CreateSubscription)

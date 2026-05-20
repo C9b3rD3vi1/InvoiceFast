@@ -216,6 +216,7 @@ func (db *DB) Migrate() error {
 		&models.KRAAuditLog{},
 		&models.Tenant{},
 		&models.PasswordResetToken{},
+		&models.EmailVerificationToken{},
 		&models.Notification{},
 		&models.NotificationLog{},
 		&models.EmailTracking{},

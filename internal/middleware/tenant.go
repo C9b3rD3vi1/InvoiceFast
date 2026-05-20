@@ -130,6 +130,39 @@ func resolveTenantFromSubdomain(c *fiber.Ctx, db *database.DB) string {
 	return ""
 }
 
+func RequireEmailVerified(db *database.DB) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userID := GetUserID(c)
+		if userID == "" {
+			return c.Next()
+		}
+
+		// Skip check for onboarding routes
+		path := c.Path()
+		if strings.HasPrefix(path, "/api/v1/onboarding") {
+			return c.Next()
+		}
+
+		var count int64
+		db.Model(&models.EmailVerificationToken{}).
+			Where("user_id = ? AND used_at IS NOT NULL", userID).
+			Count(&count)
+
+		if count == 0 {
+			accept := c.Get("Accept")
+			if strings.Contains(accept, "text/html") {
+				return c.Redirect("/onboarding")
+			}
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "email_not_verified",
+				"message": "Please verify your email before using InvoiceFast",
+			})
+		}
+
+		return c.Next()
+	}
+}
+
 func GetTenantID(c *fiber.Ctx) string {
 	if val := c.Locals(TenantIDKey); val != nil {
 		if id, ok := val.(string); ok && id != "" {

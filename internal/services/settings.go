@@ -21,6 +21,14 @@ func NewSettingsService(db *database.DB) *SettingsService {
 	return &SettingsService{db: db}
 }
 
+type OnboardingProgress struct {
+	EmailVerified    bool `json:"email_verified"`
+	BusinessProfile bool `json:"business_profile"`
+	FirstInvoice    bool `json:"first_invoice"`
+	MpesaSetup      bool `json:"mpesa_setup"`
+	Dismissed       bool `json:"dismissed"`
+}
+
 type TenantSettings struct {
 	Business      *BusinessSettings     `json:"business,omitempty"`
 	Profile       *ProfileSettings     `json:"profile,omitempty"`
@@ -31,6 +39,7 @@ type TenantSettings struct {
 	Branding      *BrandingSettings    `json:"branding,omitempty"`
 	Notifications *NotificationSettings `json:"notifications,omitempty"`
 	Integrations  interface{}          `json:"integrations,omitempty"`
+	Onboarding    *OnboardingProgress  `json:"onboarding,omitempty"`
 	Updated       time.Time            `json:"updated_at"`
 }
 

@@ -12,6 +12,7 @@ import (
 func ReminderSequenceRoutes(app *fiber.App, h *handlers.ReminderSequenceHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/reminder-sequences")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/", h.GetSequences)
 	group.Post("/", h.CreateSequence)

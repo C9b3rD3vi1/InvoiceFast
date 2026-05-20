@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"invoicefast/internal/handlers"
 	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
@@ -35,7 +36,7 @@ func getLayoutData(c *fiber.Ctx) services.LayoutData {
 }
 
 // StaticRoutes serves frontend pages from views/
-func StaticRoutes(app *fiber.App) fiber.Router {
+func StaticRoutes(app *fiber.App, authHandler *handlers.AuthHandler) fiber.Router {
 	// Root redirects to dashboard
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.Redirect("/dashboard")
@@ -158,12 +159,15 @@ func StaticRoutes(app *fiber.App) fiber.Router {
 		return c.SendFile("./views/pages/success.html")
 	})
 
+	// Email verification link handler (no auth required — token is in the link)
+	app.Get("/verify-email", authHandler.HandleVerifyEmailLink)
+
 	// Auth pages (no auth required)
 	app.Get("/login", func(c *fiber.Ctx) error {
 		return layoutService.RenderPublicWithShell(c, "./views/auth/login.html", "Sign In")
 	})
 	app.Get("/register", func(c *fiber.Ctx) error {
-		return layoutService.RenderPublicWithShell(c, "./views/auth/register.html", "Create Account")
+		return c.Redirect("/onboarding")
 	})
 	app.Get("/forgot-password", func(c *fiber.Ctx) error {
 		return layoutService.RenderPublicWithShell(c, "./views/auth/forgot-password.html", "Forgot Password")

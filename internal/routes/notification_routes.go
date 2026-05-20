@@ -13,6 +13,7 @@ import (
 func NotificationRoutes(app *fiber.App, h *handlers.NotificationHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/notifications")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/", h.GetNotifications)
 	group.Post("/read-all", h.MarkAllAsRead)

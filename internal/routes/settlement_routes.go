@@ -12,6 +12,7 @@ import (
 func SettlementRoutes(app *fiber.App, h *handlers.SettlementHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/settlement")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/daily", h.GetDailySettlement)
 	group.Get("/export", h.ExportSettlement)

@@ -28,6 +28,7 @@ func TenantRoutes(app fiber.Router, h *handlers.AuthHandler, authService *servic
 	group.Use(middleware.TenantMiddleware(authService, db))
 
 	group.Get("/me", h.GetMe)
+	group.Post("/send-verification-link", h.HandleSendVerificationLink)
 	group.Put("/me", h.UpdateUser)
 	group.Post("/change-password", h.ChangePassword)
 	group.Post("/logout", h.Logout)

@@ -13,6 +13,7 @@ import (
 func DashboardRoutes(app *fiber.App, h *handlers.DashboardHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/dashboard")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	// Add no-cache headers for all dashboard endpoints
 	group.Use(func(c *fiber.Ctx) error {

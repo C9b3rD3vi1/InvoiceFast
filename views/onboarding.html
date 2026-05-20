@@ -1,0 +1,502 @@
+<style>
+.screen{display:none}
+.screen.active{display:block}
+.screen.fade-up{animation:fadeUp 500ms ease both}
+.screen.split-screen{min-height:calc(100vh - 66px)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideIn{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(-40px);opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulseDot{0%,100%{box-shadow:0 0 0 4px var(--gold-dim)}50%{box-shadow:0 0 0 8px rgba(240,180,41,0.05)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes drawCircle{to{stroke-dashoffset:0}}
+@keyframes drawCheck{to{stroke-dashoffset:0}}
+.split-layout{display:flex;width:100%;min-height:calc(100vh - 66px)}
+.split-left{width:45%;background:var(--void);position:relative;display:flex;align-items:center;justify-content:center;padding:60px}
+.split-right{width:55%;background:var(--ink-1);position:relative;display:flex;align-items:center;justify-content:center;padding:60px;border-left:1px solid var(--border)}
+.split-right::before{content:'';position:absolute;top:0;right:0;width:300px;height:300px;background:radial-gradient(circle,rgba(240,180,41,0.05) 0%,transparent 70%);pointer-events:none}
+.two-col{display:grid;grid-template-columns:52% 48%;min-height:calc(100vh - 66px)}
+.col-form{overflow-y:auto;padding:48px 40px}
+.col-preview{overflow-y:auto;padding:40px;background:var(--ink-1);border-left:1px solid var(--border);max-height:calc(100vh - 66px)}
+.display-1{font-family:'Playfair Display',serif;font-size:52px;font-weight:700;line-height:1.15}
+.display-2{font-family:'Playfair Display',serif;font-size:44px;font-weight:700;line-height:1.2}
+.display-3{font-family:'Playfair Display',serif;font-size:36px;font-weight:700}
+.display-4{font-family:'Playfair Display',serif;font-size:30px;font-weight:700}
+.display-italic{font-style:italic}
+.mono{font-family:'JetBrains Mono',monospace}
+.value-proof{display:flex;flex-direction:column;gap:12px;margin-top:32px}
+.value-proof li{display:flex;align-items:center;gap:12px;list-style:none;font-size:14px;color:var(--bone-2)}
+.value-proof li i{color:var(--gold);font-size:14px}
+.social-proof{display:flex;align-items:center;gap:12px;margin-top:40px}
+.avatar-stack{display:flex}
+.avatar{width:32px;height:32px;border-radius:50%;border:2px solid var(--void);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;margin-left:-8px}
+.avatar:first-child{margin-left:0}
+.avatar-1{background:var(--violet-2);color:#fff}
+.avatar-2{background:var(--gold);color:#07070A}
+.avatar-3{background:var(--green);color:#fff}
+.avatar-4{background:var(--violet-3);color:#07070A}
+.divider{display:flex;align-items:center;gap:16px;color:var(--muted);font-size:11px;font-family:'JetBrains Mono',monospace}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border-2)}
+.btn-google{background:#FFF;color:#1a1a1a;border:1px solid #e0e0e0;width:100%;padding:13px 20px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:600;font-size:15px;cursor:pointer;transition:all 200ms}
+.btn-google:hover{background:#f8f8f8;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+.btn-google svg{width:20px;height:20px;flex-shrink:0}
+.form-group{position:relative;margin-bottom:16px}
+.form-group .input-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;transition:color 200ms;z-index:2}
+.form-group .input-icon-right{left:auto;right:16px;cursor:pointer;pointer-events:all}
+.form-input{width:100%;background:var(--ink-3);border:1px solid var(--border-2);border-radius:8px;padding:13px 16px 13px 44px;font-size:15px;color:var(--bone);outline:none;transition:all 200ms}
+.form-input:focus{border-color:var(--gold-border);outline:2px solid rgba(240,180,41,0.35);outline-offset:-1px}
+.form-group.no-icon .form-input{padding-left:16px}
+.pw-strength{display:flex;gap:4px;margin-top:8px;align-items:center}
+.pw-strength .bar{flex:1;height:4px;background:var(--ink-4);border-radius:2px;transition:background 200ms}
+.pw-strength .bar.active.weak{background:var(--red)}
+.pw-strength .bar.active.good{background:var(--amber)}
+.pw-strength .bar.active.strong{background:var(--green)}
+.pw-strength .label{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted);margin-left:8px;white-space:nowrap}
+.toggle{display:inline-flex;align-items:center;gap:10px;cursor:pointer}
+.toggle-track{width:44px;height:24px;background:var(--ink-4);border-radius:12px;position:relative;transition:background 200ms;flex-shrink:0}
+.toggle-track.active{background:var(--gold)}
+.toggle-thumb{width:18px;height:18px;background:var(--bone);border-radius:50%;position:absolute;top:3px;left:3px;transition:transform 200ms}
+.toggle-track.active .toggle-thumb{transform:translateX(20px)}
+.info-box{display:flex;align-items:flex-start;gap:12px;padding:16px 20px;background:var(--gold-dim);border:1px solid var(--gold-border);border-radius:12px;font-size:14px;color:var(--bone-2)}
+.info-box i{color:var(--gold);font-size:18px;margin-top:2px;flex-shrink:0}
+.otp-input{width:48px;text-align:center;padding:13px 0;font-size:24px;font-family:'JetBrains Mono',monospace}
+.envelope{position:relative;width:80px;height:60px;margin:0 auto}
+.envelope .body{width:100%;height:100%;background:var(--ink-3);border:2px solid var(--gold);border-radius:4px}
+.envelope .flap{position:absolute;top:-2px;left:-2px;right:-2px;height:50%;background:var(--ink-3);border:2px solid var(--gold);border-bottom:none;border-radius:4px 4px 0 0;transform-origin:bottom;animation:flapOpen 600ms ease-out 200ms forwards}
+@keyframes flapOpen{0%{transform:rotateX(0)}100%{transform:rotateX(180deg);z-index:0}}
+.envelope .letter{position:absolute;bottom:-4px;left:10px;right:10px;height:30px;background:#fff;border-radius:2px;animation:letterSlide 600ms ease-out 600ms forwards;opacity:0}
+@keyframes letterSlide{0%{transform:translateY(0);opacity:0}100%{transform:translateY(-40px);opacity:1}}
+.progress-bar{display:flex;align-items:center;justify-content:center;gap:0;padding:12px 40px;background:var(--void);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.progress-step{display:flex;align-items:center;gap:8px}
+.progress-step .dot{width:10px;height:10px;border-radius:50%;background:var(--faint);border:2px solid var(--faint);position:relative;transition:all 300ms;flex-shrink:0}
+.progress-step.completed .dot{background:var(--gold);border-color:var(--gold)}
+.progress-step.completed .dot::after{content:'\2713';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#07070A;font-size:7px;font-weight:700}
+.progress-step.active .dot{background:var(--gold);border-color:var(--gold);box-shadow:0 0 0 4px var(--gold-dim);animation:pulseDot 2s ease infinite}
+.progress-step .label{font-size:12px;color:var(--faint);font-weight:500;transition:color 300ms}
+.progress-step.active .label{color:var(--bone);font-weight:700}
+.progress-step.completed .label{color:var(--gold)}
+.progress-line{width:40px;height:2px;background:var(--border-2);margin:0 4px;transition:background 300ms}
+.progress-line.completed{background:var(--gold)}
+.checkmark-circle{width:100px;height:100px;border-radius:50%;position:relative}
+.checkmark-circle svg{width:100%;height:100%}
+.checkmark-circle .circle{fill:none;stroke:var(--gold);stroke-width:3;stroke-dasharray:283;stroke-dashoffset:283;animation:drawCircle 600ms ease-out forwards}
+.checkmark-circle .check{fill:none;stroke:var(--gold);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:50;stroke-dashoffset:50;animation:drawCheck 400ms ease-out 600ms forwards}
+.step-timeline{display:flex;align-items:center;justify-content:center;gap:0;max-width:600px;margin:0 auto}
+.step-timeline .node{display:flex;flex-direction:column;align-items:center;gap:8px;flex:1}
+.step-timeline .node-icon{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all 300ms}
+.step-timeline .node.active .node-icon{background:var(--gold-dim);color:var(--gold);border:2px solid var(--gold)}
+.step-timeline .node.pending .node-icon{background:var(--ink-3);color:var(--faint);border:2px solid var(--border-2)}
+.step-timeline .node-label{font-size:13px;font-weight:500}
+.step-timeline .node.active .node-label{color:var(--bone)}
+.step-timeline .node.pending .node-label{color:var(--faint)}
+.step-timeline .node-status{font-size:10px;font-family:'JetBrains Mono',monospace}
+.step-timeline .node.active .node-status{color:var(--gold)}
+.step-timeline .node.pending .node-status{color:var(--faint)}
+.step-timeline .node-connector{flex:1;height:2px;background:var(--border-2);margin-bottom:48px;position:relative}
+.step-timeline .node-connector::before{content:'';position:absolute;left:0;top:0;height:100%;background:var(--gold);transition:width 300ms}
+.step-timeline .node-connector.active::before{width:100%}
+.step-timeline .node-connector.pending::before{width:0}
+.invoice-preview{background:#FFF;color:#1a1a1a;border-radius:8px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+.invoice-preview .header{background:#1a1a2e;color:#fff;padding:24px 32px;display:flex;justify-content:space-between;align-items:center}
+.invoice-preview .body{padding:32px}
+.invoice-preview table{width:100%;border-collapse:collapse;margin:16px 0}
+.invoice-preview th{text-align:left;font-size:11px;color:#666;text-transform:uppercase;padding:8px 4px;border-bottom:1px solid #eee;font-family:'JetBrains Mono',monospace}
+.invoice-preview td{padding:10px 4px;border-bottom:1px solid #f5f5f5;font-size:14px}
+.invoice-preview .grand-total{font-size:24px;font-weight:700;color:#1a1a2e}
+.invoice-preview .pay-btn{background:#41B35A;color:#fff;border:none;padding:14px 28px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;margin-top:16px}
+.email-frame{background:#FFF;border-radius:8px;overflow:hidden;color:#333}
+.email-frame .email-header{background:#f5f5f5;padding:16px 24px;border-bottom:1px solid #e0e0e0;font-size:13px;color:#666}
+.email-frame .email-header .field{display:flex;gap:8px;padding:2px 0}
+.email-frame .email-header .field-label{color:#999;width:60px;flex-shrink:0}
+.email-frame .email-body{padding:32px}
+.email-frame .email-body h1{font-size:28px;color:#1a1a2e;margin:16px 0}
+.email-frame .email-summary{background:#f8f9fa;border-radius:12px;padding:24px;margin:16px 0}
+.email-frame .email-amount{font-size:36px;font-weight:700;color:#1a1a2e}
+.email-frame .email-cta{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#07070A;padding:14px 28px;border-radius:8px;font-weight:700;margin:16px 0}
+.select-card{border:1px solid var(--border-2);border-radius:16px;padding:20px 24px;cursor:pointer;transition:all 200ms;background:var(--card)}
+.select-card:hover{border-color:var(--gold-border)}
+.select-card.selected{border-color:var(--gold-border);background:var(--gold-dim)}
+.select-card .card-body{display:none;margin-top:20px}
+.select-card.selected .card-body{display:block}
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.timeline-item{display:flex;align-items:center;gap:16px;padding:20px 24px;background:var(--card);border:1px solid var(--border);border-radius:16px;transition:all 200ms}
+.timeline-item:hover{border-color:var(--gold-border)}
+.timeline-item .num{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--gold);width:28px}
+.timeline-item .icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--gold-dim);color:var(--gold);font-size:14px}
+.timeline-item .label{flex:1;font-weight:600;font-size:15px}
+.timeline-item .time{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)}
+.action-bar{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;background:var(--void);border-top:1px solid var(--border);position:sticky;bottom:0;z-index:10}
+@media(max-width:768px){
+.split-layout{flex-direction:column;min-height:auto}
+.split-left,.split-right{width:100%;padding:32px 24px;min-height:auto}
+.two-col{grid-template-columns:1fr}.col-preview{display:none}
+.card-grid{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+.display-1{font-size:36px}.display-2{font-size:30px}.display-3{font-size:28px}
+}
+</style>
+
+
+<!-- SCREEN 01 — Registration -->
+<div class="screen fade-up split-screen active" id="screen-01">
+<div class="split-layout">
+<div class="split-left text-center">
+<div>
+<span class="badge badge-gold mb-16"><i class="fa-solid fa-bolt"></i> #1 invoicing for African businesses</span>
+<img src="/static/images/logo/logo.png" alt="InvoiceFast" style="height:48px;margin-bottom:24px">
+<h1 class="display-1" style="max-width:440px;margin:0 auto">Get paid <span class="text-gold display-italic">faster</span>.<br>Build trust instantly.</h1>
+<p class="text-muted mt-16" style="max-width:360px;margin:0 auto;font-size:16px;line-height:1.6">Send professional invoices, accept M-Pesa payments, and get KRA-compliant — all in one platform.</p>
+<ul class="value-proof">
+<li><i class="fa-solid fa-circle-check"></i> Free forever — no credit card required</li>
+<li><i class="fa-solid fa-circle-check"></i> M-Pesa payments in 1 click</li>
+<li><i class="fa-solid fa-circle-check"></i> KRA eTIMS & iTax compliant</li>
+<li><i class="fa-solid fa-circle-check"></i> Real-time invoice tracking</li>
+</ul>
+<div class="social-proof">
+<div class="avatar-stack">
+<div class="avatar avatar-1">JM</div>
+<div class="avatar avatar-2">PK</div>
+<div class="avatar avatar-3">AW</div>
+<div class="avatar avatar-4">+2k</div>
+</div>
+<div><span style="font-weight:700;color:var(--bone)">2,400+</span> <span class="text-muted" style="font-size:13px">businesses trust InvoiceFast</span></div>
+</div>
+</div>
+</div>
+<div class="split-right">
+<div class="w-full" style="max-width:420px">
+<div class="card" style="padding:40px">
+<div style="text-align:center;margin-bottom:28px">
+<h2 class="display-3">Create your account</h2>
+<p class="text-muted mt-8" style="font-size:14px">Join 2,400+ businesses getting paid faster</p>
+</div>
+<button class="btn-google">
+<svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+Sign up with Google
+</button>
+<div class="divider mt-24 mb-24">OR CONTINUE WITH EMAIL</div>
+<form id="regForm" onsubmit="return false">
+<div class="form-group">
+<input class="form-input" id="regEmail" type="email" placeholder="you@company.com" autocomplete="email" oninput="App.onRegInput()" required>
+<i class="fa-regular fa-envelope input-icon"></i>
+<p class="helper-text" style="font-size:13px;color:var(--muted);margin-top:4px"><i class="fa-regular fa-circle-check"></i> We'll send a verification code to this email</p>
+</div>
+<div class="form-group">
+<input class="form-input" id="regPassword" type="password" placeholder="Create a strong password" autocomplete="new-password" oninput="App.onRegInput()" required>
+<i class="fa-solid fa-lock input-icon"></i>
+<div class="pw-strength"><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><span class="label"></span></div>
+</div>
+<div class="form-group" style="margin-bottom:24px">
+<input class="form-input" id="regPasswordConfirm" type="password" placeholder="Confirm password" autocomplete="new-password" oninput="App.onRegInput()" required>
+<i class="fa-solid fa-lock input-icon"></i>
+</div>
+<button class="btn btn-primary btn-full btn-lg" id="regSubmit" disabled onclick="App.submitRegistration()">
+<span class="btn-text"><i class="fa-regular fa-paper-plane"></i> Create account</span>
+<span class="btn-loading-text" style="display:none"><span class="spinner"></span> Creating account...</span>
+</button>
+</form>
+<p class="text-muted mt-24" style="font-size:12px;text-align:center">By continuing, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a></p>
+<p class="text-center mt-16" style="font-size:14px">Already have an account? <a href="#" onclick="App.go('screen-13');return false"><strong>Log in</strong></a></p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- SCREEN 02 — Email Verification -->
+<div class="screen fade-up split-screen" id="screen-02">
+<div class="split-layout">
+<div class="split-left text-center">
+<div style="max-width:400px">
+<h2 class="display-2">Check your <span class="text-gold display-italic">inbox</span></h2>
+<p class="text-muted mt-16" style="font-size:15px;line-height:1.7">We sent a 6-digit code to <strong id="verificationEmail" class="text-bone">you@company.com</strong></p>
+<div class="envelope mt-40"><div class="body"></div><div class="flap"></div><div class="letter"></div></div>
+<div class="info-box mt-32"><i class="fa-regular fa-lightbulb"></i><div>If you don't see it, check your spam folder. <a href="#" onclick="App.resendCode();return false">Resend code</a></div></div>
+</div>
+</div>
+<div class="split-right">
+<div class="w-full" style="max-width:400px">
+<div class="card" style="padding:40px">
+<h2 class="display-3 mb-16">Enter verification code</h2>
+<p class="text-muted mb-32" style="font-size:14px">Enter the 6-digit code sent to your email</p>
+<div style="display:flex;gap:8px;justify-content:center;margin-bottom:24px;direction:ltr">
+<input class="form-input otp-input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" data-index="0" oninput="App.handleOTP(this)">
+<input class="form-input otp-input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" data-index="1" oninput="App.handleOTP(this)">
+<input class="form-input otp-input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" data-index="2" oninput="App.handleOTP(this)">
+<input class="form-input otp-input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" data-index="3" oninput="App.handleOTP(this)">
+<input class="form-input otp-input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" data-index="4" oninput="App.handleOTP(this)">
+<input class="form-input otp-input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" data-index="5" oninput="App.handleOTP(this)">
+</div>
+<p class="text-center text-muted" style="font-size:13px" id="otpTimer">Resend code in <span id="otpCountdown" class="text-bone">0:30</span></p>
+<button class="btn btn-primary btn-full btn-lg mt-24" id="verifyBtn" onclick="App.verifyEmail()"><span class="btn-text"><i class="fa-solid fa-check"></i> Verify email</span><span class="btn-loading-text" style="display:none"><span class="spinner"></span> Verifying...</span></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+
+<!-- SCREEN 13 — Returning User / Login -->
+<div class="screen fade-up split-screen" id="screen-13">
+<div class="split-layout">
+<div class="split-left text-center">
+<div>
+<span class="badge badge-gold mb-16"><i class="fa-solid fa-bolt"></i> Welcome back!</span>
+<h2 class="display-1">You're <span class="text-gold display-italic">already ahead</span> of the competition.</h2>
+<p class="text-muted mt-16" style="max-width:360px;margin:0 auto;font-size:16px;line-height:1.6">Continue where you left off. Your invoices, clients, and settings are right where you left them.</p>
+<div style="display:flex;justify-content:center;gap:24px;margin-top:40px">
+<div><div style="font-size:32px;font-weight:700;color:var(--bone)">12</div><div style="font-size:12px;color:var(--muted)">Invoices sent</div></div>
+<div><div style="font-size:32px;font-weight:700;color:var(--bone)">KES 84k</div><div style="font-size:12px;color:var(--muted)">Collected</div></div>
+<div><div style="font-size:32px;font-weight:700;color:var(--bone)">98%</div><div style="font-size:12px;color:var(--muted)">On-time rate</div></div>
+</div>
+</div>
+</div>
+<div class="split-right">
+<div class="w-full" style="max-width:420px">
+<div class="card" style="padding:40px">
+<h2 class="display-3 mb-16">Welcome back</h2>
+<p class="text-muted mb-24" style="font-size:14px">Sign in to your account</p>
+<form id="loginForm" onsubmit="return false">
+<div class="form-group">
+<input class="form-input" id="loginEmail" type="email" placeholder="you@company.com" autocomplete="email">
+<i class="fa-regular fa-envelope input-icon"></i>
+</div>
+<div class="form-group" style="margin-bottom:24px">
+<input class="form-input" id="loginPassword" type="password" placeholder="Your password" autocomplete="current-password">
+<i class="fa-solid fa-lock input-icon"></i>
+</div>
+<button class="btn btn-primary btn-full btn-lg" onclick="App.login()"><span class="btn-text"><i class="fa-regular fa-paper-plane"></i> Sign in</span><span class="btn-loading-text" style="display:none"><span class="spinner"></span> Signing in...</span></button>
+</form>
+<div class="divider mt-24 mb-24">OR</div>
+<button class="btn-google">
+<svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+Sign in with Google
+</button>
+<p class="text-center mt-24" style="font-size:14px">Don't have an account? <a href="#" onclick="App.go('screen-01');return false"><strong>Sign up</strong></a></p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+
+
+<div id="toast" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--ink-3);border:1px solid var(--border);border-radius:10px;padding:14px 20px;box-shadow:0 8px 32px rgba(0,0,0,0.5);max-width:400px;min-width:280px;align-items:center;gap:10px;animation:slideUp 300ms ease">
+<div style="display:flex;align-items:center;gap:10px;width:100%">
+<div id="toastIcon" style="font-size:16px;flex-shrink:0"></div>
+<div id="toastMessage" style="font-size:14px;color:var(--bone);flex:1;line-height:1.4"></div>
+<button onclick="App.hideToast()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 0 0 8px;flex-shrink:0">&times;</button>
+</div>
+</div>
+<style>
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+#toast.show{display:flex}
+#toast.toast-error{border-color:rgba(244,63,94,.3)}
+#toast.toast-error #toastIcon i{color:var(--red)}
+#toast.toast-success{border-color:rgba(16,185,129,.3)}
+#toast.toast-success #toastIcon i{color:var(--green)}
+#toast.toast-info{border-color:rgba(240,180,41,.3)}
+#toast.toast-info #toastIcon i{color:var(--gold)}
+</style>
+<script>
+class AppClass{
+constructor(){
+	this.state={
+		currentScreen:'screen-01',
+		email:'',
+		password:'',
+		otp:['','','','','',''],
+		accessToken:localStorage.getItem('access_token')||'',
+		refreshToken:localStorage.getItem('refresh_token')||'',
+	}
+	this.otpTimer=null
+	this.otpRemaining=30
+	this.history=[]
+}
+showToast(msg,type='error'){
+const el=document.getElementById('toast')
+const icon=document.getElementById('toastIcon')
+const msgEl=document.getElementById('toastMessage')
+if(this.toastTimer)clearTimeout(this.toastTimer)
+el.className='show toast-'+type
+if(type==='success'){icon.innerHTML='<i class="fa-solid fa-circle-check"></i>'}
+else if(type==='info'){icon.innerHTML='<i class="fa-solid fa-circle-info"></i>'}
+else{icon.innerHTML='<i class="fa-solid fa-circle-exclamation"></i>'}
+msgEl.textContent=msg
+this.toastTimer=setTimeout(()=>this.hideToast(),5000)
+}
+hideToast(){
+const el=document.getElementById('toast')
+el.className=''
+el.style.display='none'
+if(this.toastTimer){clearTimeout(this.toastTimer);this.toastTimer=null}
+}
+	init(){
+		this.go('screen-01')
+		if(this.state.accessToken){
+			this.refreshUserState().then(data=>{
+				if(data&&data.email_verified){
+					window.location.href='/dashboard'
+				}else if(data&&data.email){
+					document.getElementById('verificationEmail').textContent=data.email
+					this.go('screen-02')
+					this.resendCode()
+				}
+			})
+		}
+	}
+async api(path,opts={}){
+const headers={'Content-Type':'application/json','Accept':'application/json'}
+if(this.state.accessToken){headers['Authorization']='Bearer '+this.state.accessToken}
+if(opts.headers){Object.assign(headers,opts.headers)}
+const res=await fetch(path,{...opts,headers})
+const data=await res.json()
+if(!res.ok&&data.error){throw new Error(data.error)}
+if(!res.ok){throw new Error('Request failed')}
+return data
+}
+	async refreshUserState(){
+	try{
+	const data=await this.api('/api/v1/onboarding/email-status')
+	if(data.email_verified){
+	document.getElementById('verificationEmail').textContent=data.email
+	}
+	return data
+	}catch(e){}
+	}
+go(id){
+if(id===this.state.currentScreen)return
+this.history.push(this.state.currentScreen)
+document.querySelectorAll('.screen.active').forEach(el=>{el.classList.remove('active','fade-up');el.style.display='none'})
+const el=document.getElementById(id)
+if(!el)return
+el.style.display='block'
+el.classList.add('active','fade-up')
+	this.state.currentScreen=id
+	if(id==='screen-02'&&!this.otpTimer)this.startOtpTimer()
+}
+back(){
+if(this.history.length){this.go(this.history.pop())}
+}
+onRegInput(){
+const e=document.getElementById('regEmail').value
+const p=document.getElementById('regPassword').value
+const pc=document.getElementById('regPasswordConfirm').value
+const btn=document.getElementById('regSubmit')
+const valid=e&&p&&pc&&p===pc&&p.length>=8
+btn.disabled=!valid
+this.state.email=e
+this.state.password=p
+this.evalPassword(p)
+}
+evalPassword(p){
+const bars=document.querySelectorAll('.pw-strength .bar')
+const label=document.querySelector('.pw-strength .label')
+let score=0
+if(p.length>=8)score++
+if(/[A-Z]/.test(p))score++
+if(/[0-9]/.test(p))score++
+if(/[^A-Za-z0-9]/.test(p))score++
+bars.forEach((bar,i)=>{
+bar.classList.toggle('active',i<score)
+bar.className='bar active '+(score<=1?'weak':score<=2?'good':'strong')
+})
+label.textContent=score<=1?'Weak':score<=2?'Good':'Strong'
+}
+async submitRegistration(){
+const btn=document.getElementById('regSubmit')
+btn.classList.add('loading')
+try{
+const email=document.getElementById('regEmail').value
+const password=document.getElementById('regPassword').value
+const data=await this.api('/api/v1/onboarding/register',{method:'POST',body:JSON.stringify({email,password})})
+this.state.accessToken=data.access_token
+this.state.refreshToken=data.refresh_token
+localStorage.setItem('access_token',data.access_token)
+localStorage.setItem('refresh_token',data.refresh_token)
+document.getElementById('verificationEmail').textContent=email
+this.go('screen-02')
+}catch(e){
+this.showToast(e.message||'Registration failed','error')
+}finally{
+btn.classList.remove('loading')
+}
+}
+handleOTP(input){
+const idx=parseInt(input.dataset.index)
+this.state.otp[idx]=input.value
+if(input.value&&idx<5){const next=input.parentElement.querySelector(`[data-index="${idx+1}"]`);if(next)next.focus()}
+if(idx===5&&this.state.otp.every(d=>d))this.verifyEmail()
+}
+startOtpTimer(){
+this.otpRemaining=30
+this.updateOtpDisplay()
+this.otpTimer=setInterval(()=>{
+this.otpRemaining--
+this.updateOtpDisplay()
+if(this.otpRemaining<=0){clearInterval(this.otpTimer);this.otpTimer=null;document.getElementById('otpCountdown').textContent='0:00';document.getElementById('otpCountdown').parentElement.innerHTML='<a href="#" onclick="App.resendCode();return false">Resend code</a>'}
+},1000)
+}
+updateOtpDisplay(){
+const m=Math.floor(this.otpRemaining/60);const s=this.otpRemaining%60
+document.getElementById('otpCountdown').textContent=m+':'+String(s).padStart(2,'0')
+}
+async resendCode(){
+if(this.otpTimer){clearInterval(this.otpTimer);this.otpTimer=null}
+this.otpRemaining=30
+this.startOtpTimer()
+document.querySelectorAll('.otp-input').forEach(i=>i.value='')
+this.state.otp=['','','','','','']
+try{
+const userData=await this.api('/api/v1/onboarding/email-status')
+await this.api('/api/v1/onboarding/resend-code',{method:'POST',body:JSON.stringify({email:userData.email})})
+}catch(e){}
+}
+async verifyEmail(){
+const btn=document.getElementById('verifyBtn')
+btn.classList.add('loading')
+try{
+const code=this.state.otp.join('')
+	await this.api('/api/v1/onboarding/verify-email',{method:'POST',body:JSON.stringify({code})})
+	window.location.href='/dashboard'
+}catch(e){
+this.showToast(e.message||'Verification failed','error')
+document.querySelectorAll('.otp-input').forEach(i=>i.value='')
+this.state.otp=['','','','','','']
+}finally{
+btn.classList.remove('loading')
+}
+}
+
+
+
+
+
+
+
+async login(){
+const btn=document.querySelector('#loginForm .btn-primary')
+btn.classList.add('loading')
+try{
+const email=document.getElementById('loginEmail').value
+const password=document.getElementById('loginPassword').value
+const data=await this.api('/api/v1/onboarding/login',{method:'POST',body:JSON.stringify({email,password})})
+this.state.accessToken=data.access_token
+this.state.refreshToken=data.refresh_token
+localStorage.setItem('access_token',data.access_token)
+localStorage.setItem('refresh_token',data.refresh_token)
+	window.location.href='/dashboard'
+}catch(e){
+this.showToast(e.message||'Login failed','error')
+}finally{
+btn.classList.remove('loading')
+}
+}
+
+}
+const App=new AppClass()
+document.addEventListener('DOMContentLoaded',()=>App.init())
+</script>

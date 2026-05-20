@@ -12,6 +12,7 @@ import (
 func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/invoices")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Post("/", h.CreateInvoice)
 	group.Get("/", h.GetInvoices)
@@ -57,6 +58,7 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 func ClientRoutes(app fiber.Router, h *handlers.ClientHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/clients")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Post("/", h.CreateClient)
 	group.Get("/", h.GetClients)

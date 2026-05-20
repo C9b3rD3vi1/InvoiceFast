@@ -12,6 +12,7 @@ import (
 func LateFeeRoutes(app *fiber.App, h *handlers.LateFeeHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/late-fees")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/config", h.GetConfig)
 	group.Put("/config", h.UpdateConfig)

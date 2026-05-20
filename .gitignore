@@ -27,6 +27,19 @@ go.work.sum
 # env file
 .env
 
+# Compiled binary
+server
+/server
+cmd/server/server
+cmd/migrate/migrate
+cmd/seed/seed
+
+# Database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
+
 # Database backups
 data/backups/
 

@@ -411,7 +411,7 @@ func main() {
 
 	// Reuse whatsappService created earlier
 
-	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService, pdfWorker)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService, pdfWorker, settingsService)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db, thankYouService)
@@ -437,6 +437,9 @@ func main() {
 	integrationService := services.NewIntegrationService(db)
 	quickBooksService := services.NewQuickBooksService(cfg, db)
 	integrationHandler := handlers.NewIntegrationHandler(integrationService, quickBooksService)
+
+	// Onboarding handler
+	onboardingHandler := handlers.NewOnboardingHandler(authService, invoiceService, clientService, settingsService, db)
 
 	// Static files
 	app.Static("/static", "./static")
@@ -519,6 +522,9 @@ func main() {
 
 	// Integration routes
 	routes.IntegrationRoutes(app, integrationHandler, authService, db)
+
+	// Onboarding routes
+	routes.OnboardingRoutes(app, onboardingHandler, authService, db)
 
 	// Subdomain routing for branded client portal (AFTER main routes)
 	app.Use(func(c *fiber.Ctx) error {
@@ -689,5 +695,5 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	// Add webhook routes here if needed
 
 	// === Static Frontend Pages (SPA routes) ===
-	routes.StaticRoutes(app)
+	routes.StaticRoutes(app, authHandler)
 }

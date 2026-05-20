@@ -22,6 +22,7 @@ func AutomationRoutes(app *fiber.App, db *database.DB, authService *services.Aut
 	
 	group := app.Group("/api/v1/tenant/automations")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 	
 	// ==========================================================================
 	// OVERVIEW

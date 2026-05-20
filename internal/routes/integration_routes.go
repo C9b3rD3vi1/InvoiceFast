@@ -12,6 +12,7 @@ import (
 func IntegrationRoutes(app *fiber.App, h *handlers.IntegrationHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/integrations")
 	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	group.Get("/", h.GetIntegrations)
 	group.Get("/:provider", h.GetIntegration)

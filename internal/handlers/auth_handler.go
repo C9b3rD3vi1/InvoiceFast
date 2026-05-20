@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/middleware"
@@ -139,7 +141,34 @@ func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	return c.JSON(user)
+	var emailVerified bool
+	if h.db != nil {
+		var count int64
+		h.db.Model(&models.EmailVerificationToken{}).
+			Where("user_id = ? AND used_at IS NOT NULL", userID).
+			Count(&count)
+		emailVerified = count > 0
+	}
+
+	return c.JSON(fiber.Map{
+		"id":                 user.ID,
+		"tenant_id":          user.TenantID,
+		"email":              user.Email,
+		"name":               user.Name,
+		"phone":              user.Phone,
+		"company_name":       user.CompanyName,
+		"plan":               user.Plan,
+		"is_active":          user.IsActive,
+		"role":               user.Role,
+		"two_factor_enabled": user.TwoFactorEnabled,
+		"password_changed_at": user.PasswordChangedAt,
+		"last_login_at":      user.LastLoginAt,
+		"login_alert_enabled": user.LoginAlertEnabled,
+		"created_at":         user.CreatedAt,
+		"updated_at":         user.UpdatedAt,
+		"email_verified":     emailVerified,
+		"tenant":             user.Tenant,
+	})
 }
 
 // UpdateUser - update user profile
@@ -553,4 +582,50 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"message": "Password has been reset successfully"})
+}
+
+// HandleSendVerificationLink sends a verification link email to the authenticated user.
+func (h *AuthHandler) HandleSendVerificationLink(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	if err := h.authService.SendVerificationLink(userID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"status": "sent"})
+}
+
+// HandleVerifyEmailLink handles the verification link click from email. Public endpoint.
+func (h *AuthHandler) HandleVerifyEmailLink(c *fiber.Ctx) error {
+	token := c.Query("token")
+	if token == "" {
+		return c.Redirect("/onboarding?error=invalid_token")
+	}
+
+	user, err := h.authService.VerifyEmailLink(token)
+	if err != nil {
+		return c.Redirect("/onboarding?error=verification_failed")
+	}
+
+	// Mark onboarding step as complete
+	var tenant models.Tenant
+	if err := h.db.First(&tenant, "id = ?", user.TenantID).Error; err == nil {
+		var settings services.TenantSettings
+		if tenant.Settings != "" {
+			_ = json.Unmarshal([]byte(tenant.Settings), &settings)
+		}
+		if settings.Onboarding == nil {
+			settings.Onboarding = &services.OnboardingProgress{}
+		}
+		settings.Onboarding.EmailVerified = true
+		settings.Updated = time.Now()
+		if data, err := json.Marshal(settings); err == nil {
+			h.db.Model(&tenant).Update("settings", string(data))
+		}
+	}
+
+	return c.Redirect("/dashboard")
 }

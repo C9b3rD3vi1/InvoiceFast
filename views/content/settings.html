@@ -1293,6 +1293,11 @@ function settingsContent() {
 
         async init() {
             lucide.createIcons();
+            const hash = window.location.hash.replace('#', '');
+            if (hash) {
+                const section = this.sections.find(s => s.id === hash);
+                if (section) this.activeSection = section.id;
+            }
             await this.loadSettings();
             await this.checkQuickBooksStatus();
         },
