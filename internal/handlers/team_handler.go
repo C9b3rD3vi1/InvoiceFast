@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
@@ -127,6 +129,11 @@ func (h *TeamHandler) InviteMember(c *fiber.Ctx) error {
 
 	if h.emailService != nil {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+				}
+			}()
 			inviteLink := fmt.Sprintf("/register?invite=%s", inviteToken)
 			_ = h.emailService.SendTeamInvite(req.Email, req.Name, "Your Company", inviteLink)
 		}()

@@ -181,13 +181,13 @@ func isValidKRAPIN(pin string) bool {
 // GetBuyerTypeLabel returns human-readable label for buyer type
 func GetBuyerTypeLabel(buyerType string) string {
 	switch buyerType {
-	case "B2B":
+	case string(models.BuyerClassificationB2B):
 		return "Business (B2B)"
-	case "B2C":
+	case string(models.BuyerClassificationB2C):
 		return "Consumer (B2C)"
-	case "B2E":
+	case string(models.BuyerClassificationB2E):
 		return "Employee (B2E)"
-	case "EXPORT":
+	case string(models.BuyerClassificationEXPORT):
 		return "Export (EXPORT)"
 	default:
 		return "Unknown"
@@ -197,13 +197,13 @@ func GetBuyerTypeLabel(buyerType string) string {
 // GetBuyerTypeRequirements returns requirements for each buyer type
 func GetBuyerTypeRequirements(buyerType string) string {
 	switch buyerType {
-	case "B2B":
+	case string(models.BuyerClassificationB2B):
 		return "Valid KRA PIN required (format: AxxxxxxxxB)"
-	case "B2C":
+	case string(models.BuyerClassificationB2C):
 		return "No special requirements"
-	case "B2E":
+	case string(models.BuyerClassificationB2E):
 		return "Employee flag should be set"
-	case "EXPORT":
+	case string(models.BuyerClassificationEXPORT):
 		return "Foreign country or non-KES currency required"
 	default:
 		return ""

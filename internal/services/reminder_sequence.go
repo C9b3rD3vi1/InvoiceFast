@@ -135,11 +135,11 @@ func (s *ReminderSequenceService) processSequence(seq *models.ReminderSequence) 
 	switch seq.TriggerType {
 	case "due_soon":
 		s.db.Where("tenant_id = ? AND status IN ? AND due_date BETWEEN ? AND ?",
-			seq.TenantID, []string{"sent", "viewed"},
+			seq.TenantID, []string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed)},
 			triggerDate, triggerDate.AddDate(0, 0, 1)).Find(&invoices)
 	case "overdue":
 		s.db.Where("tenant_id = ? AND status = ? AND due_date < ?",
-			seq.TenantID, "overdue", triggerDate).Find(&invoices)
+			seq.TenantID, models.InvoiceStatusOverdue, triggerDate).Find(&invoices)
 	}
 
 	for _, inv := range invoices {

@@ -15,17 +15,19 @@ import (
 
 // PaymentHandler handles payment API endpoints
 type PaymentHandler struct {
-	invoiceService *services.InvoiceService
-	mpesaService   *services.MPesaService
-	db             *database.DB
+	invoiceService   *services.InvoiceService
+	mpesaService     *services.MPesaService
+	db               *database.DB
+	thankYouService *services.ThankYouMessageService
 }
 
 // NewPaymentHandler creates PaymentHandler
-func NewPaymentHandler(invoiceSvc *services.InvoiceService, mpesaSvc *services.MPesaService, db *database.DB) *PaymentHandler {
+func NewPaymentHandler(invoiceSvc *services.InvoiceService, mpesaSvc *services.MPesaService, db *database.DB, thankYouSvc *services.ThankYouMessageService) *PaymentHandler {
 	return &PaymentHandler{
-		invoiceService: invoiceSvc,
-		mpesaService:   mpesaSvc,
-		db:             db,
+		invoiceService:  invoiceSvc,
+		mpesaService:    mpesaSvc,
+		db:              db,
+		thankYouService: thankYouSvc,
 	}
 }
 
@@ -84,6 +86,10 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		}
 
 		h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
+
+		if h.thankYouService != nil {
+			go h.thankYouService.SendThankYou(invoice)
+		}
 
 		if err := h.invoiceService.RotateMagicToken(invoice.ID); err != nil {
 			logger.Get().Warn(c.UserContext(), "Failed to rotate magic token", "component", "Webhook", "invoice_number", invoice.InvoiceNumber, "error", err)

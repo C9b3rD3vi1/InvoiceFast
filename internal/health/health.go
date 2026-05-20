@@ -154,6 +154,15 @@ func (r *Registry) checkWithTimeout(ctx context.Context, checker Checker) Compon
 	resultCh := make(chan ComponentStatus, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				resultCh <- ComponentStatus{
+					Name:   checker.Name(),
+					Status: StatusUnhealthy,
+					Error:  fmt.Sprintf("panic: %v", r),
+				}
+			}
+		}()
 		resultCh <- checker.Check(ctx)
 	}()
 

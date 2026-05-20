@@ -34,6 +34,7 @@ func DashboardRoutes(app *fiber.App, h *handlers.DashboardHandler, authService *
 
 	// HTMX endpoints for partial rendering
 	group.Get("/htmx/invoices", h.GetHTMXInvoices)
+	group.Post("/htmx/invoices/:id/kra-sync", h.KRASyncInvoice)
 
 	// Charts
 	group.Get("/charts/revenue", h.GetRevenueChart)

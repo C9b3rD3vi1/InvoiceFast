@@ -22,13 +22,15 @@ type ChartData struct {
 type DashboardHandler struct {
 	invoiceService *services.InvoiceService
 	clientService  *services.ClientService
+	kraService     *services.KRAService
 }
 
 // NewDashboardHandler creates DashboardHandler
-func NewDashboardHandler(invoiceSvc *services.InvoiceService, clientSvc *services.ClientService) *DashboardHandler {
+func NewDashboardHandler(invoiceSvc *services.InvoiceService, clientSvc *services.ClientService, kraSvc *services.KRAService) *DashboardHandler {
 	return &DashboardHandler{
 		invoiceService: invoiceSvc,
 		clientService:  clientSvc,
+		kraService:     kraSvc,
 	}
 }
 
@@ -426,4 +428,28 @@ func (h *DashboardHandler) getClientRevenueChartData(tenantID string) ChartData 
 		Values:   values,
 		Currency: "KES",
 	}
+}
+
+// KRASyncInvoice syncs a single invoice to KRA via HTMX
+func (h *DashboardHandler) KRASyncInvoice(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).SendString("Tenant required")
+	}
+
+	invoiceID := c.Params("id")
+	if invoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("Invoice ID required")
+	}
+
+	if h.kraService == nil || !h.kraService.IsKRAConfigured() {
+		return c.Status(fiber.StatusBadRequest).SendString("KRA not configured")
+	}
+
+	result, err := h.invoiceService.SubmitInvoiceToKRA(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("KRA sync failed: " + err.Error())
+	}
+
+	return c.SendString("✓ Synced - ICN: " + result.ICN)
 }

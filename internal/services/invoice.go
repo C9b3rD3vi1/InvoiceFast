@@ -742,6 +742,11 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 		currency := invoice.Currency
 
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+				}
+			}()
 			// Load fresh data for KRA submission
 			// SECURITY: Added TenantFilter to prevent IDOR
 			var cli models.Client
@@ -799,8 +804,17 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 			if err != nil {
 				logger.Get().Error(context.Background(), "KRA submission failed", "category", "kra", "invoice_number", invoiceNum, "error", err)
 				s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
-					"kra_status": "failed",
+					"kra_status": models.KRAInvoiceStatusFailed,
 					"kra_error":  err.Error(),
+				})
+				return
+			}
+
+			if kraResp == nil {
+				logger.Get().Error(context.Background(), "KRA submission returned nil response", "category", "kra", "invoice_number", invoiceNum)
+				s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+					"kra_status": models.KRAInvoiceStatusFailed,
+					"kra_error":  "nil response from KRA service",
 				})
 				return
 			}
@@ -808,7 +822,7 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 			s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
 				"kra_icn":          kraResp.ICN,
 				"kra_qr_code":      kraResp.QRCode,
-				"kra_status":       "submitted",
+				"kra_status":       models.KRAInvoiceStatusSubmitted,
 				"kra_submitted_at": time.Now(),
 				"kra_error":        "",
 			})
@@ -1569,7 +1583,7 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 	// Validate buyer type inheritance - must match original for KRA compliance
 	buyerType := original.BuyerClassification
 	if buyerType == "" {
-		buyerType = "B2C"
+		buyerType = string(models.BuyerClassificationB2C)
 	}
 
 	// Validate original was submitted to KRA
@@ -1666,7 +1680,7 @@ func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID str
 	// Validate buyer type inheritance - must match original for KRA compliance
 	buyerType := original.BuyerClassification
 	if buyerType == "" {
-		buyerType = "B2C"
+		buyerType = string(models.BuyerClassificationB2C)
 	}
 
 	// Validate original was submitted to KRA
@@ -2090,6 +2104,14 @@ dbItems := make([]models.InvoiceItem, 0)
 			return err
 		}
 
+		if kraResp == nil {
+			tx.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
+				"kra_status": models.KRAInvoiceStatusFailed,
+				"kra_error":  "nil response from KRA service",
+			})
+			return fmt.Errorf("KRA submission returned nil response")
+		}
+
 		now := time.Now()
 		tx.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
 			"kra_icn":              kraResp.ICN,
@@ -2161,7 +2183,7 @@ func (s *InvoiceService) GetKRAActivityFeed(tenantID string, limit int) ([]KRAAc
 
 	// Get invoices with KRA activity in the last 24 hours
 	s.db.Scopes(database.TenantFilter(tenantID)).
-		Where("kra_status IN ('submitted', 'failed') OR kra_icn IS NOT NULL").
+		Where("kra_status IN ? OR kra_icn IS NOT NULL", []interface{}{models.KRAInvoiceStatusSubmitted, models.KRAInvoiceStatusFailed}).
 		Order("updated_at DESC").
 		Limit(limit).
 		Find(&events)
@@ -2298,17 +2320,17 @@ func (s *InvoiceService) validateInvoiceForKRA(invoice *models.Invoice) error {
 // determineBuyerClassification determines KRA buyer classification based on client
 func determineBuyerClassification(client *models.Client) string {
 	if client == nil {
-		return "B2C" // Default
+		return string(models.BuyerClassificationB2C)
 	}
 	
 	// B2B if client has KRA PIN with valid format
 	if client.KRAPIN != "" {
 		// Validate PIN format: starts with A, ends with B
 		if strings.HasPrefix(client.KRAPIN, "A") && strings.HasSuffix(client.KRAPIN, "B") {
-			return "B2B"
+			return string(models.BuyerClassificationB2B)
 		}
 		// Invalid PIN format, treat as B2C
-		return "B2C"
+		return string(models.BuyerClassificationB2C)
 	}
 	
 	// Check for export indicators in email/address
@@ -2319,9 +2341,9 @@ func determineBuyerClassification(client *models.Client) string {
 	   strings.Contains(email, "abroad") ||
 	   strings.Contains(address, "export") ||
 	   strings.Contains(address, "duty free") {
-		return "EXPORT"
+		return string(models.BuyerClassificationEXPORT)
 	}
 	
 	// Default to B2C for consumers
-	return "B2C"
+	return string(models.BuyerClassificationB2C)
 }

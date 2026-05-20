@@ -213,6 +213,7 @@ func (db *DB) Migrate() error {
 		&models.APIKey{},
 		&models.ExchangeRate{},
 		&models.KRAQueueItem{},
+		&models.KRAAuditLog{},
 		&models.Tenant{},
 		&models.PasswordResetToken{},
 		&models.Notification{},

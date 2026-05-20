@@ -7,6 +7,7 @@ import (
 
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"github.com/gofiber/fiber/v2"
@@ -93,6 +94,11 @@ func NewNotificationService(db *database.DB, email *EmailService, sms *SMSServic
 
 func (s *NotificationService) Start() {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+			}
+		}()
 		for item := range s.queueChan {
 			req := &NotificationRequest{
 				TenantID:   item.TenantID,

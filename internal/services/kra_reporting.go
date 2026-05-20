@@ -107,8 +107,8 @@ func ValidateDSN(dsn string) *KRAValidationResult {
 func ValidateBuyerClassification(classification string) *KRAValidationResult {
 	result := &KRAValidationResult{Valid: true, Errors: []string{}}
 	
-	validTypes := []string{"B2C", "B2B", "B2E", "EXPORT"}
-	
+	validTypes := []string{string(models.BuyerClassificationB2C), string(models.BuyerClassificationB2B), string(models.BuyerClassificationB2E), string(models.BuyerClassificationEXPORT)}
+
 	found := false
 	for _, v := range validTypes {
 		if classification == v {
@@ -181,7 +181,7 @@ func (s *InvoiceService) GenerateZReport(tenantID string, reportDate time.Time) 
 		}
 
 		// Count by status
-		if inv.Status == "cancelled" || inv.Status == "voided" {
+		if inv.Status == models.InvoiceStatusCancelled || inv.Status == models.InvoiceStatusVoid {
 			report.CancelledCount++
 		}
 
@@ -241,7 +241,7 @@ func (s *InvoiceService) GenerateMonthlySummary(tenantID string, year int, month
 			report.DebitNoteCount++
 		}
 
-		if inv.Status == "cancelled" || inv.Status == "voided" {
+		if inv.Status == models.InvoiceStatusCancelled || inv.Status == models.InvoiceStatusVoid {
 			report.CancelledCount++
 		}
 

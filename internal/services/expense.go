@@ -362,7 +362,7 @@ func (s *ExpenseService) GetExpenseSummary(tenantID, period string) (map[string]
 	byCategoryRaw := make(map[string]string)
 	
 	var results []categoryResult
-	query := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ('approved', 'paid')", tenantID)
+	query := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ?", tenantID, []string{"approved", "paid"})
 	if startDate != "" && endDate != "" {
 		parsed, _ := time.Parse("2006-01-02", startDate)
 		parsed2, _ := time.Parse("2006-01-02", endDate)
@@ -395,7 +395,7 @@ func (s *ExpenseService) GetExpenseSummary(tenantID, period string) (map[string]
 }
 
 func (s *ExpenseService) GetExpensesByCategory(tenantID, startDate, endDate string) (map[string]float64, error) {
-	query := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ('approved', 'paid')", tenantID)
+	query := s.db.Model(&models.Expense{}).Where("tenant_id = ? AND status IN ?", tenantID, []string{"approved", "paid"})
 
 	if startDate != "" {
 		parsed, _ := time.Parse("2006-01-02", startDate)

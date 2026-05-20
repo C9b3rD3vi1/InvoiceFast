@@ -186,6 +186,11 @@ func (s *ExchangeRateService) seedDefaultRates() {
 
 func (s *ExchangeRateService) StartCronJob() {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 

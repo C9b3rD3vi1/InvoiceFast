@@ -222,6 +222,11 @@ func (s *PasswordResetService) CompletePasswordReset(token, newPassword, confirm
 	// 10. Send confirmation email
 	if s.emailService != nil {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+				}
+			}()
 			emailData := &PasswordChangedEmailData{
 				UserName:  user.Name,
 				UserEmail: user.Email,

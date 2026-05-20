@@ -677,6 +677,21 @@ type KRAQueueItem struct {
 	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
+// KRAAuditLog represents KRA compliance audit trail entries
+type KRAAuditLog struct {
+	ID            string    `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID      string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
+	InvoiceID     string    `json:"invoice_id" gorm:"type:uuid;index"`
+	Action       string    `json:"action" gorm:"index"` // kra_success, kra_failed, kra_retry, kra_cancel
+	Status       string    `json:"status"`
+	ICN          string    `json:"icn"`
+	ResponseCode string    `json:"response_code"`
+	ResponseDesc string    `json:"response_desc" gorm:"type:text"`
+	ErrorMessage string    `json:"error_message" gorm:"type:text"`
+	MetadataJSON string    `json:"metadata_json" gorm:"type:jsonb"`
+	CreatedAt    time.Time `json:"created_at" gorm:"index"`
+}
+
 // Notification represents a user notification
 type Notification struct {
 	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`

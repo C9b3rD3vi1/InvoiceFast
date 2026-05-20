@@ -26,7 +26,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/recover"
+	fiberRecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/template/html/v2"
 )
 
@@ -107,7 +107,7 @@ func main() {
 		Views:        engine,
 	})
 
-	app.Use(recover.New())
+	app.Use(fiberRecover.New())
 
 	// SECURITY: Request ID middleware for tracing
 	app.Use(middleware.RequestIDMiddleware())
@@ -229,13 +229,12 @@ func main() {
 	// Late fee service
 	lateFeeService := services.NewLateFeeService(db)
 
-	// Thank you message service
+	// Thank you message service - sends thank-you emails on payment
 	thankYouService := services.NewThankYouMessageService(db, &services.ServiceDependencies{
 		DB:           db,
 		Email:        emailService,
 		Notification: notificationService,
 	})
-	_ = thankYouService // Used by payment handlers to send thank you on payment completion
 
 	// Intasend service for STK Push
 	var intasendService *services.IntasendService
@@ -252,6 +251,11 @@ func main() {
 
 	// Start reminder cron job
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "reminder_cron", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		// Run immediately on startup
@@ -273,6 +277,11 @@ func main() {
 
 	// KRA retry queue processor
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "kra_retry_queue", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -290,6 +299,11 @@ func main() {
 
 	// Automation scheduler - runs every minute to check for triggers
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "automation_scheduler", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 		logSvc.Info(context.Background(), "Starting automation scheduler")
@@ -345,6 +359,11 @@ func main() {
 
 	// Start billing cron job (runs every hour)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "billing_cron", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 		// Run immediately on startup
@@ -362,6 +381,11 @@ func main() {
 
 	// Overdue invoice cron job (runs every 30 minutes)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "overdue_cron", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(30 * time.Minute)
 		defer ticker.Stop()
 		logSvc.Info(context.Background(), "Starting overdue invoice cron")
@@ -390,8 +414,8 @@ func main() {
 	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService, pdfWorker)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
-	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db)
-	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService)
+	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db, thankYouService)
+	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService, kraService)
 	reportHandler := handlers.NewReportHandler(reportService)
 	automationHandler := handlers.NewAutomationHandler(jobQueue, recurringInvoice, reminderService, workflowService)
 	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService, planService)
@@ -455,6 +479,11 @@ func main() {
 
 	// Payment discrepancy check cron job (every 15 minutes)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "discrepancy_check", "recover", r)
+			}
+		}()
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
 		if err := discrepancyService.CheckAndCreateAlerts(); err != nil {
@@ -565,6 +594,11 @@ func main() {
 
 	// Start server
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logSvc.Error(context.Background(), "panic recovered", "goroutine", "http_server", "recover", r)
+			}
+		}()
 		addr := fmt.Sprintf(":%s", cfg.Server.Port)
 		logSvc.Info(context.Background(), "Starting InvoiceFast", "addr", addr, "mode", cfg.Server.Mode)
 		if err := app.Listen(addr); err != nil {

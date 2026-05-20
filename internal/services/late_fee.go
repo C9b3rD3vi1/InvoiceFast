@@ -197,7 +197,7 @@ func (s *LateFeeService) ProcessAllOverdue() error {
 	var invoices []models.Invoice
 	now := time.Now()
 
-	if err := s.db.Where("status = ? AND due_date < ?", "overdue", now).Find(&invoices).Error; err != nil {
+	if err := s.db.Where("status = ? AND due_date < ?", models.InvoiceStatusOverdue, now).Find(&invoices).Error; err != nil {
 		return fmt.Errorf("failed to find overdue invoices: %w", err)
 	}
 

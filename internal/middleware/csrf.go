@@ -90,6 +90,11 @@ func (s *csrfStore) cleanup() {
 
 func (s *csrfStore) StartCleanup(interval time.Duration) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("PANIC in CSRF cleanup: %v\n", r)
+			}
+		}()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for range ticker.C {

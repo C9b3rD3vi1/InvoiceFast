@@ -272,10 +272,11 @@ func (h *SettingsHandler) SaveSettingsKRA(c *fiber.Ctx) error {
 	}
 
 	var req struct {
-		VendorID string `json:"vendor_id"`
-		APIKey   string `json:"api_key"`
-		LiveMode bool   `json:"live_mode"`
-		Enabled  bool   `json:"enabled"`
+		VendorID      string `json:"vendor_id"`
+		APIKey        string `json:"api_key"`
+		RSAPrivateKey string `json:"rsa_private_key"`
+		LiveMode      bool   `json:"live_mode"`
+		Enabled       bool   `json:"enabled"`
 	}
 
 	if err := c.BodyParser(&req); err != nil {
@@ -287,10 +288,11 @@ func (h *SettingsHandler) SaveSettingsKRA(c *fiber.Ctx) error {
 	}
 
 	settings := &services.KRASettings{
-		VendorID: req.VendorID,
-		APIKey:   req.APIKey,
-		LiveMode: req.LiveMode,
-		Enabled:  req.Enabled,
+		VendorID:      req.VendorID,
+		APIKey:        req.APIKey,
+		RSAPrivateKey: req.RSAPrivateKey,
+		LiveMode:      req.LiveMode,
+		Enabled:       req.Enabled,
 	}
 
 	if err := h.settingsService.SaveKRASettings(tenantID, settings); err != nil {

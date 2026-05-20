@@ -44,6 +44,11 @@ func (s *BackupService) Start() {
 	s.ticker = time.NewTicker(schedule)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+			}
+		}()
 		ctx := context.Background()
 		logger.Get().Info(ctx, "Backup service started", "schedule", schedule.String())
 

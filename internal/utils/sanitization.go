@@ -306,8 +306,8 @@ func ValidateKRAPIN(pin string) error {
 		return nil // Empty is acceptable (optional field)
 	}
 	
-	// KRA PIN: 1 letter + 9 digits + 2 letters
-	pinRegex := regexp.MustCompile(`^[A-Z][0-9]{9}[A-Z]{2}$`)
+	// KRA PIN: 11 characters, starts with a letter, ends with a letter, middle alphanumeric (AxxxxxxxxB format)
+	pinRegex := regexp.MustCompile(`^[A-Z][A-Z0-9]{9}[A-Z]$`)
 	if !pinRegex.MatchString(pin) {
 		return newValidationError("kra_pin", "invalid KRA PIN format")
 	}

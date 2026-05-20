@@ -285,7 +285,7 @@ func (s *QuickBooksService) SyncInvoices(tenantID string) (int, error) {
 
 	// Get unpaid invoices from our system
 	var invoices []models.Invoice
-	s.db.Where("tenant_id = ? AND status IN ?", tenantID, []string{"sent", "viewed", "partially_paid", "overdue"}).Find(&invoices)
+	s.db.Where("tenant_id = ? AND status IN ?", tenantID, []string{string(models.InvoiceStatusSent), string(models.InvoiceStatusViewed), string(models.InvoiceStatusPartiallyPaid), string(models.InvoiceStatusOverdue)}).Find(&invoices)
 
 	syncedCount := 0
 	for _, inv := range invoices {

@@ -24,9 +24,9 @@ func (s *OverdueService) MarkOverdueInvoices() error {
 	now := time.Now()
 	result := s.db.Model(&models.Invoice{}).
 		Where("status NOT IN ? AND due_date < ? AND paid_amount < total",
-			[]string{"paid", "cancelled", "draft"}, now).
+			[]string{string(models.InvoiceStatusPaid), string(models.InvoiceStatusCancelled), string(models.InvoiceStatusDraft)}, now).
 		Updates(map[string]interface{}{
-			"status": "overdue",
+			"status": models.InvoiceStatusOverdue,
 		})
 
 	if result.Error != nil {
@@ -40,7 +40,7 @@ func (s *OverdueService) MarkOverdueInvoices() error {
 func (s *OverdueService) GetOverdueInvoices(tenantID string) ([]models.Invoice, error) {
 	var invoices []models.Invoice
 	err := s.db.Where("tenant_id = ? AND status = ? AND due_date < ?",
-		tenantID, "overdue", time.Now()).
+		tenantID, models.InvoiceStatusOverdue, time.Now()).
 		Order("due_date ASC").
 		Find(&invoices).Error
 	return invoices, err
@@ -51,12 +51,12 @@ func (s *OverdueService) GetOverdueStats(tenantID string) (map[string]interface{
 	var total float64
 
 	s.db.Model(&models.Invoice{}).
-		Where("tenant_id = ? AND status = ?", tenantID, "overdue").
+		Where("tenant_id = ? AND status = ?", tenantID, models.InvoiceStatusOverdue).
 		Count(&count)
 
 	s.db.Model(&models.Invoice{}).
 		Select("COALESCE(SUM(total - paid_amount), 0)").
-		Where("tenant_id = ? AND status = ?", tenantID, "overdue").
+		Where("tenant_id = ? AND status = ?", tenantID, models.InvoiceStatusOverdue).
 		Scan(&total)
 
 	return map[string]interface{}{

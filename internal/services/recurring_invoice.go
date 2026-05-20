@@ -35,7 +35,7 @@ func (s *RecurringInvoiceService) ProcessRecurringInvoices() error {
 	now := time.Now()
 
 	if err := s.db.Where("is_recurring = ? AND recurring_next_date <= ? AND status != ?",
-		true, now, "cancelled").Find(&invoices).Error; err != nil {
+		true, now, models.InvoiceStatusCancelled).Find(&invoices).Error; err != nil {
 		return fmt.Errorf("failed to find due recurring invoices: %w", err)
 	}
 
@@ -70,7 +70,7 @@ func (s *RecurringInvoiceService) createRecurringInvoice(parent *models.Invoice)
 		Discount:          parent.Discount,
 		Total:             parent.Total,
 		PaidAmount:        0,
-		Status:            "draft",
+		Status:            models.InvoiceStatusDraft,
 		DueDate:           time.Now().AddDate(0, 1, 0),
 		Notes:             parent.Notes,
 		Terms:             parent.Terms,

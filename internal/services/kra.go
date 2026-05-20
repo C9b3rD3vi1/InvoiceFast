@@ -4,14 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -476,25 +473,30 @@ func (s *KRAService) signInvoice(data *KRAInvoiceData) (*KRASignature, error) {
 
 	// Hash the data
 	hash := sha256.Sum256(jsonData)
-	hashStr := hex.EncodeToString(hash[:])
 
-	// Sign with private key (simplified - in production use proper crypto)
-	block, err := aes.NewCipher([]byte(s.cfg.KRA.PrivateKey[:32]))
-	if err != nil {
-		return nil, err
+	// Sign with RSA private key
+	keyBytes := []byte(s.cfg.KRA.PrivateKey)
+	parsedKey, parseErr := x509.ParsePKCS1PrivateKey(keyBytes)
+	if parseErr != nil {
+		// Try PKCS8 as fallback
+		key, pkcs8Err := x509.ParsePKCS8PrivateKey(keyBytes)
+		if pkcs8Err != nil {
+			return nil, fmt.Errorf("failed to parse private key (PKCS1: %v, PKCS8: %v): %w", parseErr, pkcs8Err, parseErr)
+		}
+		var ok bool
+		parsedKey, ok = key.(*rsa.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key is not RSA")
+		}
 	}
 
-	ciphertext := make([]byte, aes.BlockSize+len(hashStr))
-	iv := ciphertext[:aes.BlockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return nil, err
+	signature, signErr := rsa.SignPKCS1v15(rand.Reader, parsedKey, crypto.SHA256, hash[:])
+	if signErr != nil {
+		return nil, fmt.Errorf("failed to sign: %w", signErr)
 	}
-
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(hashStr))
 
 	return &KRASignature{
-		Signature:   base64.StdEncoding.EncodeToString(ciphertext),
+		Signature:   base64.StdEncoding.EncodeToString(signature),
 		SigningTime: time.Now().Format(time.RFC3339),
 		CertSerial:  s.cfg.KRA.CertSerial,
 	}, nil
@@ -557,13 +559,13 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 		}
 	}
 
-// Determine buyer classification from invoice (prefer invoice-level, fallback to client)
+	// Determine buyer classification from invoice (prefer invoice-level, fallback to client)
 	buyerClassification := invoice.BuyerClassification
 	if buyerClassification == "" {
 		if cli != nil {
 			buyerClassification = DetectBuyerType(cli)
 		} else {
-			buyerClassification = "B2C"
+			buyerClassification = string(models.BuyerClassificationB2C)
 		}
 	}
 
@@ -576,7 +578,7 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 		sellerAddress = "Kenya" // Fallback
 	}
 
-return &KRAInvoiceData{
+	return &KRAInvoiceData{
 		InvoiceNumber:     invoice.InvoiceNumber,
 		InvoiceDate:    invoice.CreatedAt.Format("2006-01-02"),
 		InvoiceTime:    invoice.CreatedAt.Format("15:04:05"),
@@ -629,13 +631,12 @@ func (s *KRAService) QueueFailedSubmission(tenantID, invoiceID, invoiceNumber st
 		return errors.New("KRA queue unavailable")
 	}
 
-	payloadJSON, _ := json.Marshal(payload)
 	queueItem := models.KRAQueueItem{
 		ID:            fmt.Sprintf("kra-%d", time.Now().UnixNano()),
 		TenantID:      tenantID,
 		InvoiceID:     invoiceID,
 		InvoiceNumber: invoiceNumber,
-		Payload:       string(payloadJSON),
+		Payload:       string(payload),
 		RetryCount:    0,
 		MaxRetries:    3,
 		Status:        models.KRAQueuePending,
@@ -683,8 +684,7 @@ func (s *KRAService) ProcessRetryQueue() error {
 }
 
 func (s *KRAService) processQueueItem(item *models.KRAQueueItem) {
-	var payload []byte
-	json.Unmarshal([]byte(item.Payload), &payload)
+	payload := []byte(item.Payload)
 
 	resp, err := s.submitToKRA(payload)
 	if err != nil {
