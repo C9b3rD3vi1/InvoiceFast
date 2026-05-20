@@ -10,6 +10,7 @@ import (
 	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
+	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -305,7 +306,41 @@ func (db *DB) IsPostgres() bool {
 	return db.isPostgres
 }
 
-// SeedDefaultTemplates placeholder
+// SeedDefaultTemplates creates default invoice templates
 func (db *DB) SeedDefaultTemplates(userID string) error {
+	templates := []models.Template{
+		{
+			ID:        uuid.New().String(),
+			TenantID:  userID,
+			UserID:    userID,
+			Name:      "Classic",
+			HTML:      "<html><body><h1>{{.BusinessName}}</h1><p>Invoice #{{.InvoiceNumber}}</p><p>Date: {{.IssueDate}}</p><p>Due: {{.DueDate}}</p><table><tr><th>Description</th><th>Amount</th></tr>{{range .Items}}<tr><td>{{.Description}}</td><td>{{.Total}}</td></tr>{{end}}</table><p>Total: {{.Total}}</p></body></html>",
+			IsDefault: true,
+			CreatedAt: time.Now(),
+		},
+		{
+			ID:        uuid.New().String(),
+			TenantID:  userID,
+			UserID:    userID,
+			Name:      "Modern",
+			HTML:      "<html><body><div class=\"header\"><h1>{{.BusinessName}}</h1></div><div class=\"details\"><p><strong>Invoice:</strong> {{.InvoiceNumber}}</p><p><strong>Date:</strong> {{.IssueDate}}</p><p><strong>Due:</strong> {{.DueDate}}</p></div><table><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr>{{range .Items}}<tr><td>{{.Description}}</td><td>{{.Quantity}}</td><td>{{.UnitPrice}}</td><td>{{.Total}}</td></tr>{{end}}</table><div class=\"total\"><p>Total: {{.Total}}</p></div></body></html>",
+			IsDefault: false,
+			CreatedAt: time.Now(),
+		},
+		{
+			ID:        uuid.New().String(),
+			TenantID:  userID,
+			UserID:    userID,
+			Name:      "Minimal",
+			HTML:      "<html><body><h2>{{.BusinessName}}</h2><p>Invoice {{.InvoiceNumber}}</p><hr>{{range .Items}}<p>{{.Description}} - {{.Total}}</p>{{end}}<hr><p><strong>Total: {{.Total}}</strong></p></body></html>",
+			IsDefault: false,
+			CreatedAt: time.Now(),
+		},
+	}
+	for _, t := range templates {
+		if err := db.Create(&t).Error; err != nil {
+			return err
+		}
+	}
 	return nil
 }

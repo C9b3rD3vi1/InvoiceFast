@@ -2,406 +2,816 @@ package cache
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	"invoicefast/internal/logger"
-
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/singleflight"
 )
 
-// RedisCache provides caching with Redis
-type RedisCache struct {
-	client *redis.Client
-	prefix string
-}
+const (
+	DurationShort  = 5 * time.Minute
+	DurationMedium = 30 * time.Minute
+	DurationLong   = 24 * time.Hour
+)
 
-// CacheConfig holds cache configuration
+var (
+	ErrCacheMiss        = errors.New("cache miss")
+	ErrLockNotAcquired  = errors.New("lock not acquired")
+	ErrLockNotOwned     = errors.New("lock not owned")
+	ErrInvalidTenant    = errors.New("invalid tenant")
+	ErrInvalidNamespace = errors.New("invalid namespace")
+	ErrInvalidKey       = errors.New("invalid cache key")
+)
+
 type CacheConfig struct {
-	URL         string
-	Password    string
-	DB          int
-	Prefix      string
-	MaxRetries  int
-	PoolSize    int
-	IdleTimeout time.Duration
+	RedisAddr            string
+	RedisPassword        string
+	RedisDB              int
+	Prefix          string
+	DefaultTTL      time.Duration
+	MaxRetries      int
+	PoolSize        int
+	MinIdleConns    int
+	DialTimeout     time.Duration
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	EnableTLS       bool
+	Environment     string
+	CompressionSize int
 }
 
-// NewRedisCache creates a new Redis cache client
-func NewRedisCache(cfg *CacheConfig) (*RedisCache, error) {
-	if cfg.URL == "" {
-		return nil, fmt.Errorf("redis URL is required")
+type RedisCache struct {
+	client redis.UniversalClient
+	config CacheConfig
+	log    zerolog.Logger
+	sf     singleflight.Group
+}
+
+type CacheItem[T any] struct {
+	Data      T         `json:"data"`
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type KeyBuilder struct {
+	Environment string
+	TenantID    string
+	Module      string
+	Resource    string
+	ID          string
+	Version     string
+}
+
+type DistributedLock struct {
+	cache      *RedisCache
+	key        string
+	token      string
+	expiration time.Duration
+}
+
+type HealthStatus struct {
+	Status  string        `json:"status"`
+	Latency time.Duration `json:"latency"`
+}
+
+type RateLimiter struct {
+	cache *RedisCache
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+func NewRedisCache(cfg CacheConfig) (*RedisCache, error) {
+	options := &redis.Options{
+		Addr:         cfg.RedisAddr,
+		Password:     cfg.RedisPassword,
+		DB:           cfg.RedisDB,
+		MaxRetries:   cfg.MaxRetries,
+		PoolSize:     cfg.PoolSize,
+		MinIdleConns: cfg.MinIdleConns,
+		DialTimeout:  cfg.DialTimeout,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
 	}
 
-	opts, err := redis.ParseURL(cfg.URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+	if cfg.EnableTLS {
+		options.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
 	}
 
-	if cfg.Password != "" {
-		opts.Password = cfg.Password
-	}
-	if cfg.DB > 0 {
-		opts.DB = cfg.DB
-	}
-	if cfg.MaxRetries > 0 {
-		opts.MaxRetries = cfg.MaxRetries
-	}
-	if cfg.PoolSize > 0 {
-		opts.PoolSize = cfg.PoolSize
-	}
+	rdb := redis.NewClient(options)
 
-	client := redis.NewClient(opts)
-
-	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	prefix := cfg.Prefix
-	if prefix == "" {
-		prefix = "invoicefast"
+	if cfg.DefaultTTL == 0 {
+		cfg.DefaultTTL = DurationMedium
 	}
 
-	logger.Get().Info(context.Background(), "Connected successfully", "prefix", prefix)
-
-	return &RedisCache{
-		client: client,
-		prefix: prefix,
-	}, nil
-}
-
-// Close closes the Redis connection
-func (c *RedisCache) Close() error {
-	return c.client.Close()
-}
-
-// key generates a prefixed cache key
-func (c *RedisCache) key(key string) string {
-	return fmt.Sprintf("%s:%s", c.prefix, key)
-}
-
-// Set stores a value in cache with expiration
-func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("failed to marshal value: %w", err)
+	cache := &RedisCache{
+		client: rdb,
+		config: cfg,
+		log: log.With().
+			Str("service", "redis-cache").
+			Str("environment", cfg.Environment).
+			Logger(),
 	}
 
-	return c.client.Set(ctx, c.key(key), data, expiration).Err()
+	cache.log.Info().
+		Str("addr", cfg.RedisAddr).
+		Msg("redis cache initialized")
+
+	return cache, nil
 }
 
-// Get retrieves a value from cache
-func (c *RedisCache) Get(ctx context.Context, key string, dest interface{}) error {
-	data, err := c.client.Get(ctx, c.key(key)).Bytes()
-	if err != nil {
-		return err
+func (c *RedisCache) Client() redis.UniversalClient {
+	return c.client
+}
+
+// ============================================================
+// KEY HELPERS
+// ============================================================
+
+func (c *RedisCache) buildKey(key string) string {
+	if c.config.Prefix == "" {
+		return key
 	}
 
-	return json.Unmarshal(data, dest)
+	return fmt.Sprintf("%s:%s", c.config.Prefix, key)
 }
 
-// GetString retrieves a string value from cache
-func (c *RedisCache) GetString(ctx context.Context, key string) (string, error) {
-	return c.client.Get(ctx, c.key(key)).Result()
-}
-
-// SetString stores a string value in cache
-func (c *RedisCache) SetString(ctx context.Context, key, value string, expiration time.Duration) error {
-	return c.client.Set(ctx, c.key(key), value, expiration).Err()
-}
-
-// Delete removes a key from cache
-func (c *RedisCache) Delete(ctx context.Context, keys ...string) error {
-	fullKeys := make([]string, len(keys))
-	for i, k := range keys {
-		fullKeys[i] = c.key(k)
-	}
-	return c.client.Del(ctx, fullKeys...).Err()
-}
-
-// DeleteByPattern removes keys matching a pattern
-func (c *RedisCache) DeleteByPattern(ctx context.Context, pattern string) error {
-	fullPattern := c.key(pattern)
-	iter := c.client.Scan(ctx, 0, fullPattern, 0).Iterator()
-
-	var keys []string
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
+func validateKey(key string) error {
+	if key == "" {
+		return ErrInvalidKey
 	}
 
-	if err := iter.Err(); err != nil {
-		return err
+	if strings.Contains(key, "..") {
+		return ErrInvalidKey
 	}
 
-	if len(keys) > 0 {
-		return c.client.Del(ctx, keys...).Err()
+	if len(key) > 512 {
+		return ErrInvalidKey
 	}
 
 	return nil
 }
 
-// Exists checks if a key exists
-func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
-	count, err := c.client.Exists(ctx, c.key(key)).Result()
-	return count > 0, err
+func (k KeyBuilder) Build() (string, error) {
+	if k.TenantID == "" {
+		return "", ErrInvalidTenant
+	}
+
+	if strings.Contains(k.TenantID, ":") {
+		return "", ErrInvalidTenant
+	}
+
+	if k.Module == "" {
+		return "", ErrInvalidNamespace
+	}
+
+	if k.Version == "" {
+		k.Version = "v1"
+	}
+
+	return fmt.Sprintf(
+		"%s:%s:%s:%s:%s:%s",
+		k.Environment,
+		k.TenantID,
+		k.Module,
+		k.Resource,
+		k.ID,
+		k.Version,
+	), nil
 }
 
-// Expire sets expiration for a key
-func (c *RedisCache) Expire(ctx context.Context, key string, expiration time.Duration) error {
-	return c.client.Expire(ctx, c.key(key), expiration).Err()
+// ============================================================
+// CORE CACHE OPERATIONS
+// ============================================================
+
+func (c *RedisCache) Set(
+	ctx context.Context,
+	key string,
+	value interface{},
+	ttl time.Duration,
+) error {
+
+	if err := validateKey(key); err != nil {
+		return err
+	}
+
+	if ttl <= 0 {
+		ttl = c.config.DefaultTTL
+	}
+
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal failed: %w", err)
+	}
+
+	key = c.buildKey(key)
+
+	if err := c.client.Set(ctx, key, payload, ttl).Err(); err != nil {
+		return fmt.Errorf("redis set failed: %w", err)
+	}
+
+	return nil
 }
 
-// TTL gets the remaining time to live for a key
-func (c *RedisCache) TTL(ctx context.Context, key string) (time.Duration, error) {
-	return c.client.TTL(ctx, c.key(key)).Result()
+func (c *RedisCache) Get(
+	ctx context.Context,
+	key string,
+	dest interface{},
+) error {
+
+	if err := validateKey(key); err != nil {
+		return err
+	}
+
+	key = c.buildKey(key)
+
+	val, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return ErrCacheMiss
+		}
+
+		return fmt.Errorf("redis get failed: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(val), dest); err != nil {
+		return fmt.Errorf("unmarshal failed: %w", err)
+	}
+
+	return nil
 }
 
-// Increment increments a counter
-func (c *RedisCache) Increment(ctx context.Context, key string) (int64, error) {
-	return c.client.Incr(ctx, c.key(key)).Result()
+func (c *RedisCache) SetString(
+	ctx context.Context,
+	key string,
+	value string,
+	ttl time.Duration,
+) error {
+
+	if err := validateKey(key); err != nil {
+		return err
+	}
+
+	if ttl <= 0 {
+		ttl = c.config.DefaultTTL
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.Set(ctx, key, value, ttl).Err()
 }
 
-// IncrementBy increments a counter by a value
-func (c *RedisCache) IncrementBy(ctx context.Context, key string, value int64) (int64, error) {
-	return c.client.IncrBy(ctx, c.key(key), value).Result()
+func (c *RedisCache) GetString(
+	ctx context.Context,
+	key string,
+) (string, error) {
+
+	if err := validateKey(key); err != nil {
+		return "", err
+	}
+
+	key = c.buildKey(key)
+
+	val, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", ErrCacheMiss
+		}
+
+		return "", fmt.Errorf("redis get failed: %w", err)
+	}
+
+	return val, nil
 }
 
-// Decrement decrements a counter
-func (c *RedisCache) Decrement(ctx context.Context, key string) (int64, error) {
-	return c.client.Decr(ctx, c.key(key)).Result()
+func (c *RedisCache) Delete(
+	ctx context.Context,
+	keys ...string,
+) error {
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	prefixed := make([]string, 0, len(keys))
+
+	for _, key := range keys {
+		if err := validateKey(key); err != nil {
+			return err
+		}
+
+		prefixed = append(prefixed, c.buildKey(key))
+	}
+
+	return c.client.Del(ctx, prefixed...).Err()
 }
 
-// SetNX sets a value only if the key doesn't exist (useful for locks)
-func (c *RedisCache) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
-	data, err := json.Marshal(value)
+func (c *RedisCache) DeleteByPattern(
+	ctx context.Context,
+	pattern string,
+) error {
+
+	if pattern == "" {
+		return nil
+	}
+
+	pattern = c.buildKey(pattern)
+
+	iter := c.client.Scan(ctx, 0, pattern, 100).Iterator()
+
+	for iter.Next(ctx) {
+		if err := c.client.Del(ctx, iter.Val()).Err(); err != nil {
+			c.log.Error().
+				Err(err).
+				Str("key", iter.Val()).
+				Msg("cache invalidation failed")
+		}
+	}
+
+	return iter.Err()
+}
+
+func (c *RedisCache) Exists(ctx context.Context,key string) (bool, error) {
+
+	if err := validateKey(key); err != nil {
+		return false, err
+	}
+
+	key = c.buildKey(key)
+
+	count, err := c.client.Exists(ctx, key).Result()
 	if err != nil {
 		return false, err
 	}
-	return c.client.SetNX(ctx, c.key(key), data, expiration).Result()
+
+	return count > 0, nil
 }
 
-// GetOrSet gets a value from cache, or sets it using the provided function
-func (c *RedisCache) GetOrSet(ctx context.Context, key string, dest interface{}, expiration time.Duration, fetchFn func() (interface{}, error)) error {
-	// Try to get from cache first
-	err := c.Get(ctx, key, dest)
+func (c *RedisCache) Unlock(ctx context.Context,key string,token string) error {
+
+	lockKey := c.buildKey("lock:" + key)
+
+	script := `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+else
+	return 0
+end
+`
+
+	result, err := c.client.Eval(ctx,script,[]string{lockKey}, token).Int()
+
+	if err != nil {
+		return err
+	}
+
+	if result == 0 {
+		return ErrLockNotOwned
+	}
+
+	return nil
+}
+
+func (c *RedisCache) Lock(ctx context.Context,key string,expiration time.Duration) (*DistributedLock, error) {
+
+	return c.AcquireLock(ctx, key, expiration)
+}
+
+func (c *RedisCache) Increment(ctx context.Context,key string) (int64, error) {
+
+	if err := validateKey(key); err != nil {
+		return 0, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.Incr(ctx, key).Result()
+}
+
+
+func (c *RedisCache) Expire(ctx context.Context,key string,ttl time.Duration,) error {
+
+	if err := validateKey(key); err != nil {
+		return err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.Expire(ctx, key, ttl).Err()
+}
+
+
+// ZAdd adds members to a sorted set
+func (c *RedisCache) ZAdd(ctx context.Context,key string,members ...redis.Z) error {
+
+	if err := validateKey(key); err != nil {
+		return err
+	}
+
+	if len(members) == 0 {
+		return nil
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZAdd(ctx, key, members...).Err()
+}
+
+
+// ZRange returns sorted set members
+func (c *RedisCache) ZRange(ctx context.Context,key string,start int64,stop int64) ([]string, error) {
+
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZRange(ctx, key, start, stop).Result()
+}
+
+// ZRevRange returns sorted set members in reverse order
+func (c *RedisCache) ZRevRange(
+	ctx context.Context,
+	key string,
+	start int64,
+	stop int64,
+) ([]string, error) {
+
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZRevRange(ctx, key, start, stop).Result()
+}
+
+// ZRem removes sorted set members
+func (c *RedisCache) ZRem(
+	ctx context.Context,
+	key string,
+	members ...interface{},
+) error {
+
+	if err := validateKey(key); err != nil {
+		return err
+	}
+
+	if len(members) == 0 {
+		return nil
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZRem(ctx, key, members...).Err()
+}
+
+// ZCard gets sorted set count
+func (c *RedisCache) ZCard(ctx context.Context,key string) (int64, error) {
+
+	if err := validateKey(key); err != nil {
+		return 0, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZCard(ctx, key).Result()
+}
+
+func (c *RedisCache) ZPopMin(ctx context.Context,key string, count int64) ([]redis.Z, error) {
+
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZPopMin(ctx, key, count).Result()
+}
+
+
+func (c *RedisCache) ZPopMax(ctx context.Context,key string,count int64) ([]redis.Z, error) {
+
+	if err := validateKey(key); err != nil {
+		return nil, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZPopMax(ctx, key, count).Result()
+}
+
+func (c *RedisCache) ZScore(ctx context.Context,key string,member string) (float64, error) {
+
+	if err := validateKey(key); err != nil {
+		return 0, err
+	}
+
+	key = c.buildKey(key)
+
+	return c.client.ZScore(ctx, key, member).Result()
+}
+
+// ============================================================
+// GENERIC TYPED CACHE HELPERS
+// ============================================================
+
+func SetTyped[T any](ctx context.Context,cache *RedisCache,key string,value T,ttl time.Duration) error {
+
+	item := CacheItem[T]{
+		Data:      value,
+		Version:   1,
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(ttl),
+	}
+
+	return cache.Set(ctx, key, item, ttl)
+}
+
+func GetTyped[T any](ctx context.Context,cache *RedisCache,key string) (*T, error) {
+
+	var item CacheItem[T]
+
+	if err := cache.Get(ctx, key, &item); err != nil {
+		return nil, err
+	}
+
+	return &item.Data, nil
+}
+
+// ============================================================
+// CACHE STAMPEDE PROTECTION
+// ============================================================
+
+func GetOrSet[T any](
+	ctx context.Context,
+	cache *RedisCache,
+	key string,
+	ttl time.Duration,
+	fetcher func() (*T, error),
+) (*T, error) {
+
+	data, err := GetTyped[T](ctx, cache, key)
 	if err == nil {
-		return nil // Cache hit
+		return data, nil
 	}
 
-	if err != redis.Nil {
-		return err // Error other than not found
-	}
+	result, err, _ := cache.sf.Do(key, func() (interface{}, error) {
 
-	// Cache miss - fetch the value
-	value, err := fetchFn()
-	if err != nil {
-		return err
-	}
+		data, err := GetTyped[T](ctx, cache, key)
+		if err == nil {
+			return data, nil
+		}
 
-	// Store in cache
-	if err := c.Set(ctx, key, value, expiration); err != nil {
-		logger.Get().Warn(ctx, "Failed to cache value", "key", key, "error", err)
-	}
+		fresh, err := fetcher()
+		if err != nil {
+			return nil, err
+		}
 
-	// Set destination
-	data, _ := json.Marshal(value)
-	return json.Unmarshal(data, dest)
-}
+		if err := SetTyped(ctx, cache, key, *fresh, ttl); err != nil {
+			cache.log.Error().
+				Err(err).
+				Str("key", key).
+				Msg("cache set failed")
+		}
 
-// Hash operations for structured caching
+		return fresh, nil
+	})
 
-// HSet sets a field in a hash
-func (c *RedisCache) HSet(ctx context.Context, key string, field string, value interface{}) error {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	return c.client.HSet(ctx, c.key(key), field, data).Err()
-}
-
-// HGet gets a field from a hash
-func (c *RedisCache) HGet(ctx context.Context, key string, field string, dest interface{}) error {
-	data, err := c.client.HGet(ctx, c.key(key), field).Bytes()
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, dest)
-}
-
-// HGetAll gets all fields from a hash
-func (c *RedisCache) HGetAll(ctx context.Context, key string) (map[string]string, error) {
-	return c.client.HGetAll(ctx, c.key(key)).Result()
-}
-
-// HDel deletes a field from a hash
-func (c *RedisCache) HDel(ctx context.Context, key string, fields ...string) error {
-	fullFields := make([]string, len(fields))
-	copy(fullFields, fields)
-	return c.client.HDel(ctx, c.key(key), fullFields...).Err()
-}
-
-// List operations
-
-// LPush pushes to the left of a list
-func (c *RedisCache) LPush(ctx context.Context, key string, values ...interface{}) error {
-	return c.client.LPush(ctx, c.key(key), values...).Err()
-}
-
-// RPush pushes to the right of a list
-func (c *RedisCache) RPush(ctx context.Context, key string, values ...interface{}) error {
-	return c.client.RPush(ctx, c.key(key), values...).Err()
-}
-
-// LRange gets a range of elements from a list
-func (c *RedisCache) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
-	return c.client.LRange(ctx, c.key(key), start, stop).Result()
-}
-
-// LPop pops from the left of a list
-func (c *RedisCache) LPop(ctx context.Context, key string) (string, error) {
-	return c.client.LPop(ctx, c.key(key)).Result()
-}
-
-// RPop pops from the right of a list
-func (c *RedisCache) RPop(ctx context.Context, key string) (string, error) {
-	return c.client.RPop(ctx, c.key(key)).Result()
-}
-
-// Sorted Set operations (for worker queues)
-
-// ZAdd adds a member to sorted set
-func (c *RedisCache) ZAdd(ctx context.Context, key string, z *redis.Z) error {
-	return c.client.ZAdd(ctx, c.key(key), *z).Err()
-}
-
-// ZPopMin removes and returns lowest score members
-func (c *RedisCache) ZPopMin(ctx context.Context, key string, count int64) ([]redis.Z, error) {
-	return c.client.ZPopMin(ctx, c.key(key), count).Result()
-}
-
-// ZCard returns sorted set cardinality
-func (c *RedisCache) ZCard(ctx context.Context, key string) (int64, error) {
-	return c.client.ZCard(ctx, c.key(key)).Result()
-}
-
-// Pub/Sub operations
-
-// Publish publishes a message to a channel
-func (c *RedisCache) Publish(ctx context.Context, channel string, message interface{}) error {
-	data, err := json.Marshal(message)
-	if err != nil {
-		return err
-	}
-	return c.client.Publish(ctx, c.key(channel), data).Err()
-}
-
-// Subscribe subscribes to a channel
-func (c *RedisCache) Subscribe(ctx context.Context, channel string) *redis.PubSub {
-	return c.client.Subscribe(ctx, c.key(channel))
-}
-
-// Distributed Lock
-
-// Lock acquires a distributed lock
-func (c *RedisCache) Lock(ctx context.Context, key string, expiration time.Duration) (bool, error) {
-	return c.client.SetNX(ctx, c.key("lock:"+key), "1", expiration).Result()
-}
-
-// Unlock releases a distributed lock
-func (c *RedisCache) Unlock(ctx context.Context, key string) error {
-	return c.client.Del(ctx, c.key("lock:"+key)).Err()
-}
-
-// Stats returns cache statistics
-func (c *RedisCache) Stats(ctx context.Context) (*CacheStats, error) {
-	_, err := c.client.Info(ctx, "stats").Result()
 	if err != nil {
 		return nil, err
 	}
 
-	stats := &CacheStats{}
-	// Parse basic stats from info string
-	// This is simplified - in production, parse all relevant metrics
-	stats.Connected = true
+	typed, ok := result.(*T)
+	if !ok {
+		return nil, errors.New("type assertion failed")
+	}
 
-	dbSize, _ := c.client.DBSize(ctx).Result()
-	stats.KeyCount = dbSize
-
-	return stats, nil
+	return typed, nil
 }
 
-// CacheStats holds cache statistics
-type CacheStats struct {
-	Connected bool   `json:"connected"`
-	KeyCount  int64  `json:"key_count"`
-	Hits      int64  `json:"hits"`
-	Misses    int64  `json:"misses"`
-	Memory    string `json:"memory"`
+// ============================================================
+// DISTRIBUTED LOCKING
+// ============================================================
+
+func (c *RedisCache) AcquireLock(ctx context.Context,key string,expiration time.Duration) (*DistributedLock, error) {
+
+	tokenBytes := make([]byte, 16)
+
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, err
+	}
+
+	token := hex.EncodeToString(tokenBytes)
+
+	lockKey := c.buildKey("lock:" + key)
+
+	ok, err := c.client.SetNX(ctx,lockKey,token, expiration).Result()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !ok {
+		return nil, ErrLockNotAcquired
+	}
+
+	return &DistributedLock{
+		cache:      c,
+		key:        lockKey,
+		token:      token,
+		expiration: expiration,
+	}, nil
 }
 
-// Cache keys for InvoiceFast entities
-const (
-	CacheKeyUser         = "user"
-	CacheKeyInvoice      = "invoice"
-	CacheKeyClient       = "client"
-	CacheKeyDashboard    = "dashboard"
-	CacheKeyRateLimit    = "ratelimit"
-	CacheKeySession      = "session"
-	CacheKeyAPIKey       = "apikey"
-	CacheKeyInvoiceCount = "invoice:count"
-)
+func (l *DistributedLock) Release(ctx context.Context) error {
 
-// Cache durations
-const (
-	DurationShort  = 5 * time.Minute
-	DurationMedium = 30 * time.Minute
-	DurationLong   = 2 * time.Hour
-	DurationDay    = 24 * time.Hour
-)
+	script := `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+else
+	return 0
+end
+`
 
-// CacheableInvoice wraps invoice data for caching
-type CacheableInvoice struct {
-	ID            string                 `json:"id"`
-	InvoiceNumber string                 `json:"invoice_number"`
-	ClientID      string                 `json:"client_id"`
-	Total         float64                `json:"total"`
-	Status        string                 `json:"status"`
-	Data          map[string]interface{} `json:"data"`
-}
+	result, err := l.cache.client.Eval(ctx,script,[]string{l.key},l.token).Int()
 
-// CacheableUser wraps user data for caching
-type CacheableUser struct {
-	ID          string `json:"id"`
-	Email       string `json:"email"`
-	Name        string `json:"name"`
-	CompanyName string `json:"company_name"`
-	Plan        string `json:"plan"`
-}
+	if err != nil {
+		return err
+	}
 
-// NoOpCache is a no-operation cache for when Redis is not available
-type NoOpCache struct{}
+	if result == 0 {
+		return ErrLockNotOwned
+	}
 
-func NewNoOpCache() *NoOpCache {
-	return &NoOpCache{}
-}
-
-func (c *NoOpCache) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return nil
 }
 
-func (c *NoOpCache) Get(ctx context.Context, key string, dest interface{}) error {
-	return fmt.Errorf("cache miss")
+// ============================================================
+// RATE LIMITING
+// ============================================================
+
+func NewRateLimiter(cache *RedisCache) *RateLimiter {
+	return &RateLimiter{
+		cache: cache,
+	}
 }
 
-func (c *NoOpCache) Delete(ctx context.Context, keys ...string) error {
+func (r *RateLimiter) Allow(ctx context.Context,key string,limit int,window time.Duration) (bool, error) {
+
+	key = r.cache.buildKey("ratelimit:" + key)
+
+	pipe := r.cache.client.TxPipeline()
+
+	count := pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, window)
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return count.Val() <= int64(limit), nil
+}
+
+// ============================================================
+// IDEMPOTENCY
+// ============================================================
+
+func (c *RedisCache) StoreIdempotencyKey(ctx context.Context,key string,ttl time.Duration) error {
+
+	key = c.buildKey("idempotency:" + key)
+
+	ok, err := c.client.SetNX(ctx,key,"1",ttl).Result()
+
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		return errors.New("duplicate request")
+	}
+
 	return nil
 }
 
-func (c *NoOpCache) Close() error {
-	return nil
+// ============================================================
+// FRAUD DETECTION
+// ============================================================
+
+func (c *RedisCache) TrackFailedPayments(ctx context.Context,tenantID string,clientID string) error {
+
+	key := fmt.Sprintf("fraud:%s:%s:failed_payments",tenantID,clientID)
+
+	key = c.buildKey(key)
+
+	return c.client.Incr(ctx, key).Err()
+}
+
+func (c *RedisCache) IsFraudRisk(
+	ctx context.Context,
+	tenantID string,
+	clientID string,
+) (bool, error) {
+
+	key := fmt.Sprintf(
+		"fraud:%s:%s:failed_payments",
+		tenantID,
+		clientID,
+	)
+
+	key = c.buildKey(key)
+
+	count, err := c.client.Get(ctx, key).Int()
+
+	if err != nil && !errors.Is(err, redis.Nil) {
+		return false, err
+	}
+
+	return count >= 5, nil
+}
+
+// ============================================================
+// SAFE INVALIDATION
+// ============================================================
+
+func (c *RedisCache) InvalidateTenantModule(
+	ctx context.Context,
+	tenantID string,
+	module string,
+) error {
+
+	pattern := fmt.Sprintf(
+		"%s:%s:%s:*",
+		c.config.Environment,
+		tenantID,
+		module,
+	)
+
+	return c.DeleteByPattern(ctx, pattern)
+}
+
+// ============================================================
+// HEALTH CHECKS
+// ============================================================
+
+func (c *RedisCache) Health(
+	ctx context.Context,
+) (*HealthStatus, error) {
+
+	start := time.Now()
+
+	err := c.client.Ping(ctx).Err()
+
+	latency := time.Since(start)
+
+	if err != nil {
+		return &HealthStatus{
+			Status:  "DOWN",
+			Latency: latency,
+		}, err
+	}
+
+	stats := c.client.PoolStats()
+
+	c.log.Debug().
+		Int32("hits", int32(stats.Hits)).
+		Int32("misses", int32(stats.Misses)).
+		Uint32("timeouts", stats.Timeouts).
+		Msg("redis pool stats")
+
+	return &HealthStatus{
+		Status:  "UP",
+		Latency: latency,
+	}, nil
+}
+
+// ============================================================
+// CLEAN SHUTDOWN
+// ============================================================
+
+func (c *RedisCache) Close() error {
+	c.log.Info().Msg("closing redis cache connection")
+	return c.client.Close()
 }

@@ -28,7 +28,7 @@ func (w *BillingWorker) ProcessSubscriptionRenewals() error {
 	var subs []models.Subscription
 	now := time.Now()
 
-	if err := w.db.Where("status = ? AND renews_at <= ?", "active", now).
+	if err := w.db.Where("status = ? AND current_period_end <= ?", "active", now).
 		Find(&subs).Error; err != nil {
 		logger.Get().Error(context.Background(), "Error finding renewals", "error", err)
 		return err

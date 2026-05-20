@@ -91,6 +91,24 @@ func NewNotificationService(db *database.DB, email *EmailService, sms *SMSServic
 	}
 }
 
+func (s *NotificationService) Start() {
+	go func() {
+		for item := range s.queueChan {
+			req := &NotificationRequest{
+				TenantID:   item.TenantID,
+				UserID:     item.UserID,
+				EventType:  item.EventType,
+				Recipient:  item.Recipient,
+				Subject:    item.Subject,
+				Body:       item.Body,
+				Variables:  item.Variables,
+				Reference:  item.Reference,
+			}
+			s.sendAsync(item.Channel, req)
+		}
+	}()
+}
+
 func (s *NotificationService) Init() error {
 	return s.db.AutoMigrate(
 		&models.NotificationQueueItem{},

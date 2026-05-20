@@ -172,18 +172,30 @@ func (s *BackupService) backupPostgres(ctx context.Context, destPath string) err
 }
 
 func (s *BackupService) uploadToS3(ctx context.Context, filePath string) error {
-	if s.cfg.S3Bucket == "" || s.cfg.S3AccessKey == "" || s.cfg.S3SecretKey == "" {
-		logger.Get().Info(ctx, "Backup: S3 not fully configured, skipping upload", "bucket", s.cfg.S3Bucket)
+	if s.cfg.S3Bucket == "" {
+		logger.Get().Info(ctx, "Backup: S3 not configured, skipping upload")
 		return nil
 	}
 
-	logger.Get().Info(ctx, "Backup: S3 upload would be triggered",
-		"bucket", s.cfg.S3Bucket,
-		"region", s.cfg.S3Region,
-		"endpoint", s.cfg.S3Endpoint,
-		"file", filePath,
-	)
+	args := []string{"s3", "cp", filePath, fmt.Sprintf("s3://%s/%s", s.cfg.S3Bucket, filepath.Base(filePath))}
+	if s.cfg.S3Endpoint != "" {
+		args = append(args, "--endpoint-url", s.cfg.S3Endpoint)
+	}
 
+	logger.Get().Info(ctx, "Backup: uploading to S3", "bucket", s.cfg.S3Bucket, "file", filePath, "args", args)
+
+	if _, err := exec.LookPath("aws"); err != nil {
+		logger.Get().Warn(ctx, "Backup: aws CLI not found, skipping S3 upload", "error", err)
+		return nil
+	}
+
+	cmd := exec.CommandContext(ctx, "aws", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("aws s3 cp failed: %w, output: %s", err, string(out))
+	}
+
+	logger.Get().Info(ctx, "Backup: S3 upload completed", "bucket", s.cfg.S3Bucket, "file", filePath, "output", string(out))
 	return nil
 }
 

@@ -47,25 +47,16 @@ func HandleIntasendWebhook(c *fiber.Ctx, db *database.DB, idempotencySvc *servic
 	}
 
 	if idemKey != "" && idempotencySvc != nil {
-		// Acquire distributed lock to prevent race conditions
-		isNew, err := idempotencySvc.HandlePaymentCallback(c.Context(), idemKey, nil)
+		alreadyProcessed, err := idempotencySvc.HandlePaymentCallback(c.Context(), idemKey, nil)
 		if err != nil {
 			logger.Get().Error(c.Context(), "Idempotency error", "error", err)
-			// Continue without lock - best effort
-		} else if !isNew {
-			// Already processed or being processed by another worker
-			logger.Get().Info(c.Context(), "Already processing or processed", "idem_key", idemKey)
+		} else if alreadyProcessed {
+			logger.Get().Info(c.Context(), "Already processed", "idem_key", idemKey)
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
 				"status":          "already_processed",
 				"idempotency_key": idemKey,
 			})
 		}
-		// Lock acquired - proceed with processing
-		defer func() {
-			if idempotencySvc != nil && idemKey != "" {
-				idempotencySvc.Unlock(c.Context(), idemKey)
-			}
-		}()
 	}
 
 	// SECURITY HARD-STOP: Enforce tenant isolation

@@ -88,6 +88,16 @@ func (s *csrfStore) cleanup() {
 	}
 }
 
+func (s *csrfStore) StartCleanup(interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			s.cleanup()
+		}
+	}()
+}
+
 // DefaultCSRFConfig returns default CSRF configuration
 func DefaultCSRFConfig() CSRFConfig {
 	return CSRFConfig{
@@ -106,6 +116,7 @@ func DefaultCSRFConfig() CSRFConfig {
 // CSRF returns a CSRF protection middleware
 func CSRF() fiber.Handler {
 	config := DefaultCSRFConfig()
+	config.store.StartCleanup(10 * time.Minute)
 
 	return func(c *fiber.Ctx) error {
 		// Skip for GET, HEAD, OPTIONS (safe methods)

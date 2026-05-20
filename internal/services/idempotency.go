@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"time"
+	"errors"
 
 	"invoicefast/internal/cache"
 	"invoicefast/internal/logger"
@@ -16,14 +17,26 @@ func NewIdempotencyService(redisCache *cache.RedisCache) *IdempotencyService {
 	return &IdempotencyService{cache: redisCache}
 }
 
-func (s *IdempotencyService) CheckAndLock(ctx context.Context, key string) (bool, error) {
-	acquired, err := s.cache.Lock(ctx, key, 5*time.Minute)
+func (s *IdempotencyService) CheckAndLock(ctx context.Context,key string) (bool, func(), error) {
+
+	lock, err := s.cache.Lock(ctx, key, 5*time.Minute)
+
 	if err != nil {
-		return false, err
+
+		if errors.Is(err, cache.ErrLockNotAcquired) {
+			return false, nil, nil
+		}
+
+		return false, nil, err
 	}
 
-	return acquired, nil
+	if lock == nil {
+		return false, nil, nil
+	}
+
+	return true, func() { lock.Release(ctx); }, nil
 }
+
 
 func (s *IdempotencyService) IsProcessed(ctx context.Context, key string) (bool, error) {
 	key = "idempotent:" + key
@@ -35,37 +48,65 @@ func (s *IdempotencyService) MarkProcessed(ctx context.Context, key string, data
 	return s.cache.Set(ctx, key, data, 24*time.Hour)
 }
 
-func (s *IdempotencyService) Unlock(ctx context.Context, key string) error {
-	lockKey := "idempotency:" + key
-	return s.cache.Unlock(ctx, lockKey)
-}
+func (s *IdempotencyService) HandlePaymentCallback(ctx context.Context,checkoutID string,payload map[string]interface{},) (bool, error) {
 
-func (s *IdempotencyService) HandlePaymentCallback(ctx context.Context, checkoutID string, payload map[string]interface{}) (bool, error) {
 	lockKey := "payment:lock:" + checkoutID
 
-	acquired, err := s.cache.Lock(ctx, lockKey, 5*time.Minute)
+	// acquire distributed lock
+	lock, err := s.cache.Lock(ctx,lockKey,5*time.Minute)
+
 	if err != nil {
-		logger.Get().Error(ctx, "Error acquiring lock", "checkout_id", checkoutID, "error", err)
+
+		// another process already processing
+		if errors.Is(err, cache.ErrLockNotAcquired) {
+
+			logger.Get().Warn(ctx, "Lock already held - returning 200 to stop retries", "checkout_id", checkoutID)
+
+			return true, nil
+		}
+
+		logger.Get().Error(ctx,"Error acquiring lock","checkout_id",checkoutID,"error",err)
+
 		return false, err
 	}
 
-	if !acquired {
-		logger.Get().Warn(ctx, "Lock already held - returning 200 to stop retries", "checkout_id", checkoutID)
-		return true, nil
-	}
+	// ALWAYS release lock
+	defer func() {
+
+		if lock != nil {
+
+			if err := lock.Release(ctx); err != nil {
+
+				logger.Get().Error(ctx,"Failed to release payment lock","checkout_id",checkoutID,"error",err)
+			}
+		}
+	}()
 
 	processedKey := "payment:processed:" + checkoutID
+
 	exists, err := s.cache.Exists(ctx, processedKey)
-	if err == nil && exists {
-		logger.Get().Info(ctx, "Payment already processed - releasing lock and returning 200", "checkout_id", checkoutID)
-		_ = s.cache.Unlock(ctx, lockKey)
+	if err != nil {
+
+		logger.Get().Error(ctx,"Failed checking processed payment","checkout_id",checkoutID,"error",err)
+
+		return false, err
+	}
+
+	// already processed
+	if exists {
+
+		logger.Get().Info(ctx,"Payment already processed","checkout_id",checkoutID)
+
 		return true, nil
 	}
 
-	if err := s.cache.Set(ctx, processedKey, payload, 24*time.Hour); err != nil {
-		logger.Get().Warn(ctx, "Failed to mark payment as processed", "checkout_id", checkoutID, "error", err)
+	// mark processed
+	if err := s.cache.Set(ctx, processedKey,payload,24*time.Hour); err != nil {
+
+		logger.Get().Warn(ctx,"Failed to mark payment as processed", "checkout_id",checkoutID,"error",err)
 	}
 
-	logger.Get().Info(ctx, "New payment - processing callback", "checkout_id", checkoutID)
+	logger.Get().Info(ctx,"New payment - processing callback", "checkout_id",checkoutID)
+
 	return false, nil
 }

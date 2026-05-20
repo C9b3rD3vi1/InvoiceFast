@@ -158,7 +158,11 @@ func (h *PublicHandler) GetInvoicePDF(c *fiber.Ctx) error {
 	}
 	c.Set("Content-Type", "application/pdf")
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.pdf", invoice.InvoiceNumber))
-	return c.SendString("PDF generation not implemented")
+	pdfBytes, err := h.invoiceService.GenerateInvoicePDF(invoice)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate PDF"})
+	}
+	return c.Send(pdfBytes)
 }
 
 // GetInvoiceReceipt - get receipt PDF

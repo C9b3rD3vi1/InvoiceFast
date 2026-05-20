@@ -21,6 +21,7 @@ func IntegrationRoutes(app *fiber.App, h *handlers.IntegrationHandler, authServi
 	group.Post("/:id/toggle", h.ToggleIntegration)
 
 	// QuickBooks endpoints
+	group.Get("/quickbooks/callback", h.QuickBooksCallback)
 	group.Post("/quickbooks/connect", h.QuickBooksConnect)
 	group.Post("/quickbooks/disconnect", h.QuickBooksDisconnect)
 	group.Post("/quickbooks/test", h.QuickBooksTest)

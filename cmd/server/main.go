@@ -63,7 +63,20 @@ func main() {
 	// Initialize Redis if configured
 	var redisCache *cache.RedisCache
 	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
-		redisCache, err = cache.NewRedisCache(&cache.CacheConfig{URL: redisURL})
+		redisCache, err = cache.NewRedisCache(cache.CacheConfig{
+			RedisAddr:     cfg.RedisCache.RedisAddr,
+			RedisPassword: cfg.RedisCache.RedisPassword,
+			RedisDB:       cfg.RedisCache.RedisDB,
+			Prefix:        "invoicefast",
+			Environment:   cfg.Server.Mode,
+			DefaultTTL:    cache.DurationMedium,
+			MaxRetries:    3,
+			PoolSize:      20,
+			MinIdleConns:  5,
+			DialTimeout:   5 * time.Second,
+			ReadTimeout:   3 * time.Second,
+			WriteTimeout:  3 * time.Second,
+		})
 		if err != nil {
 			logSvc.Warn(context.Background(), "Redis connection failed (continuing without cache)", "error", err.Error())
 		} else {
@@ -175,23 +188,23 @@ func main() {
 
 	// Notification service (for all modules)
 	notificationService := services.NewNotificationService(db, emailService, smsService, whatsappService, cfg)
-	_ = notificationService
+	notificationService.Start()
 
 	// Build invoice service with all dependencies
 	invoiceService := services.NewInvoiceServiceWithDeps(db, &services.ServiceDependencies{
-		DB:            db,
-		Email:         emailService,
-		WhatsApp:      whatsappService,
+		DB:           db,
+		Email:        emailService,
+		WhatsApp:     whatsappService,
 		Notification: notificationService,
 		Exchange:     exchangeRateService,
-		KRA:           kraService,
-		Config:        cfg,
+		KRA:          kraService,
+		Config:       cfg,
 	})
 
 	clientService := services.NewClientService(db)
 	reportService := services.NewReportService(db)
 	settingsService := services.NewSettingsService(db)
-	
+
 	// Automation services - Enterprise Edition
 	jobQueue := services.NewJobQueueService(db)
 	recurringInvoice := services.NewAutoRecurringInvoiceService(db, jobQueue)
@@ -218,8 +231,8 @@ func main() {
 
 	// Thank you message service
 	thankYouService := services.NewThankYouMessageService(db, &services.ServiceDependencies{
-		DB:            db,
-		Email:         emailService,
+		DB:           db,
+		Email:        emailService,
 		Notification: notificationService,
 	})
 	_ = thankYouService // Used by payment handlers to send thank you on payment completion
@@ -232,8 +245,8 @@ func main() {
 
 	// Reminder service - uses notification service
 	legacyReminderService := services.NewReminderService(db, &services.ServiceDependencies{
-		DB:            db,
-		Email:         emailService,
+		DB:           db,
+		Email:        emailService,
 		Notification: notificationService,
 	})
 
@@ -312,9 +325,9 @@ func main() {
 	webhookVerifier := middleware.NewWebhookVerifierMiddleware(services.NewWebhookVerifier(cfg))
 
 	// Billing services (must be before handlers that need them)
-planService := services.NewPlanService(db, exchangeRateService)
+	planService := services.NewPlanService(db, exchangeRateService)
 	planService.SeedDefaultPlans()
-	
+
 	// Migrate users without subscription to trial plan
 	if err := planService.MigrateUsersWithoutSubscription(); err != nil {
 		logSvc.Warn(context.Background(), "Failed to migrate users without subscription", "error", err.Error())
@@ -324,6 +337,8 @@ planService := services.NewPlanService(db, exchangeRateService)
 
 	subscriptionService := services.NewSubscriptionService(db, planService, notificationService)
 	billingService := services.NewBillingService(db, planService, subscriptionService, nil, notificationService, cfg)
+
+	overdueService := services.NewOverdueService(db)
 
 	// Initialize billing worker for cron jobs
 	billingWorker := worker.NewBillingWorker(db, subscriptionService, billingService)
@@ -345,6 +360,24 @@ planService := services.NewPlanService(db, exchangeRateService)
 		}
 	}()
 
+	// Overdue invoice cron job (runs every 30 minutes)
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		logSvc.Info(context.Background(), "Starting overdue invoice cron")
+		for {
+			select {
+			case <-stopCh:
+				logSvc.Info(context.Background(), "Stopping overdue invoice cron")
+				return
+			case <-ticker.C:
+				if err := overdueService.MarkOverdueInvoices(); err != nil {
+					logSvc.Error(context.Background(), "Overdue invoice error", "error", err.Error())
+				}
+			}
+		}
+	}()
+
 	// Initialize handlers
 	// Initialize PDF service
 	pdfService := &services.PDFService{}
@@ -354,7 +387,7 @@ planService := services.NewPlanService(db, exchangeRateService)
 
 	// Reuse whatsappService created earlier
 
-	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService, pdfWorker)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db)
@@ -416,6 +449,29 @@ planService := services.NewPlanService(db, exchangeRateService)
 	activityService := services.NewActivityService(db)
 	activityHandler := handlers.NewActivityHandler(activityService)
 	routes.ActivityRoutes(app, activityHandler, authService, db)
+
+	// Payment discrepancy alert service
+	discrepancyService := services.NewPaymentDiscrepancyService(db, emailService)
+
+	// Payment discrepancy check cron job (every 15 minutes)
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		if err := discrepancyService.CheckAndCreateAlerts(); err != nil {
+			logSvc.Error(context.Background(), "Initial discrepancy check error", "error", err.Error())
+		}
+		for {
+			select {
+			case <-stopCh:
+				logSvc.Info(context.Background(), "Stopping discrepancy check cron")
+				return
+			case <-ticker.C:
+				if err := discrepancyService.CheckAndCreateAlerts(); err != nil {
+					logSvc.Error(context.Background(), "Discrepancy check error", "error", err.Error())
+				}
+			}
+		}
+	}()
 
 	// Payment matching routes
 	paymentMatchingService := services.NewPaymentMatchingService(db, notificationService)
@@ -526,12 +582,6 @@ planService := services.NewPlanService(db, exchangeRateService)
 		logSvc.Warn(context.Background(), "Shutdown error", "error", err.Error())
 	}
 	logSvc.Info(context.Background(), "Server exited")
-}
-
-// runActiveAutomations executes all active automations with triggers
-func runActiveAutomations() error {
-	// Legacy automation - now handled by new automation engine
-	return nil
 }
 
 func customErrorHandler(c *fiber.Ctx, err error) error {

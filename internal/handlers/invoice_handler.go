@@ -10,6 +10,7 @@ import (
 	"invoicefast/internal/models"
 	"invoicefast/internal/pdf"
 	"invoicefast/internal/services"
+	"invoicefast/internal/worker"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -26,10 +27,11 @@ type InvoiceHandler struct {
 	pdfGenerator      *pdf.PDFGenerator
 	emailService      *services.EmailService
 	whatsappService   *services.WhatsAppService
+	pdfWorker         *worker.PDFWorker
 }
 
 // NewInvoiceHandler creates InvoiceHandler
-func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, whatsappSvc *services.WhatsAppService) *InvoiceHandler {
+func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, whatsappSvc *services.WhatsAppService, pdfWorker *worker.PDFWorker) *InvoiceHandler {
 	return &InvoiceHandler{
 		invoiceService:    invoiceSvc,
 		kraService:        kraSvc,
@@ -39,6 +41,7 @@ func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRA
 		pdfService:        pdfSvc,
 		pdfGenerator:      pdfGen,
 		whatsappService:   whatsappSvc,
+		pdfWorker:         pdfWorker,
 	}
 }
 
@@ -73,6 +76,16 @@ func (h *InvoiceHandler) CreateInvoice(c *fiber.Ctx) error {
 
 	if h.subService != nil {
 		h.subService.IncrementUsage(tenantID, "invoices", 1)
+	}
+
+	if h.pdfWorker != nil {
+		task := &worker.PDFTask{
+			InvoiceID:  invoice.ID,
+			TenantID:   tenantID,
+			InvoiceNum: invoice.InvoiceNumber,
+			CreatedAt:  time.Now(),
+		}
+		h.pdfWorker.EnqueueTask(c.Context(), task)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(invoice)

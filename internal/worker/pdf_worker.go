@@ -81,10 +81,7 @@ func (w *PDFWorker) EnqueueTask(ctx context.Context, task *PDFTask) error {
 		score = float64(task.Priority)*1e15 + score
 	}
 
-	err = w.redis.ZAdd(ctx, w.queueName, &redis.Z{
-		Score:  score,
-		Member: string(taskJSON),
-	})
+	err = w.redis.ZAdd(ctx, w.queueName, redis.Z{Score:  score, Member: string(taskJSON)})
 
 	if err != nil {
 		return fmt.Errorf("failed to enqueue task: %w", err)

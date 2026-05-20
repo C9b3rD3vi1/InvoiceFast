@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"strconv"
-	"strings"
+	"time"
 
 	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
@@ -448,16 +450,45 @@ func (h *ExpenseHandler) bulkDeleteExpenses(c *fiber.Ctx, tenantID string, ids [
 	})
 }
 
-// bulkExportExpenses exports multiple expenses (placeholder for now)
+// bulkExportExpenses exports multiple expenses as CSV
 func (h *ExpenseHandler) bulkExportExpenses(c *fiber.Ctx, tenantID string, ids []string) error {
-	// For now, we'll just return a success message
-	// In a real implementation, this would generate a CSV or PDF file
-	message := fmt.Sprintf("Export initiated for %d expenses", len(ids))
-	
-	return c.JSON(fiber.Map{
-		"message": message,
-		"count":   len(ids),
-		// In a real implementation, we'd provide a download URL here
-		"url":     "/api/v1/tenant/expenses/export?ids=" + strings.Join(ids, ","),
-	})
+	var expenses []models.Expense
+	for _, id := range ids {
+		exp, err := h.expenseService.GetExpenseByID(tenantID, id)
+		if err != nil {
+			continue
+		}
+		expenses = append(expenses, *exp)
+	}
+
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	writer.Write([]string{"Date", "Description", "Category", "Amount", "Currency"})
+
+	for _, exp := range expenses {
+		category := exp.CategoryID
+		if cats, err := h.expenseService.GetExpenseCategories(tenantID); err == nil {
+			for _, cat := range cats {
+				if cat.ID == exp.CategoryID {
+					category = cat.Name
+					break
+				}
+			}
+		}
+		writer.Write([]string{
+			exp.Date.Format("2006-01-02"),
+			exp.Description,
+			category,
+			fmt.Sprintf("%.2f", exp.Amount),
+			exp.Currency,
+		})
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate CSV"})
+	}
+
+	c.Set("Content-Type", "text/csv")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=expenses_%s.csv", time.Now().Format("2006-01-02")))
+	return c.Send(buf.Bytes())
 }

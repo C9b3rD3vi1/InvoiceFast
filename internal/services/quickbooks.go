@@ -98,7 +98,7 @@ func (s *QuickBooksService) HandleOAuthCallback(code, state string) (*QuickBooks
 	// Exchange code for tokens
 	tokenURL := "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 	if s.cfg.QuickBooks.Environment == "production" {
-		tokenURL = "https://oauth.platform.intintuit.com/oauth2/v1/tokens/bearer"
+		tokenURL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 	}
 
 	data := url.Values{}

@@ -24,6 +24,7 @@ type Config struct {
 	Stripe      StripeConfig
 	QuickBooks  QuickBooksConfig
 	Backup      BackupConfig
+	RedisCache RedisCacheConfig
 }
 
 type ServerConfig struct {
@@ -54,6 +55,13 @@ type DatabaseConfig struct {
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
 	QueryTimeout    time.Duration
+}
+
+type RedisCacheConfig struct {
+	RedisAddr     string `env:"REDIS_ADDR"`
+	RedisPassword string `env:"REDIS_PASSWORD"`
+	RedisDB       int    `env:"REDIS_DB"`
+	Environment   string `env:"ENVIRONMENT"`
 }
 
 type IntasendConfig struct {
@@ -262,7 +270,7 @@ func Load() *Config {
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:         getBoolEnv("RATE_LIMIT_ENABLED", true),
-			RequestsPer:     getIntEnv("RATE_LIMIT_REQUESTS_PER", 100),
+			RequestsPer:     getIntEnv("RATE_LIMIT_REQUESTS", 100),
 			Window:          getDurationEnv("RATE_LIMIT_WINDOW", 1*time.Minute),
 			Burst:           getIntEnv("RATE_LIMIT_BURST", 20),
 			CleanupInterval: getDurationEnv("RATE_LIMIT_CLEANUP", 5*time.Minute),
@@ -297,7 +305,7 @@ func Load() *Config {
 			APISecret:     getEnv("WHATSAPP_API_SECRET", ""),
 			PhoneNumber:   getEnv("WHATSAPP_PHONE_NUMBER", ""),
 			PhoneNumberID: getEnv("WHATSAPP_PHONE_NUMBER_ID", ""),
-			BusinessID:    getEnv("WHATSAPP_BUSINESS_ID", ""),
+			BusinessID:    getEnvWithFallback("WHATSAPP_BUSINESS_ACCOUNT_ID", "WHATSAPP_BUSINESS_ID", ""),
 			AccessToken:   getEnv("WHATSAPP_ACCESS_TOKEN", ""),
 		},
 		SMS: SMSConfig{
@@ -321,6 +329,14 @@ func Load() *Config {
 			Environment: getEnv("QUICKBOOKS_ENVIRONMENT", "sandbox"), // sandbox, production
 			RedirectURI: getEnv("QUICKBOOKS_REDIRECT_URI", ""),
 		},
+		
+		RedisCache: RedisCacheConfig{
+			RedisAddr:     getEnv("REDIS_ADDR", "localhost"),
+			RedisPassword: getEnv("REDIS_PASSWORD", ""),
+			RedisDB:       getIntEnv("REDIS_DB", 0),
+			Environment:   getEnv("REDIS_ENVIRONMENT", "development"),
+			
+		},
 		Backup: BackupConfig{
 			Enabled:       getBoolEnv("BACKUP_ENABLED", true),
 			Schedule:      getEnv("BACKUP_SCHEDULE", "0 3 * * *"),
@@ -337,6 +353,16 @@ func Load() *Config {
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvWithFallback(primary, fallback, defaultValue string) string {
+	if value := os.Getenv(primary); value != "" {
+		return value
+	}
+	if value := os.Getenv(fallback); value != "" {
 		return value
 	}
 	return defaultValue

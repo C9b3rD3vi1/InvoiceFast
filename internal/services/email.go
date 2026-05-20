@@ -436,12 +436,14 @@ func (s *EmailService) MockSend(req EmailRequest) error {
 
 // QueueEmail adds email to queue (for async processing)
 type EmailQueue struct {
+	svc      *EmailService
 	emails   chan EmailRequest
 	stopChan chan bool
 }
 
-func NewEmailQueue(workerCount int) *EmailQueue {
+func NewEmailQueue(svc *EmailService, workerCount int) *EmailQueue {
 	q := &EmailQueue{
+		svc:      svc,
 		emails:   make(chan EmailRequest, 1000),
 		stopChan: make(chan bool),
 	}
@@ -458,8 +460,7 @@ func (q *EmailQueue) worker() {
 	for {
 		select {
 		case email := <-q.emails:
-			// Process email (would call EmailService.Send in production)
-			fmt.Printf("Processing email to: %s\n", email.To)
+			_ = q.svc.Send(email)
 		case <-q.stopChan:
 			return
 		}

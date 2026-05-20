@@ -27,10 +27,10 @@ func getLayoutData(c *fiber.Ctx) services.LayoutData {
 	// Default values - will be overridden by Alpine.js client-side
 	return services.LayoutData{
 		Title:        "",
-		TenantName:   "Loading...",
-		UserName:     "Loading...",
-		UserEmail:    "Loading...",
-		UserInitials: "L",
+		TenantName:   "",
+		UserName:     "",
+		UserEmail:    "",
+		UserInitials: "",
 	}
 }
 
@@ -111,11 +111,6 @@ func StaticRoutes(app *fiber.App) fiber.Router {
 	// Billing - dedicated page
 	settingsRouter.Get("/billing", func(c *fiber.Ctx) error {
 		return layoutService.RenderWithShell(c, "./views/content/billing.html", getLayoutData(c))
-	})
-
-	// Pricing - public page
-	app.Get("/pricing", func(c *fiber.Ctx) error {
-		return layoutService.RenderWithShell(c, "./views/content/pricing.html", getLayoutData(c))
 	})
 
 	// Reports - shell

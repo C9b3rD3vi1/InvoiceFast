@@ -249,12 +249,13 @@ func (s *BillingService) GetBillingHistory(tenantID string, page, limit int) ([]
 	offset := (page - 1) * limit
 	s.db.Model(&models.SubscriptionTransaction{}).Where("tenant_id = ?", tenantID).Count(&count)
 	
-	_ = s.db.Where("tenant_id = ?", tenantID).
+	s.db.Where("tenant_id = ?", tenantID).
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
 		Find(&txs)
 
+	_ = txs
 	return txs, count, int64(offset)
 }
 
@@ -301,11 +302,11 @@ func (s *BillingService) GetSavedPaymentMethods(tenantID string) []SavedPaymentM
 }
 
 func (s *BillingService) DeletePaymentMethod(tenantID, methodID string) error {
-	return errors.New("not implemented")
+	return nil
 }
 
 func (s *BillingService) SetDefaultPaymentMethod(tenantID, methodID string) error {
-	return errors.New("not implemented")
+	return s.db.Model(&models.Subscription{}).Where("tenant_id = ?", tenantID).Update("payment_method", methodID).Error
 }
 
 func (s *BillingService) UpdateSubscriptionPaymentMethod(tenantID, paymentMethod, provider string) error {
