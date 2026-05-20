@@ -1,4 +1,4 @@
-package middleware_test
+package services_test
 
 import (
 	"testing"
@@ -123,7 +123,7 @@ func TestValidateUUID(t *testing.T) {
 }
 
 // TestValidateCurrency tests currency validation
-func TestValidateCurrency(t *testing.T) {
+func TestMiddlewareValidateCurrency(t *testing.T) {
 	tests := []struct {
 		name     string
 		currency string
