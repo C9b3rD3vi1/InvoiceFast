@@ -523,8 +523,9 @@ func main() {
 	// Integration routes
 	routes.IntegrationRoutes(app, integrationHandler, authService, db)
 
-	// Onboarding routes
-	routes.OnboardingRoutes(app, onboardingHandler, authService, db)
+	// Onboarding routes with sensitive rate limiting
+	sensitiveLimit := rateLimiter.SensitiveRateLimiter()
+	routes.OnboardingRoutes(app, onboardingHandler, authService, db, sensitiveLimit)
 
 	// Subdomain routing for branded client portal (AFTER main routes)
 	app.Use(func(c *fiber.Ctx) error {

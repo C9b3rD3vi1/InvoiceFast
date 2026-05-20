@@ -60,7 +60,8 @@ func setupOnboardingTest(t *testing.T) (*fiber.App, *handlers.OnboardingHandler,
 	handler := handlers.NewOnboardingHandler(authService, invoiceService, clientService, settingsService, db)
 
 	app := fiber.New(fiber.Config{})
-	routes.OnboardingRoutes(app, handler, authService, db)
+	noopLimit := func(c *fiber.Ctx) error { return c.Next() }
+	routes.OnboardingRoutes(app, handler, authService, db, noopLimit)
 
 	return app, handler, db, authService
 }

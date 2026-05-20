@@ -116,6 +116,21 @@ func (rl *FiberRateLimiter) AuthRateLimiter() fiber.Handler {
 	}
 }
 
+// SensitiveRateLimiter for password reset, verification resend, etc (5 req/min)
+func (rl *FiberRateLimiter) SensitiveRateLimiter() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		key := rl.getClientKey(c)
+
+		if !rl.allowWithRate(key, 5) {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error":       "Too many requests. Please try again later.",
+				"retry_after": "60 seconds",
+			})
+		}
+		return c.Next()
+	}
+}
+
 // WebhookRateLimiter is stricter for webhooks
 func (rl *FiberRateLimiter) WebhookRateLimiter() fiber.Handler {
 	return func(c *fiber.Ctx) error {
