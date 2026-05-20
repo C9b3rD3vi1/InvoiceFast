@@ -92,6 +92,41 @@ func (m *WebhookVerifierMiddleware) IntasendVerification() fiber.Handler {
 	}
 }
 
+// StripeVerification verifies Stripe webhook signatures
+func (m *WebhookVerifierMiddleware) StripeVerification() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		signature := c.Get("Stripe-Signature")
+		if signature == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "missing Stripe-Signature header",
+				"code":  "MISSING_SIGNATURE",
+			})
+		}
+
+		body := c.Body()
+		if len(body) == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "empty request body",
+				"code":  "INVALID_BODY",
+			})
+		}
+
+		result := m.verifier.VerifyStripeWebhook(body, signature, "", "")
+		if !result.Valid {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "webhook verification failed",
+				"code":  "WEBHOOK_VERIFICATION_FAILED",
+			})
+		}
+
+		c.Locals("webhook_verified", true)
+		c.Locals("webhook_provider", "stripe")
+		c.Locals("webhook_timestamp", result.Timestamp)
+
+		return c.Next()
+	}
+}
+
 // VerifyTenantMiddleware ensures tenant context is present
 func VerifyTenantMiddleware(db *database.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {

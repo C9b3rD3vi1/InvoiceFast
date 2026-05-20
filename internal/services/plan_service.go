@@ -79,20 +79,23 @@ func (s *PlanService) GetMonthlyPriceKES(plan *models.SubscriptionPlan) int64 {
 		return 0
 	}
 	rate := s.GetExchangeRate()
-	return int64(float64(plan.MonthlyPriceUSD) * rate)
+	usd := float64(plan.MonthlyPriceUSD) / 100
+	return int64(usd * rate * 100)
 }
 
 func (s *PlanService) GetYearlyPriceKES(plan *models.SubscriptionPlan) int64 {
 	if plan.YearlyPriceUSD > 0 {
 		rate := s.GetExchangeRate()
-		return int64(float64(plan.YearlyPriceUSD) * rate)
+		usd := float64(plan.YearlyPriceUSD) / 100
+		return int64(usd * rate * 100)
 	}
 	if plan.MonthlyPriceUSD <= 0 {
 		return 0
 	}
 	rate := s.GetExchangeRate()
 	annualTotal := float64(plan.MonthlyPriceUSD) * 12 * 0.8
-	return int64(annualTotal * rate)
+	usd := annualTotal / 100
+	return int64(usd * rate * 100)
 }
 
 func (s *PlanService) SeedDefaultPlans() error {
@@ -108,6 +111,7 @@ func (s *PlanService) SeedDefaultPlans() error {
 			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":1,"storage":1073741824}`,
 			IsActive:        true,
 			SortOrder:       1,
+			Tier:            1,
 			TrialDays:       14,
 		},
 		{
@@ -121,6 +125,7 @@ func (s *PlanService) SeedDefaultPlans() error {
 			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":5,"storage":5368709120}`,
 			IsActive:        true,
 			SortOrder:       2,
+			Tier:            2,
 			TrialDays:       14,
 		},
 		{
@@ -134,6 +139,7 @@ func (s *PlanService) SeedDefaultPlans() error {
 			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":-1,"storage":107374182400}`,
 			IsActive:        true,
 			SortOrder:       3,
+			Tier:            3,
 			TrialDays:       14,
 		},
 		{
@@ -147,6 +153,7 @@ func (s *PlanService) SeedDefaultPlans() error {
 			LimitsJSON:      `{"invoices":-1,"clients":-1,"users":-1,"storage":-1}`,
 			IsActive:        true,
 			SortOrder:       4,
+			Tier:            4,
 			TrialDays:       14,
 		},
 	}
@@ -186,7 +193,8 @@ func (s *PlanService) MigrateUsersWithoutSubscription() error {
 		}
 
 		exchangeRate := s.GetExchangeRate()
-		amountKES := int64(float64(starterPlan.MonthlyPriceUSD) * exchangeRate)
+		usd := float64(starterPlan.MonthlyPriceUSD) / 100
+		amountKES := int64(usd * exchangeRate * 100)
 		subscription := &models.Subscription{
 			ID:                 uuid.New().String(),
 			TenantID:           tenant.ID,

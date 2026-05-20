@@ -72,7 +72,8 @@ type IntasendWebhookPayload struct {
 	PublicID  string `json:"public_id"`
 
 	Checkout struct {
-		ID string `json:"id"`
+		ID     string `json:"id"`
+		APIRef string `json:"api_ref,omitempty"`
 	} `json:"checkout"`
 
 	Collection struct {
@@ -189,6 +190,15 @@ func (s *IntasendService) HandleWebhook(payload []byte, signature string, source
 		return nil
 	}
 
+	// Verify signature if secret is configured
+	if s.cfg.WebhookSecret != "" {
+		expectedSig := computeHMAC(string(payload), s.cfg.WebhookSecret)
+		if signature != expectedSig {
+			logger.Get().Error(context.Background(), "Invalid webhook signature", "source_ip", sourceIP)
+			return ErrInvalidSignature
+		}
+	}
+
 	var event IntasendWebhookPayload
 	if err := json.Unmarshal(payload, &event); err != nil {
 		return fmt.Errorf("invalid webhook payload: %w", err)
@@ -229,8 +239,8 @@ func (s *IntasendService) handlePaymentSuccess(checkoutID, tenantID string, even
 	}
 
 	var invoice models.Invoice
-	if s.db != nil && tenantID != "" {
-		s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "id = ?", event.Checkout.ID)
+	if s.db != nil && tenantID != "" && event.Checkout.APIRef != "" {
+		s.db.Scopes(database.TenantFilter(tenantID)).First(&invoice, "invoice_number = ? OR id = ?", event.Checkout.APIRef, event.Checkout.APIRef)
 	}
 
 	payment := &models.Payment{

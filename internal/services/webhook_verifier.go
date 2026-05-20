@@ -89,9 +89,17 @@ func (v *WebhookVerifier) VerifyMpesaCallback(payload []byte, signature string) 
 	}
 
 	result.RequestID = cb.Body.StkCallback.CheckoutRequestID
+	// M-Pesa does not sign callbacks cryptographically.
+	// Security relies on:
+	//   - HTTPS endpoint
+	//   - CheckoutRequestID uniqueness (verified above)
+	//   - ResultCode validation (verified above)
+	//   - Callback URL configured at STK push time
+	if code != 0 {
+		result.Error = fmt.Errorf("M-Pesa callback indicates payment failure: result_code=%d desc=%s", code, cb.Body.StkCallback.ResultDesc)
+		return result
+	}
 	result.Valid = true
-	_ = code
-	_ = v.mpesaSecurityCredential
 	return result
 }
 

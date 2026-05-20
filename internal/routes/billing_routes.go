@@ -48,5 +48,9 @@ func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *serv
 		webhookVerifier.IntasendVerification(),
 		h.HandleIntasendWebhook)
 
+	group.Post("/webhook/stripe",
+		middleware.IdempotencyMiddleware(idempotencySvc),
+		h.HandleStripeWebhook)
+
 	return group
 }

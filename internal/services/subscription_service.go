@@ -82,11 +82,14 @@ func (s *SubscriptionService) CreateSubscription(tenantID, planID string, billin
 		return nil, err
 	}
 
+	rate := s.planService.GetExchangeRate()
 	var amount int64
 	if billingCycle == "yearly" {
-		amount = plan.YearlyPriceUSD
+		usd := float64(plan.YearlyPriceUSD) / 100
+		amount = int64(usd * rate * 100)
 	} else {
-		amount = plan.MonthlyPriceUSD
+		usd := float64(plan.MonthlyPriceUSD) / 100
+		amount = int64(usd * rate * 100)
 	}
 
 	now := time.Now()
@@ -172,13 +175,16 @@ func (s *SubscriptionService) UpgradePlan(tenantID, newPlanID string, billingCyc
 		return nil, err
 	}
 
+	rate := s.planService.GetExchangeRate()
 	sub.PlanID = newPlanID
 	sub.BillingCycle = billingCycle
 
 	if billingCycle == "yearly" {
-		sub.Amount = newPlan.YearlyPriceUSD
+		usd := float64(newPlan.YearlyPriceUSD) / 100
+		sub.Amount = int64(usd * rate * 100)
 	} else {
-		sub.Amount = newPlan.MonthlyPriceUSD
+		usd := float64(newPlan.MonthlyPriceUSD) / 100
+		sub.Amount = int64(usd * rate * 100)
 	}
 
 	sub.UpdatedAt = time.Now()
@@ -198,8 +204,10 @@ func (s *SubscriptionService) DowngradePlan(tenantID, newPlanID string) (*models
 		return nil, err
 	}
 
+	rate := s.planService.GetExchangeRate()
+	usd := float64(newPlan.MonthlyPriceUSD) / 100
 	sub.PlanID = newPlanID
-	sub.Amount = newPlan.MonthlyPriceUSD
+	sub.Amount = int64(usd * rate * 100)
 	sub.UpdatedAt = time.Now()
 
 	s.db.Save(sub)
@@ -212,12 +220,12 @@ func (s *SubscriptionService) ExtendTrial(tenantID string, days int) error {
 		return err
 	}
 
-	if sub.TrialEnd == nil {
-		now := time.Now()
-		sub.TrialEnd = &now
+	base := time.Now()
+	if sub.TrialEnd != nil && sub.TrialEnd.After(time.Now()) {
+		base = *sub.TrialEnd
 	}
 
-	newEnd := sub.TrialEnd.Add(time.Duration(days) * 24 * time.Hour)
+	newEnd := base.Add(time.Duration(days) * 24 * time.Hour)
 	sub.TrialEnd = &newEnd
 	sub.UpdatedAt = time.Now()
 
@@ -235,7 +243,7 @@ func (s *SubscriptionService) ProcessRenewalPayment(tenantID string) error {
 	sub.UpdatedAt = time.Now()
 
 	if sub.RetryCount >= 3 {
-		sub.Status = "suspended"
+		sub.Status = "past_due"
 	}
 
 	if err := s.db.Save(sub).Error; err != nil {
@@ -294,8 +302,14 @@ func (s *SubscriptionService) GetUsage(tenantID string) (*models.UsageTracking, 
 	var usage models.UsageTracking
 	if err := s.db.Where("tenant_id = ?", tenantID).First(&usage).Error; err != nil {
 		if err.Error() == "record not found" {
-			s.InitUsageTracking(tenantID)
-			return s.GetUsage(tenantID)
+			if initErr := s.InitUsageTracking(tenantID); initErr != nil {
+				return nil, initErr
+			}
+			var retry models.UsageTracking
+			if err := s.db.Where("tenant_id = ?", tenantID).First(&retry).Error; err != nil {
+				return nil, err
+			}
+			return &retry, nil
 		}
 		return nil, err
 	}

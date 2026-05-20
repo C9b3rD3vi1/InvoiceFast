@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -119,6 +120,32 @@ func (s *BillingService) HandleStripeWebhook(payload []byte, signature string) e
 	}
 
 	logger.Get().Info(context.Background(), "Stripe webhook received", "event_type", event.Type)
+
+	switch event.Type {
+	case "checkout.session.completed":
+		var session stripe.CheckoutSession
+		if decodeErr := json.Unmarshal(event.Data.Raw, &session); decodeErr != nil {
+			return fmt.Errorf("failed to decode checkout session: %w", decodeErr)
+		}
+		logger.Get().Info(context.Background(), "Checkout session completed", "session_id", session.ID, "customer", session.Customer)
+	case "invoice.paid":
+		var inv stripe.Invoice
+		if decodeErr := json.Unmarshal(event.Data.Raw, &inv); decodeErr != nil {
+			return fmt.Errorf("failed to decode invoice: %w", decodeErr)
+		}
+		logger.Get().Info(context.Background(), "Invoice paid via Stripe", "invoice_id", inv.ID, "amount_paid", inv.AmountPaid)
+	case "customer.subscription.updated":
+		var sub stripe.Subscription
+		if decodeErr := json.Unmarshal(event.Data.Raw, &sub); decodeErr != nil {
+			return fmt.Errorf("failed to decode subscription: %w", decodeErr)
+		}
+		logger.Get().Info(context.Background(), "Subscription updated via Stripe", "sub_id", sub.ID, "status", sub.Status)
+	case "payment_intent.succeeded":
+		if s.stripeSvc != nil {
+			return s.stripeSvc.HandleWebhook(payload, signature)
+		}
+	}
+
 	return nil
 }
 
@@ -196,19 +223,19 @@ func (s *BillingService) ValidateFeature(tenantID, feature string) error {
 
 	limits := details.Limits
 
-	if maxInvoices, ok := limits["max_invoices_per_month"]; ok {
+	if maxInvoices, ok := limits["invoices"]; ok && maxInvoices > 0 {
 		if details.Usage.InvoicesUsed >= maxInvoices {
 			return fmt.Errorf("invoice limit exceeded: %d/%d", details.Usage.InvoicesUsed, maxInvoices)
 		}
 	}
 
-	if maxClients, ok := limits["max_clients"]; ok {
+	if maxClients, ok := limits["clients"]; ok && maxClients > 0 {
 		if details.Usage.ClientsUsed >= maxClients {
 			return fmt.Errorf("client limit exceeded: %d/%d", details.Usage.ClientsUsed, maxClients)
 		}
 	}
 
-	if maxUsers, ok := limits["max_users"]; ok {
+	if maxUsers, ok := limits["users"]; ok && maxUsers > 0 {
 		if details.Usage.UsersUsed >= maxUsers {
 			return fmt.Errorf("user limit exceeded: %d/%d", details.Usage.UsersUsed, maxUsers)
 		}

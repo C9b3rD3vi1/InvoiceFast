@@ -609,3 +609,15 @@ func (h *BillingHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"success": true})
 }
+
+func (h *BillingHandler) HandleStripeWebhook(c *fiber.Ctx) error {
+	payload := c.BodyRaw()
+	signature := c.Get("stripe-signature")
+
+	if err := h.billingSvc.HandleStripeWebhook(payload, signature); err != nil {
+		logger.Get().Error(c.UserContext(), "Stripe webhook handling failed", "error", err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"success": true})
+}
