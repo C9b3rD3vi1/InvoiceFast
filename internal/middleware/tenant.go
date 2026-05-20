@@ -17,7 +17,7 @@ const (
 
 func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var tenantID, userID string
+		var tenantID, userID, role string
 		var authErr error
 
 		// Extract from JWT Bearer token
@@ -28,6 +28,7 @@ func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.
 			if err == nil && claims != nil {
 				userID = claims.UserID
 				tenantID = claims.TenantID
+				role = claims.Role
 				if tenantID == "" {
 					tenantID = userID
 				}
@@ -44,6 +45,7 @@ func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.
 				if err == nil && claims != nil {
 					userID = claims.UserID
 					tenantID = claims.TenantID
+					role = claims.Role
 					if tenantID == "" {
 						tenantID = userID
 					}
@@ -89,6 +91,16 @@ func TenantMiddleware(authService *services.AuthService, db *database.DB) fiber.
 			// Also store for layout
 			c.Locals("user_id", userID)
 			c.Locals("tenant_id", tenantID)
+		}
+
+		// Populate user_role: from JWT claims first, then fall back to DB query
+		if role != "" {
+			c.Locals(RoleKey, role)
+		} else if userID != "" && db != nil {
+			var user models.User
+			if err := db.First(&user, "id = ?", userID).Error; err == nil {
+				c.Locals(RoleKey, user.Role)
+			}
 		}
 
 		if authErr != nil && c.Path() != "/api/v1/auth/login" {

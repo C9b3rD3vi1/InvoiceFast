@@ -10,6 +10,7 @@ const (
 	RoleAdmin   = "admin"
 	RoleOwner   = "owner"
 	RoleManager = "manager"
+	RoleFinance = "finance"
 	RoleStaff   = "staff"
 	RoleUser    = "user"
 	RoleViewer  = "viewer"
@@ -22,6 +23,7 @@ var roleHierarchy = map[string]int{
 	RoleAdmin:   5,
 	RoleOwner:   5,
 	RoleManager: 4,
+	RoleFinance: 4,
 	RoleStaff:   3,
 	RoleUser:    2,
 	RoleViewer:  1,

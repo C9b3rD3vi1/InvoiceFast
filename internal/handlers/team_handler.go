@@ -78,9 +78,9 @@ func (h *TeamHandler) InviteMember(c *fiber.Ctx) error {
 	}
 
 	userID := middleware.GetUserID(c)
-	requesterRole := c.Locals("user_role")
-	if requesterRole != "admin" && requesterRole != "owner" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Only admins can invite team members"})
+	requesterRole := middleware.GetUserRole(c)
+	if requesterRole != "admin" && requesterRole != "owner" && requesterRole != "manager" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Only admins and managers can invite team members"})
 	}
 
 	var req InviteRequest
@@ -96,12 +96,17 @@ func (h *TeamHandler) InviteMember(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid email format"})
 	}
 
-	validRoles := map[string]bool{"admin": true, "finance": true, "staff": true, "viewer": true}
+	validRoles := map[string]bool{"admin": true, "manager": true, "finance": true, "staff": true, "viewer": true}
 	if req.Role == "" {
 		req.Role = "staff"
 	}
 	if !validRoles[req.Role] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role"})
+	}
+
+	// Only owners/admins can invite other admins
+	if req.Role == "admin" && requesterRole != "owner" && requesterRole != "admin" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Only owners and admins can invite admins"})
 	}
 
 	var existing models.User
@@ -158,8 +163,14 @@ func (h *TeamHandler) RemoveMember(c *fiber.Ctx) error {
 	}
 
 	requesterID := middleware.GetUserID(c)
+	requesterRole := middleware.GetUserRole(c)
 	if memberID == requesterID {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cannot remove yourself"})
+	}
+
+	// Only owners, admins, and managers can remove members
+	if requesterRole != "owner" && requesterRole != "admin" && requesterRole != "manager" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Insufficient permissions to remove members"})
 	}
 
 	var member models.User
@@ -169,6 +180,11 @@ func (h *TeamHandler) RemoveMember(c *fiber.Ctx) error {
 
 	if member.Role == "owner" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Cannot remove owner"})
+	}
+
+	// Managers can only remove staff, viewers, and finance
+	if requesterRole == "manager" && member.Role != "staff" && member.Role != "viewer" && member.Role != "finance" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Managers can only remove staff, viewers, and finance members"})
 	}
 
 	if err := h.db.Delete(&member).Error; err != nil {
@@ -193,14 +209,33 @@ func (h *TeamHandler) UpdateMemberRole(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	validRoles := map[string]bool{"admin": true, "finance": true, "staff": true, "viewer": true}
+	validRoles := map[string]bool{"admin": true, "manager": true, "finance": true, "staff": true, "viewer": true}
 	if !validRoles[req.Role] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid role"})
+	}
+
+	requesterRole := middleware.GetUserRole(c)
+	if requesterRole != "owner" && requesterRole != "admin" && requesterRole != "manager" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Insufficient permissions to change roles"})
 	}
 
 	var member models.User
 	if err := h.db.Where("id = ? AND tenant_id = ?", memberID, tenantID).First(&member).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Member not found"})
+	}
+
+	if member.Role == "owner" && requesterRole != "owner" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Cannot change owner's role"})
+	}
+
+	// Only owners/admins can promote to admin
+	if req.Role == "admin" && requesterRole != "owner" && requesterRole != "admin" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Only owners and admins can assign admin role"})
+	}
+
+	// Managers can only change roles of staff/viewer/finance members
+	if requesterRole == "manager" && member.Role != "staff" && member.Role != "viewer" && member.Role != "finance" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Managers can only manage staff, viewer, and finance roles"})
 	}
 
 	member.Role = req.Role

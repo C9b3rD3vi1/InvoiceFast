@@ -278,6 +278,7 @@ type Claims struct {
 	UserID   string `json:"user_id"`
 	TenantID string `json:"tenant_id"`
 	Email    string `json:"email"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -707,6 +708,7 @@ func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
 		UserID:   user.ID,
 		TenantID: tenantID,
 		Email:    user.Email,
+		Role:     user.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.cfg.JWT.Expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

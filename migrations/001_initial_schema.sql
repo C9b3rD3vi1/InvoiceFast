@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     kra_pin VARCHAR(50), -- Encrypted in production
     plan VARCHAR(50) DEFAULT 'free',
     is_active BOOLEAN DEFAULT true,
-    role VARCHAR(50) DEFAULT 'user' CHECK (role IN ('owner', 'admin', 'manager', 'user')),
+    role VARCHAR(50) DEFAULT 'staff' CHECK (role IN ('owner', 'admin', 'manager', 'finance', 'staff', 'viewer')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(tenant_id, email)
