@@ -94,16 +94,16 @@ type NotificationEvent struct {
 
 type MpesaSettings struct {
 	ConsumerKey    string `json:"consumer_key"`
-	ConsumerSecret string `json:"-"` // Encrypted at rest
+	ConsumerSecret string `json:"consumer_secret,omitempty"` // Encrypted at rest
 	Shortcode      string `json:"shortcode"`
-	Passkey        string `json:"-"` // Encrypted at rest
+	Passkey        string `json:"passkey,omitempty"` // Encrypted at rest
 	Enabled        bool   `json:"enabled"`
 }
 
 type KRASettings struct {
 	VendorID      string `json:"vendor_id"`
-	APIKey        string `json:"-"` // Encrypted at rest
-	RSAPrivateKey string `json:"-"` // Encrypted at rest
+	APIKey        string `json:"api_key,omitempty"` // Encrypted at rest
+	RSAPrivateKey string `json:"rsa_private_key,omitempty"` // Encrypted at rest
 	LiveMode      bool   `json:"live_mode"`
 	Enabled       bool   `json:"enabled"`
 }
@@ -287,6 +287,9 @@ func (s *SettingsService) GetSettings(tenantID string) (*TenantSettings, error) 
 		settings.Payments.Mpesa = settings.Mpesa
 	}
 
+	// Decrypt sensitive fields before masking for display
+	s.decryptSettings(settings)
+
 	// Mask secrets for UI display
 	s.MaskSecrets(settings)
 
@@ -303,27 +306,16 @@ func (s *SettingsService) GetSettings(tenantID string) (*TenantSettings, error) 
 func (s *SettingsService) SaveSettings(tenantID string, settings *TenantSettings) error {
 	settings.Updated = time.Now()
 
-	// Encrypt sensitive fields before saving
-	if err := s.encryptSettings(settings); err != nil {
-		return fmt.Errorf("failed to encrypt settings: %w", err)
-	}
-
-	settingsJSON, err := json.Marshal(settings)
-	if err != nil {
-		return fmt.Errorf("failed to marshal settings: %w", err)
-	}
-
 	// Get current settings and merge
 	var tenant models.Tenant
 	if err := s.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
 		return fmt.Errorf("tenant not found")
 	}
 
-	// Parse existing settings
+	// Parse existing settings and merge secret fields
 	var existing TenantSettings
 	if tenant.Settings != "" {
 		if err := json.Unmarshal([]byte(tenant.Settings), &existing); err == nil {
-			// Merge: only overwrite if new value is non-empty
 			if settings.Business != nil && existing.Business != nil {
 				settings.Business = mergeBusiness(settings.Business, existing.Business)
 			}
@@ -345,9 +337,23 @@ func (s *SettingsService) SaveSettings(tenantID string, settings *TenantSettings
 			}
 			if settings.Mpesa == nil {
 				settings.Mpesa = existing.Mpesa
+			} else if existing.Mpesa != nil {
+				if settings.Mpesa.ConsumerSecret == "" {
+					settings.Mpesa.ConsumerSecret = existing.Mpesa.ConsumerSecret
+				}
+				if settings.Mpesa.Passkey == "" {
+					settings.Mpesa.Passkey = existing.Mpesa.Passkey
+				}
 			}
 			if settings.KRA == nil {
 				settings.KRA = existing.KRA
+			} else if existing.KRA != nil {
+				if settings.KRA.APIKey == "" {
+					settings.KRA.APIKey = existing.KRA.APIKey
+				}
+				if settings.KRA.RSAPrivateKey == "" {
+					settings.KRA.RSAPrivateKey = existing.KRA.RSAPrivateKey
+				}
 			}
 			if settings.Notifications == nil {
 				settings.Notifications = existing.Notifications
@@ -355,7 +361,12 @@ func (s *SettingsService) SaveSettings(tenantID string, settings *TenantSettings
 		}
 	}
 
-	settingsJSON, err = json.Marshal(settings)
+	// Encrypt sensitive fields before saving
+	if err := s.encryptSettings(settings); err != nil {
+		return fmt.Errorf("failed to encrypt settings: %w", err)
+	}
+
+	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}

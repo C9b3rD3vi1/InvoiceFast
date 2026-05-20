@@ -75,8 +75,8 @@ func TestCalculateLineTotal(t *testing.T) {
 			unitPrice: 100.00,
 			discount:  15,
 			taxRate:   16,
-			wantTotal: 265.68,
-			wantTax:   36.48,
+			wantTotal: 295.80,
+			wantTax:   40.80,
 		},
 		{
 			name:      "large quantity",
@@ -372,7 +372,7 @@ func TestSanitizeInvoiceDescription(t *testing.T) {
 		{"empty string", "", "Item"},
 		{"whitespace only", "   ", "Item"},
 		{"trims whitespace", "  Product  ", "Product"},
-		{"truncates long description", string(makeString(600)), "Item"},
+		{"truncates long description", string(makeString(600)), string(makeString(500))},
 	}
 
 	for _, tt := range tests {

@@ -16,7 +16,7 @@ import (
 	"invoicefast/internal/services"
 )
 
-func setupTestService(t *testing.T) (*services.SettingsService, string) {
+func setupTestService(t *testing.T) (*services.SettingsService, *database.DB, string) {
 	if os.Getenv("ENCRYPTION_KEY") == "" {
 		os.Setenv("ENCRYPTION_KEY", "a-very-long-encryption-key-for-testing-123456789012")
 	}
@@ -24,10 +24,10 @@ func setupTestService(t *testing.T) (*services.SettingsService, string) {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	mysqlDB := &database.DB{DB: db}
+	mysqlDB := &database.DB{DB: gdb}
 	err = mysqlDB.Migrate()
 	require.NoError(t, err)
 
@@ -37,11 +37,11 @@ func setupTestService(t *testing.T) (*services.SettingsService, string) {
 	require.NoError(t, err)
 	tenantID := tenant.ID
 
-	return settingsService, tenantID
+	return settingsService, mysqlDB, tenantID
 }
 
 func TestSettingsService_SaveAndGetSettings(t *testing.T) {
-	settingsService, tenantID := setupTestService(t)
+	settingsService, _, tenantID := setupTestService(t)
 
 	settings := &services.TenantSettings{
 		Business: &services.BusinessSettings{
@@ -80,7 +80,7 @@ func TestSettingsService_SaveAndGetSettings(t *testing.T) {
 }
 
 func TestSettingsService_EncryptionDecryption(t *testing.T) {
-	settingsService, tenantID := setupTestService(t)
+	settingsService, db, tenantID := setupTestService(t)
 
 	settings := &services.TenantSettings{
 		Mpesa: &services.MpesaSettings{
@@ -99,18 +99,28 @@ func TestSettingsService_EncryptionDecryption(t *testing.T) {
 	err := settingsService.SaveSettings(tenantID, settings)
 	assert.NoError(t, err)
 
+	// Verify values are encrypted in the database JSON blob
+	var tenant models.Tenant
+	err = db.DB.First(&tenant, "id = ?", tenantID).Error
+	assert.NoError(t, err)
+	assert.Contains(t, tenant.Settings, "consumer_secret")
+	assert.NotContains(t, tenant.Settings, "cs_encrypt_secret")
+	assert.Contains(t, tenant.Settings, "passkey")
+	assert.NotContains(t, tenant.Settings, "passkey_123")
+
+	// GetSettings decrypts then masks secrets for UI display
 	retrieved, err := settingsService.GetSettings(tenantID)
 	assert.NoError(t, err)
 	assert.NotNil(t, retrieved)
 	assert.Equal(t, "ck_encrypt_test", retrieved.Mpesa.ConsumerKey)
-	assert.Equal(t, "cs_encrypt_secret", retrieved.Mpesa.ConsumerSecret)
-	assert.Equal(t, "passkey_123", retrieved.Mpesa.Passkey)
-	assert.Equal(t, "kra_encrypt_key", retrieved.KRA.APIKey)
-	assert.Equal(t, "rsa_private_key", retrieved.KRA.RSAPrivateKey)
+	assert.Equal(t, "********", retrieved.Mpesa.ConsumerSecret)
+	assert.Equal(t, "********", retrieved.Mpesa.Passkey)
+	assert.Equal(t, "********", retrieved.KRA.APIKey)
+	assert.Equal(t, "********", retrieved.KRA.RSAPrivateKey)
 }
 
 func TestSettingsService_MaskSecrets(t *testing.T) {
-	settingsService, _ := setupTestService(t)
+	settingsService, _, _ := setupTestService(t)
 
 	settings := &services.TenantSettings{
 		Mpesa: &services.MpesaSettings{

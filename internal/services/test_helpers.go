@@ -162,21 +162,25 @@ func normalizePhoneNumber(phone string) string {
 		phone = phone[1:]
 	}
 
-	// Handle country codes
-	if strings.HasPrefix(phone, "254") {
-		// Already has country code
-	} else if strings.HasPrefix(phone, "7") || strings.HasPrefix(phone, "1") {
-		// Kenya mobile without country code
-		phone = "254" + phone
-	} else if strings.HasPrefix(phone, "01") {
-		// Kenya mobile with 01X prefix
-		phone = "254" + phone[1:]
-	} else if strings.HasPrefix(phone, "0") {
-		// Other numbers with 0 prefix
-		phone = phone[1:]
+	// Strip leading zeros to normalize
+	phone = strings.TrimLeft(phone, "0")
+
+	if phone == "" {
+		return ""
 	}
 
-	// Add + back for E.164
+	// If starts with known country code (254, 255, 256, 234), keep as-is
+	if strings.HasPrefix(phone, "254") || strings.HasPrefix(phone, "255") ||
+		strings.HasPrefix(phone, "256") || strings.HasPrefix(phone, "234") {
+		return phone
+	}
+
+	// Kenya mobile without country code (7xx or 1xx)
+	if strings.HasPrefix(phone, "7") || strings.HasPrefix(phone, "1") {
+		return "254" + phone
+	}
+
+	// Unknown format — return as-is
 	return phone
 }
 

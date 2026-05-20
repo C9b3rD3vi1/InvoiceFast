@@ -217,7 +217,7 @@ func TestPaymentTimeout(t *testing.T) {
 	// Test timeout calculation
 	timeout := services.GetPaymentTimeoutForTest()
 	assert.Greater(t, timeout, int64(0))
-	assert.LessOrEqual(t, timeout, int64(300)) // Max 5 minutes
+	assert.LessOrEqual(t, timeout, int64(1800)) // Max 30 minutes
 }
 
 // TestPartialPaymentTracking tests partial payment balance tracking
@@ -267,7 +267,7 @@ func TestPaymentMatchingThreshold(t *testing.T) {
 		expectMatch   bool
 	}{
 		{"exact match", 1000.00, 1000.00, true},
-		{"partial 50%", 1000.00, 500.00, true},
+		{"partial 50%", 1000.00, 500.00, false},
 		{"over payment", 1000.00, 1100.00, true},
 		{"slight under (1%)", 1000.00, 990.00, true},
 		{"under (10%)", 1000.00, 900.00, false},

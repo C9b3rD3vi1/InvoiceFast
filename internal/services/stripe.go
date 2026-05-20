@@ -107,13 +107,20 @@ func (s *StripeService) HandleWebhook(payload []byte, signature string) error {
 	return nil
 }
 
+func invoiceIDFromDescription(desc string) string {
+	if len(desc) > 8 && desc[:7] == "Invoice" {
+		return desc[8:]
+	}
+	return desc
+}
+
 func (s *StripeService) handlePaymentSuccess(data interface{}) error {
 	pi, ok := data.(*stripe.PaymentIntent)
 	if !ok {
 		return errors.New("invalid payment intent data")
 	}
 
-	invoiceID := pi.Description
+	invoiceID := invoiceIDFromDescription(pi.Description)
 	if invoiceID == "" {
 		return errors.New("no invoice reference in payment intent")
 	}
@@ -125,16 +132,22 @@ func (s *StripeService) handlePaymentSuccess(data interface{}) error {
 
 	amount := float64(pi.Amount) / 100
 
+	chargeID := ""
+	if pi.Charges != nil && len(pi.Charges.Data) > 0 {
+		chargeID = pi.Charges.Data[0].ID
+	}
+
 	payment := &models.Payment{
-		ID:          pi.ID,
-		TenantID:    invoice.TenantID,
-		UserID:      invoice.UserID,
-		InvoiceID:   invoiceID,
-		Amount:      amount,
-		Currency:    string(pi.Currency),
-		Method:      models.PaymentMethodCard,
-		Status:      models.PaymentStatusCompleted,
-		Reference:   pi.ID,
+		ID:             pi.ID,
+		TenantID:       invoice.TenantID,
+		UserID:         invoice.UserID,
+		InvoiceID:      invoiceID,
+		Amount:         amount,
+		Currency:       string(pi.Currency),
+		Method:         models.PaymentMethodCard,
+		Status:         models.PaymentStatusCompleted,
+		Reference:      pi.ID,
+		StripeChargeID: chargeID,
 	}
 	now := time.Now()
 	payment.CompletedAt = &now
@@ -158,7 +171,7 @@ func (s *StripeService) handlePaymentFailure(data interface{}) error {
 		return errors.New("invalid payment intent data")
 	}
 
-	invoiceID := pi.Description
+	invoiceID := invoiceIDFromDescription(pi.Description)
 	if invoiceID == "" {
 		return nil
 	}
@@ -180,13 +193,20 @@ func (s *StripeService) handleRefund(data interface{}) error {
 		return errors.New("invalid charge data")
 	}
 
-	if ch.Invoice == nil {
+	if ch.Invoice == nil && ch.PaymentIntent == nil {
 		return nil
 	}
 
 	var payment models.Payment
+	// Try matching by StripeChargeID first, then by Reference (payment intent ID)
 	if err := s.db.Where("stripe_charge_id = ?", ch.ID).First(&payment).Error; err != nil {
-		return nil
+		if ch.PaymentIntent != nil {
+			if err := s.db.Where("reference = ?", ch.PaymentIntent).First(&payment).Error; err != nil {
+				return nil
+			}
+		} else {
+			return nil
+		}
 	}
 
 	payment.Status = models.PaymentStatusRefunded
