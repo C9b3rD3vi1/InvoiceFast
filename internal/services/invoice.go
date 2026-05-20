@@ -882,7 +882,7 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 		s.notificationSvc.Send(context.Background(), &NotificationRequest{
 			TenantID:   tenantID,
 			UserID:     userID,
-			EventType:  "invoice.created",
+			EventType:  EventInvoiceCreated,
 			Channels:  []string{ChannelEmail, ChannelWA},
 			Recipient: client.Email,
 			Subject:   "New Invoice " + invoice.InvoiceNumber,
@@ -1058,10 +1058,10 @@ func (s *InvoiceService) sendPaymentNotification(tenantID string, invoice *model
 
 	amount := fmt.Sprintf("%s %.2f", invoice.Currency, payment.Amount)
 	
-	s.notificationSvc.Send(context.Background(), &NotificationRequest{
-		TenantID:   tenantID,
-		UserID:    invoice.UserID,
-		EventType: "payment.received",
+		s.notificationSvc.Send(context.Background(), &NotificationRequest{
+			TenantID:   tenantID,
+			UserID:    invoice.UserID,
+			EventType: EventPaymentReceived,
 		Channels: []string{ChannelEmail, ChannelWA},
 		Recipient: client.Email,
 		Subject:  "Payment Received - " + invoice.InvoiceNumber,

@@ -422,6 +422,7 @@ func main() {
 	passwordResetService := services.NewPasswordResetService(db, cfg, emailService)
 	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService, passwordResetService, db)
 	notificationHandler := handlers.NewNotificationHandler(db)
+	notificationAdminHandler := services.NewNotificationHandler(db, notificationService, cfg)
 
 	// Billing handler
 	billingHandler := handlers.NewBillingHandler(subscriptionService, planService, billingService, stripeService, intasendService, exchangeRateService, db)
@@ -452,7 +453,8 @@ func main() {
 	// Setup all routes - ONLY ONCE
 	setupRoutes(app, cfg, invoiceHandler, clientHandler, settingsHandler, paymentHandler,
 		dashboardHandler, reportHandler, automationHandler, notificationHandler, authService, idempotencySvc,
-		db, publicHandler, authHandler, webhookVerifier, emailService, rateLimiter, billingHandler)
+		db, publicHandler, authHandler, webhookVerifier, emailService, rateLimiter, billingHandler,
+		notificationAdminHandler)
 
 	// Item library routes
 	itemLibraryHandler := handlers.NewItemLibraryHandler(itemLibraryService)
@@ -655,7 +657,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	authService *services.AuthService, idempotencySvc *services.IdempotencyService,
 	db *database.DB, publicHandler *handlers.PublicHandler, authHandler *handlers.AuthHandler,
 	webhookVerifier *middleware.WebhookVerifierMiddleware, emailService *services.EmailService,
-	rateLimiter *middleware.FiberRateLimiter, billingHandler *handlers.BillingHandler) {
+	rateLimiter *middleware.FiberRateLimiter, billingHandler *handlers.BillingHandler,
+	notificationAdminHandler *services.NotificationHandler) {
 
 	teamHandler := handlers.NewTeamHandler(db, authService, emailService)
 
@@ -688,6 +691,7 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.TeamRoutes(app, teamHandler, authService, db)
 	routes.AutomationRoutes(app, db, authService)
 	routes.NotificationRoutes(app, notificationHandler, authService, db)
+	routes.NotificationAdminRoutes(app, notificationAdminHandler, authService, db)
 	routes.BillingRoutes(app, billingHandler, authService, db, webhookVerifier, idempotencySvc)
 
 	// Webhook endpoints (rate limited separately)

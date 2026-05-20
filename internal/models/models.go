@@ -1186,16 +1186,17 @@ type AutomationWorkflow struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
-// TriggerEvent constants
+// TriggerEvent constants (used for workflow automation triggers)
+// NOTE: these are distinct from the notification event constants in services/notification_service.go
 const (
-	EventInvoiceCreated  = "invoice_created"
-	EventInvoiceSent     = "invoice_sent"
-	EventInvoicePaid     = "invoice_paid"
-	EventInvoiceOverdue  = "invoice_overdue"
-	EventPaymentReceived = "payment_received"
-	EventPaymentFailed   = "payment_failed"
-	EventFraudDetected   = "fraud_detected"
-	EventClientAdded     = "client_added"
+	TriggerEventInvoiceCreated  = "invoice_created"
+	TriggerEventInvoiceSent     = "invoice_sent"
+	TriggerEventInvoicePaid     = "invoice_paid"
+	TriggerEventInvoiceOverdue  = "invoice_overdue"
+	TriggerEventPaymentReceived = "payment_received"
+	TriggerEventPaymentFailed   = "payment_failed"
+	TriggerEventFraudDetected   = "fraud_detected"
+	TriggerEventClientAdded     = "client_added"
 )
 
 // WorkflowCondition defines a condition for workflow execution

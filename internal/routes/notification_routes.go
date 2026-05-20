@@ -22,3 +22,28 @@ func NotificationRoutes(app *fiber.App, h *handlers.NotificationHandler, authSer
 
 	return group
 }
+
+// NotificationAdminRoutes configures notification admin endpoints (preferences, templates, logs)
+func NotificationAdminRoutes(app *fiber.App, h *services.NotificationHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+	group := app.Group("/api/v1/tenant/notification-admin")
+	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
+
+	// Preferences
+	group.Get("/preferences", h.GetPreferences)
+	group.Put("/preferences", h.UpdatePreferences)
+
+	// Delivery logs
+	group.Get("/logs", h.GetDeliveryLogs)
+
+	// Templates
+	group.Get("/templates", h.GetTemplates)
+	group.Post("/templates", h.CreateTemplate)
+	group.Put("/templates/:id", h.UpdateTemplate)
+	group.Delete("/templates/:id", h.DeleteTemplate)
+
+	// Queue management
+	group.Post("/retry/:id", h.RetryNotification)
+
+	return group
+}

@@ -53,7 +53,7 @@ func SanitizeString(input string, config SanitizationConfig) string {
 	
 	// 4. Handle HTML
 	if !config.AllowHTML {
-		result = stripHTMLTags(result)
+		result = StripHTMLTags(result)
 		result = html.EscapeString(result)
 	}
 	
@@ -78,7 +78,7 @@ func SanitizeEmail(email string) string {
 	email = removeControlChars(email)
 	
 	// Remove any HTML
-	email = stripHTMLTags(email)
+	email = StripHTMLTags(email)
 	email = html.EscapeString(email)
 	
 	return email
@@ -255,7 +255,7 @@ func SanitizeReference(reference string) string {
 	reference = removeControlChars(reference)
 	
 	// Remove HTML
-	reference = stripHTMLTags(reference)
+	reference = StripHTMLTags(reference)
 	
 	// Limit length
 	if len(reference) > 100 {
@@ -354,7 +354,7 @@ func removeControlChars(s string) string {
 	return result.String()
 }
 
-func stripHTMLTags(s string) string {
+func StripHTMLTags(s string) string {
 	// Remove HTML tags
 	re := regexp.MustCompile(`<[^>]*>`)
 	s = re.ReplaceAllString(s, "")

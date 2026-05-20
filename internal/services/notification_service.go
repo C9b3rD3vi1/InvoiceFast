@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"invoicefast/internal/database"
 	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
+	"invoicefast/internal/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -77,6 +79,9 @@ const (
 	EventPaymentMatched   = "payment.matched"
 	EventPaymentUnmatched = "payment.unmatched"
 
+	EventInvoiceDueSoon = "invoice.due_soon"
+	EventHighValueTransaction = "high_value.transaction"
+
 	EventFraudAlert     = "fraud.alert"
 	EventFailedPayment = "payment.attempts"
 )
@@ -89,10 +94,75 @@ func NewNotificationService(db *database.DB, email *EmailService, sms *SMSServic
 		waSvc:   wa,
 		cfg:     cfg,
 		queueChan: make(chan *QueuedNotification, 1000),
+		workerChan: make(chan struct{}),
 	}
 }
 
+// getTenantNotificationSettings reads tenant-level notification defaults from Tenant.Settings JSON.
+// Used as fallback when no per-user NotificationPreference exists.
+func (s *NotificationService) getTenantNotificationSettings(tenantID string) *NotificationSettings {
+	var tenant models.Tenant
+	if err := s.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
+		return nil
+	}
+	if tenant.Settings == "" {
+		return nil
+	}
+	var settings TenantSettings
+	if err := json.Unmarshal([]byte(tenant.Settings), &settings); err != nil {
+		return nil
+	}
+	return settings.Notifications
+}
+
+// createInAppNotification creates a bell-icon Notification record for the UI.
+func (s *NotificationService) createInAppNotification(tenantID, userID, eventType, recipient, body string) {
+	category, icon := mapEventToInAppCategory(eventType)
+	notification := models.Notification{
+		ID:        uuid.New().String(),
+		TenantID:  tenantID,
+		UserID:    userID,
+		Title:     eventType,
+		Message:   truncateForNotification(body, 255),
+		Category:  category,
+		Icon:      icon,
+		Actor:     "system",
+		Read:      false,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	s.db.Create(&notification)
+}
+
+func mapEventToInAppCategory(eventType string) (string, string) {
+	switch {
+	case strings.HasPrefix(eventType, "invoice.") || strings.HasPrefix(eventType, "credit_note") || strings.HasPrefix(eventType, "debit_note"):
+		return "Invoices", "file-text"
+	case strings.HasPrefix(eventType, "payment.") || strings.HasPrefix(eventType, "refund."):
+		return "Payments", "credit-card"
+	case strings.HasPrefix(eventType, "subscription."):
+		return "System", "settings"
+	case strings.HasPrefix(eventType, "kra."):
+		return "System", "bell"
+	case strings.HasPrefix(eventType, "password.") || strings.HasPrefix(eventType, "login."):
+		return "System", "bell"
+	case strings.HasPrefix(eventType, "fraud.") || strings.HasPrefix(eventType, "high_value."):
+		return "System", "bell"
+	default:
+		return "System", "bell"
+	}
+}
+
+func truncateForNotification(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen]) + "..."
+}
+
 func (s *NotificationService) Start() {
+	// Process in-memory channel (legacy path)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -110,9 +180,91 @@ func (s *NotificationService) Start() {
 				Variables:  item.Variables,
 				Reference:  item.Reference,
 			}
-			s.sendAsync(item.Channel, req)
+			s.sendAsync(item.Channel, req, item.ID)
 		}
 	}()
+
+	// Poll DB queue for pending/retry items
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
+			}
+		}()
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.processQueue()
+			case <-s.workerChan:
+				return
+			}
+		}
+	}()
+}
+
+func (s *NotificationService) Stop() {
+	close(s.workerChan)
+	close(s.queueChan)
+}
+
+// processQueue picks pending queue items from the DB and sends them.
+func (s *NotificationService) processQueue() {
+	var items []models.NotificationQueueItem
+	err := s.db.Where("status = ? AND (scheduled_at IS NULL OR scheduled_at <= ?)", "pending", time.Now()).
+		Order("priority DESC, created_at ASC").Limit(50).Find(&items).Error
+	if err != nil || len(items) == 0 {
+		return
+	}
+
+	for _, item := range items {
+		// Mark as processing
+		s.db.Model(&item).Update("status", "processing")
+
+		vars := make(map[string]string)
+		if item.Variables != "" {
+			json.Unmarshal([]byte(item.Variables), &vars)
+		}
+
+		extID, errMsg, provider := "", "", ""
+		switch item.Channel {
+		case ChannelEmail:
+			extID, errMsg, provider = s.sendEmail(item.Recipient, item.Subject, item.Body, vars)
+		case ChannelSMS:
+			extID, errMsg, provider = s.sendSMS(item.Recipient, item.Body, vars)
+		case ChannelWA:
+			extID, errMsg, provider = s.sendWhatsApp(item.Recipient, item.Body, vars)
+		}
+
+		if errMsg != "" {
+			item.RetryCount++
+			if item.RetryCount >= item.MaxRetries {
+				item.Status = "dead_letter"
+			} else {
+				item.Status = "failed"
+			}
+			item.ErrorMsg = errMsg
+		} else {
+			item.Status = "sent"
+			item.ExternalID = extID
+			item.SentAt = time.Now()
+		}
+
+		// Create delivery log for queue-processed notifications
+		req := &NotificationRequest{
+			TenantID:   item.TenantID,
+			UserID:     item.UserID,
+			EventType:  item.EventType,
+			Recipient:  item.Recipient,
+			Subject:    item.Subject,
+			Body:       item.Body,
+			Reference:  item.Reference,
+		}
+		s.logDelivery(req, item.Channel, provider, extID, errMsg)
+		item.UpdatedAt = time.Now()
+		s.db.Save(&item)
+	}
 }
 
 func (s *NotificationService) Init() error {
@@ -125,9 +277,19 @@ func (s *NotificationService) Init() error {
 
 func (s *NotificationService) Send(ctx context.Context, req *NotificationRequest) error {
 	prefs, _ := s.GetPreferences(ctx, req.TenantID, req.UserID)
+
+	// Fallback: if no per-user preferences exist, use tenant-level defaults
 	if len(prefs) == 0 {
-		req.Channels = []string{ChannelEmail}
+		tenantPrefs := s.getTenantNotificationSettings(req.TenantID)
+		if tenantPrefs != nil {
+			req.Channels = tenantPrefsToChannels(tenantPrefs, req.EventType)
+		} else {
+			req.Channels = []string{ChannelEmail}
+		}
 	}
+
+	// Create in-app notification for the user regardless of channel success
+	s.createInAppNotification(req.TenantID, req.UserID, req.EventType, req.Recipient, req.Body)
 
 	for _, ch := range req.Channels {
 		channelEnabled := true
@@ -153,38 +315,122 @@ func (s *NotificationService) Send(ctx context.Context, req *NotificationRequest
 			continue
 		}
 
-		go s.sendAsync(ch, req)
+		// Persist to queue table for audit trail and retry capability
+		itemID := s.enqueue(req, ch)
+
+		// Send immediately via goroutine
+		go s.sendAsync(ch, req, itemID)
 	}
 	return nil
 }
 
-func (s *NotificationService) sendAsync(channel string, req *NotificationRequest) {
+// tenantPrefsToChannels converts tenant-level NotificationSettings to a channel list
+// for a given event type, based on which channel has the event enabled.
+func tenantPrefsToChannels(settings *NotificationSettings, eventType string) []string {
+	var channels []string
+	for _, ev := range settings.Email {
+		if ev.Key == eventType && ev.Enabled {
+			channels = append(channels, ChannelEmail)
+			break
+		}
+	}
+	for _, ev := range settings.SMS {
+		if ev.Key == eventType && ev.Enabled {
+			channels = append(channels, ChannelSMS)
+			break
+		}
+	}
+	for _, ev := range settings.WhatsApp {
+		if ev.Key == eventType && ev.Enabled {
+			channels = append(channels, ChannelWA)
+			break
+		}
+	}
+	if len(channels) == 0 {
+		channels = []string{ChannelEmail}
+	}
+	return channels
+}
+
+// enqueue persists a notification to the queue table and returns the item ID.
+func (s *NotificationService) enqueue(req *NotificationRequest, channel string) string {
+	varsJSON, _ := json.Marshal(req.Variables)
+
+	item := models.NotificationQueueItem{
+		ID:        uuid.New().String(),
+		TenantID:  req.TenantID,
+		UserID:    req.UserID,
+		EventType: req.EventType,
+		Channel:   channel,
+		Recipient: req.Recipient,
+		Subject:   req.Subject,
+		Body:      req.Body,
+		Variables: string(varsJSON),
+		Reference: req.Reference,
+		Status:    "pending",
+	}
+
+	if err := s.db.Create(&item).Error; err != nil {
+		logger.Get().Error(context.Background(), "failed to enqueue notification", "category", "notification", "error", err)
+	}
+	return item.ID
+}
+
+func (s *NotificationService) sendAsync(channel string, req *NotificationRequest, queueItemID string) {
 	vars := req.Variables
 	if vars == nil {
 		vars = make(map[string]string)
 	}
 
+	// Look up tenant template for this event + channel; override subject/body if found
+	subject, body := req.Subject, req.Body
+	if tmpl := s.GetTemplateByEvent(req.TenantID, req.EventType, channel); tmpl != nil {
+		if tmpl.Subject != "" {
+			subject = tmpl.Subject
+		}
+		if tmpl.Body != "" {
+			body = tmpl.Body
+		}
+	}
+
 	var errMsg string
 	var extID string
+	var provider string
 
 	switch channel {
 	case ChannelEmail:
-		extID, errMsg = s.sendEmail(req.Recipient, req.Subject, req.Body, vars)
+		extID, errMsg, provider = s.sendEmail(req.Recipient, subject, body, vars)
 	case ChannelSMS:
-		extID, errMsg = s.sendSMS(req.Recipient, req.Body, vars)
+		extID, errMsg, provider = s.sendSMS(req.Recipient, body, vars)
 	case ChannelWA:
-		extID, errMsg = s.sendWhatsApp(req.Recipient, req.Body, vars)
+		extID, errMsg, provider = s.sendWhatsApp(req.Recipient, body, vars)
 	}
 
-	s.logDelivery(req, channel, extID, errMsg)
+	s.logDelivery(req, channel, provider, extID, errMsg)
+
+	// Update queue item status if we have one
+	if queueItemID != "" {
+		updates := map[string]interface{}{
+			"updated_at": time.Now(),
+		}
+		if errMsg != "" {
+			updates["status"] = "failed"
+			updates["error_msg"] = errMsg
+		} else {
+			updates["status"] = "sent"
+			updates["external_id"] = extID
+			updates["sent_at"] = time.Now()
+		}
+		s.db.Model(&models.NotificationQueueItem{}).Where("id = ?", queueItemID).Updates(updates)
+	}
 }
 
-func (s *NotificationService) sendEmail(to, subject, body string, vars map[string]string) (string, string) {
+func (s *NotificationService) sendEmail(to, subject, body string, vars map[string]string) (string, string, string) {
 	body = s.processTemplate(body, vars)
 	subject = s.processTemplate(subject, vars)
 
 	if s.emailSvc == nil {
-		return "", "email service not configured"
+		return "", "email service not configured", ""
 	}
 
 	infoName, infoEmail := s.emailSvc.sender("info")
@@ -198,40 +444,41 @@ func (s *NotificationService) sendEmail(to, subject, body string, vars map[strin
 	})
 
 	if err != nil {
-		return "", err.Error()
+		return "", err.Error(), ""
 	}
-	return "sent", ""
+	return "sent", "", "smtp"
 }
 
-func (s *NotificationService) sendSMS(to, body string, vars map[string]string) (string, string) {
+func (s *NotificationService) sendSMS(to, body string, vars map[string]string) (string, string, string) {
 	body = s.processTemplate(body, vars)
 
 	if s.smsSvc == nil {
-		return "", "SMS service not configured"
+		return "", "SMS service not configured", ""
 	}
 
 	err := s.smsSvc.Send(to, body)
 	if err != nil {
-		return "", err.Error()
+		return "", err.Error(), ""
 	}
-	return "sent", ""
+	return "sent", "", "africastalking"
 }
 
-func (s *NotificationService) sendWhatsApp(to, body string, vars map[string]string) (string, string) {
+func (s *NotificationService) sendWhatsApp(to, body string, vars map[string]string) (string, string, string) {
 	body = s.processTemplate(body, vars)
 
 	if s.waSvc == nil {
-		return "", "WhatsApp service not configured"
+		return "", "WhatsApp service not configured", ""
 	}
 
 	result := s.waSvc.Send(to, body)
-	if !result.Sent && result.URL == "" {
-		return "", "WhatsApp send failed"
+	if result.Sent {
+		return "sent", "", "metas"
 	}
 	if result.URL != "" {
-		return "", "WhatsApp not configured - use wa.me link"
+		// Fallback to wa.me link — return the URL as external ID so caller can use it
+		return result.URL, "", "metas"
 	}
-	return "sent", ""
+	return "", "WhatsApp send failed", ""
 }
 
 func (s *NotificationService) processTemplate(template string, vars map[string]string) string {
@@ -242,7 +489,7 @@ func (s *NotificationService) processTemplate(template string, vars map[string]s
 	return result
 }
 
-func (s *NotificationService) logDelivery(req *NotificationRequest, channel, extID, errMsg string) {
+func (s *NotificationService) logDelivery(req *NotificationRequest, channel, provider, extID, errMsg string) {
 	status := "sent"
 	if errMsg != "" {
 		status = "failed"
@@ -253,8 +500,10 @@ func (s *NotificationService) logDelivery(req *NotificationRequest, channel, ext
 		TenantID:  req.TenantID,
 		UserID:   req.UserID,
 		Type:     channel,
+		Provider: provider,
 		To:       req.Recipient,
 		Status:   status,
+		ExternalID: extID,
 		ErrorMsg: errMsg,
 		SentAt:   time.Now(),
 	}
@@ -275,6 +524,17 @@ func (s *NotificationService) GetPreferences(ctx context.Context, tenantID, user
 }
 
 func (s *NotificationService) SetPreference(ctx context.Context, pref *models.NotificationPreference) error {
+	var existing models.NotificationPreference
+	err := s.db.Where("tenant_id = ? AND user_id = ? AND event_type = ?",
+		pref.TenantID, pref.UserID, pref.EventType).First(&existing).Error
+
+	if err == nil {
+		pref.ID = existing.ID
+		pref.CreatedAt = existing.CreatedAt
+		pref.UpdatedAt = time.Now()
+		return s.db.Save(pref).Error
+	}
+
 	pref.ID = uuid.New().String()
 	pref.CreatedAt = time.Now()
 	pref.UpdatedAt = time.Now()
@@ -329,22 +589,40 @@ func (s *NotificationService) RetryFailed(limit int) error {
 	return nil
 }
 
-func (s *NotificationService) isQuietHours(tenantID, userID string) bool {
-	var pref models.NotificationPreference
-	err := s.db.Where("tenant_id = ? AND user_id = ? AND is_enabled = ?", tenantID, userID, true).First(&pref).Error
+// GetTemplateByEvent finds the active template for a given tenant, event type, and channel.
+func (s *NotificationService) GetTemplateByEvent(tenantID, eventType, channel string) *models.NotificationTemplate {
+	var t models.NotificationTemplate
+	err := s.db.Where("tenant_id = ? AND event_type = ? AND channel = ? AND is_active = ?",
+		tenantID, eventType, channel, true).First(&t).Error
 	if err != nil {
-		return false
+		return nil
 	}
+	return &t
+}
 
-	if pref.QuietHoursStart == "" || pref.QuietHoursEnd == "" {
+func (s *NotificationService) isQuietHours(tenantID, userID string) bool {
+	var prefs []models.NotificationPreference
+	err := s.db.Where("tenant_id = ? AND user_id = ? AND is_enabled = ?", tenantID, userID, true).Find(&prefs).Error
+	if err != nil || len(prefs) == 0 {
 		return false
 	}
 
 	currentTime := time.Now().Format("15:04")
-	if pref.QuietHoursStart > pref.QuietHoursEnd {
-		return currentTime >= pref.QuietHoursStart || currentTime < pref.QuietHoursEnd
+	for _, pref := range prefs {
+		if pref.QuietHoursStart == "" || pref.QuietHoursEnd == "" {
+			continue
+		}
+		if pref.QuietHoursStart > pref.QuietHoursEnd {
+			if currentTime >= pref.QuietHoursStart || currentTime < pref.QuietHoursEnd {
+				return true
+			}
+		} else {
+			if currentTime >= pref.QuietHoursStart && currentTime < pref.QuietHoursEnd {
+				return true
+			}
+		}
 	}
-	return currentTime >= pref.QuietHoursStart && currentTime < pref.QuietHoursEnd
+	return false
 }
 
 type NotificationRequest struct {
@@ -512,8 +790,7 @@ func (h *NotificationHandler) RetryNotification(c *fiber.Ctx) error {
 }
 
 func stripHTML(s string) string {
-	re := strings.NewReplacer("<br>", "\n", "<br>", "\n", "<p>", "", "</p>", "", "<span>", "", "</span>", "")
-	return re.Replace(s)
+	return utils.StripHTMLTags(s)
 }
 
 func (s *NotificationService) SendFraudAlert(tenantID, userID string, details map[string]string) error {
@@ -587,7 +864,7 @@ func (s *NotificationService) SendHighValueAlert(tenantID, userID, amount, refer
 		req := &NotificationRequest{
 			TenantID:   tenantID,
 			UserID:    admin.ID,
-			EventType: "high_value.transaction",
+			EventType: EventHighValueTransaction,
 			Channels:  []string{ChannelEmail, ChannelSMS},
 			Body:      "High value transaction: " + amount + " Ref: " + reference,
 			Variables: details,

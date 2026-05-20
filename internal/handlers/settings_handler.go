@@ -189,7 +189,7 @@ func (h *SettingsHandler) SaveSettings(c *fiber.Ctx) error {
 			}
 		}
 		if whatsappEnabled, ok := notifications["whatsapp"].(bool); ok {
-			settings.Notifications.Slack = []services.NotificationEvent{
+			settings.Notifications.WhatsApp = []services.NotificationEvent{
 				{Key: "invoice_created", Label: "Invoice Created", Enabled: whatsappEnabled},
 				{Key: "payment_received", Label: "Payment Received", Enabled: whatsappEnabled},
 			}

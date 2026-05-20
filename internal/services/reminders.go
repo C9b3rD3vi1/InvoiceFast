@@ -138,7 +138,7 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 		s.notificationSvc.Send(context.Background(), &NotificationRequest{
 			TenantID:   tenantID,
 			UserID:    invoice.UserID,
-			EventType: "invoice.due_soon",
+			EventType: EventInvoiceDueSoon,
 			Channels:  []string{ChannelEmail, ChannelWA},
 			Recipient: client.Email,
 			Subject:  "Invoice Due Soon - " + invoice.InvoiceNumber,
@@ -223,7 +223,7 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 		s.notificationSvc.Send(context.Background(), &NotificationRequest{
 			TenantID:   tenantID,
 			UserID:    invoice.UserID,
-			EventType: "invoice.overdue",
+			EventType: EventInvoiceOverdue,
 			Channels:  []string{ChannelEmail, ChannelWA},
 			Recipient: client.Email,
 			Subject:  fmt.Sprintf("Invoice Overdue - %s (%d days)", invoice.InvoiceNumber, daysOverdue),

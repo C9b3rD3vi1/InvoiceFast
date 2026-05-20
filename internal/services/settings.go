@@ -88,10 +88,11 @@ type PaymentSettings struct {
 }
 
 type NotificationSettings struct {
-	Email   []NotificationEvent `json:"email"`
-	SMS     []NotificationEvent `json:"sms"`
-	Slack   []NotificationEvent `json:"slack"`
-	Webhook []NotificationEvent `json:"webhook"`
+	Email    []NotificationEvent `json:"email"`
+	SMS      []NotificationEvent `json:"sms"`
+	Slack    []NotificationEvent `json:"slack"`
+	WhatsApp []NotificationEvent `json:"whatsapp"`
+	Webhook  []NotificationEvent `json:"webhook"`
 }
 
 type NotificationEvent struct {
