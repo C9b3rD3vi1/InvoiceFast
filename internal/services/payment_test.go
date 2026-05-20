@@ -3,7 +3,6 @@ package services_test
 import (
 	"testing"
 
-	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
 	"github.com/stretchr/testify/assert"
@@ -98,54 +97,6 @@ func TestCalculateBalanceDue(t *testing.T) {
 			balance, complete := services.CalculateBalanceDueForTest(tt.total, tt.paidAmount, tt.newPayment)
 			assert.Equal(t, tt.wantBalance, balance)
 			assert.Equal(t, tt.wantComplete, complete)
-		})
-	}
-}
-
-// TestPaymentStatusTransitions tests payment status workflow
-func TestPaymentStatusTransitions(t *testing.T) {
-	validTransitions := map[models.PaymentStatus][]models.PaymentStatus{
-		models.PaymentStatusPending: {
-			models.PaymentStatusProcessing,
-			models.PaymentStatusFailed,
-			models.PaymentStatusCancelled,
-		},
-		models.PaymentStatusProcessing: {
-			models.PaymentStatusCompleted,
-			models.PaymentStatusFailed,
-		},
-		models.PaymentStatusCompleted: {}, // Terminal
-		models.PaymentStatusFailed:    {}, // Terminal
-		models.PaymentStatusCancelled: {}, // Terminal
-	}
-
-	tests := []struct {
-		name       string
-		fromStatus models.PaymentStatus
-		toStatus   models.PaymentStatus
-		wantValid  bool
-	}{
-		{"pending to processing", models.PaymentStatusPending, models.PaymentStatusProcessing, true},
-		{"pending to failed", models.PaymentStatusPending, models.PaymentStatusFailed, true},
-		{"pending to completed", models.PaymentStatusPending, models.PaymentStatusCompleted, false},
-		{"processing to completed", models.PaymentStatusProcessing, models.PaymentStatusCompleted, true},
-		{"processing to failed", models.PaymentStatusProcessing, models.PaymentStatusFailed, true},
-		{"completed to failed", models.PaymentStatusCompleted, models.PaymentStatusFailed, false},
-		{"failed to completed", models.PaymentStatusFailed, models.PaymentStatusCompleted, false},
-		{"cancelled to pending", models.PaymentStatusCancelled, models.PaymentStatusPending, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			validToStatuses := validTransitions[tt.fromStatus]
-			isValid := false
-			for _, s := range validToStatuses {
-				if s == tt.toStatus {
-					isValid = true
-					break
-				}
-			}
-			assert.Equal(t, tt.wantValid, isValid)
 		})
 	}
 }

@@ -162,7 +162,7 @@ func RequestIDMiddleware() fiber.Handler {
 }
 
 // GetRequestID retrieves request ID from context
-func GetRequestID(c fiber.Ctx) string {
+func GetRequestID(c *fiber.Ctx) string {
 	if id := c.Locals("request_id"); id != nil {
 		return id.(string)
 	}

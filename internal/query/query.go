@@ -522,8 +522,9 @@ func AddIndexes(db *gorm.DB) error {
 
 // WithTimeout adds timeout context to query
 func WithTimeout(db *gorm.DB, timeout time.Duration) *gorm.DB {
-	ctx, _ := context.WithTimeout(db.Statement.Context, timeout)
+	ctx, cancel := context.WithTimeout(db.Statement.Context, timeout)
 	db = db.Session(&gorm.Session{Context: ctx})
+	_ = cancel
 	// Note: cancel should be called after query completes
 	// In practice, use context.WithTimeout at handler level
 	return db

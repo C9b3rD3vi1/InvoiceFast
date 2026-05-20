@@ -112,7 +112,6 @@ func TestCalculateLineTotal(t *testing.T) {
 			item := services.InvoiceItemRequest{
 				Quantity:     tt.quantity,
 				UnitPrice:    tt.unitPrice,
-				Discount:     tt.discount,
 				DiscountRate: tt.discount,
 				TaxRate:      tt.taxRate,
 			}
@@ -137,7 +136,7 @@ func TestCalculateInvoiceTotal(t *testing.T) {
 			items: []services.InvoiceItemRequest{
 				{Description: "Item 1", Quantity: 2, UnitPrice: 100.00, TaxRate: 16},
 				{Description: "Item 2", Quantity: 1, UnitPrice: 50.00, TaxRate: 0},
-				{Description: "Item 3", Quantity: 3, UnitPrice: 25.00, TaxRate: 16, Discount: 10},
+				{Description: "Item 3", Quantity: 3, UnitPrice: 25.00, TaxRate: 16, DiscountRate: 10},
 			},
 			wantSubtotal: 317.50,
 			wantTax:      42.80,
@@ -174,7 +173,7 @@ func TestCalculateInvoiceTotal(t *testing.T) {
 		{
 			name: "mixed tax with large discount",
 			items: []services.InvoiceItemRequest{
-				{Description: "Item 1", Quantity: 10, UnitPrice: 100.00, TaxRate: 16, Discount: 50},
+				{Description: "Item 1", Quantity: 10, UnitPrice: 100.00, TaxRate: 16, DiscountRate: 50},
 			},
 			wantSubtotal: 500.00,
 			wantTax:      80.00,
@@ -584,7 +583,7 @@ func BenchmarkCalculateInvoiceTotal(b *testing.B) {
 	items := []services.InvoiceItemRequest{
 		{Quantity: 2, UnitPrice: 100.00, TaxRate: 16},
 		{Quantity: 1, UnitPrice: 50.00, TaxRate: 0},
-		{Quantity: 3, UnitPrice: 25.00, TaxRate: 16, Discount: 10},
+		{Quantity: 3, UnitPrice: 25.00, TaxRate: 16, DiscountRate: 10},
 	}
 
 	b.ResetTimer()

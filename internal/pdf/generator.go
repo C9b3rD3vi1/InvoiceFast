@@ -598,7 +598,6 @@ func (p *PDFGenerator) renderDefaultInvoiceHTML(data *InvoiceData) string {
 		brandColor,
 		brandColor,
 		brandColor,
-		brandColor,
 		data.CompanyName,
 		data.CompanyEmail,
 		data.CompanyPhone,

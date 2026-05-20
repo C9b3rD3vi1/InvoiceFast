@@ -239,7 +239,7 @@ func main() {
 
 	// Intasend service for STK Push
 	var intasendService *services.IntasendService
-	if cfg.Intasend.SecretKey != "" && cfg.Intasend.APIURL != "" {
+	if cfg.Intasend.APIKey != "" && cfg.Intasend.APIURL != "" {
 		intasendService = services.NewIntasendServiceWithDB(db, &cfg.Intasend, notificationService)
 	}
 

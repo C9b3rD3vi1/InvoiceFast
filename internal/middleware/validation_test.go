@@ -5,14 +5,11 @@ import (
 
 	"invoicefast/internal/middleware"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestValidateEmail tests email validation
 func TestValidateEmail(t *testing.T) {
-	app := fiber.New()
-
 	tests := []struct {
 		name  string
 		email string
@@ -41,10 +38,6 @@ func TestValidateEmail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Use the validation middleware
-			c := app.AcquireCtx()
-			defer app.ReleaseCtx(c)
-
 			err := middleware.ValidateEmail(tt.email)
 			if tt.valid {
 				assert.NoError(t, err)
@@ -57,7 +50,6 @@ func TestValidateEmail(t *testing.T) {
 
 // TestValidatePhone tests phone validation
 func TestValidatePhone(t *testing.T) {
-	app := fiber.New()
 
 	tests := []struct {
 		name  string
@@ -92,9 +84,6 @@ func TestValidatePhone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := app.AcquireCtx()
-			defer app.ReleaseCtx(c)
-
 			err := middleware.ValidatePhone(tt.phone)
 			if tt.valid {
 				assert.NoError(t, err)
@@ -107,8 +96,6 @@ func TestValidatePhone(t *testing.T) {
 
 // TestValidateUUID tests UUID validation
 func TestValidateUUID(t *testing.T) {
-	app := fiber.New()
-
 	tests := []struct {
 		name  string
 		uuid  string
@@ -125,9 +112,6 @@ func TestValidateUUID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := app.AcquireCtx()
-			defer app.ReleaseCtx(c)
-
 			err := middleware.ValidateUUID(tt.uuid)
 			if tt.valid {
 				assert.NoError(t, err)
