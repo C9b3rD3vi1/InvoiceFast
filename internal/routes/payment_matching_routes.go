@@ -10,7 +10,7 @@ import (
 )
 
 func PaymentMatchingRoutes(app *fiber.App, h *handlers.PaymentMatchingHandler, authService *services.AuthService, db *database.DB) fiber.Router {
-	group := app.Group("/api/v1/tenant/payments")
+	group := app.Group("/api/v1/tenant/payments/matching")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 

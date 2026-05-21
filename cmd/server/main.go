@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -62,6 +63,7 @@ func main() {
 
 	// Graceful shutdown channel
 	stopCh := make(chan struct{})
+	var wg sync.WaitGroup
 
 	// Initialize Redis if configured
 	var redisCache *cache.RedisCache
@@ -106,7 +108,7 @@ func main() {
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
-		ErrorHandler: customErrorHandler,
+		ErrorHandler: middleware.ErrorHandler(logSvc),
 		Views:        engine,
 	})
 
@@ -122,7 +124,9 @@ func main() {
 	app.Use(middleware.LoggingMiddleware(logSvc))
 
 	// SECURITY: CSRF protection for state-changing requests
-	app.Use(middleware.CSRF())
+	csrfHandler, csrfStop := middleware.NewCSRFMiddleware()
+	defer csrfStop()
+	app.Use(csrfHandler)
 
 	// Prometheus metrics collection
 	app.Use(metrics.PrometheusMiddleware())
@@ -175,7 +179,6 @@ func main() {
 
 	// SMS service for critical alerts (Africa's Talking)
 	smsService := services.NewSMSService(&cfg.SMS)
-	_ = smsService // Used by reminder service for SMS fallback
 
 	// Audit service for comprehensive logging
 	auditService := services.NewAuditService(db)
@@ -260,7 +263,9 @@ func main() {
 	})
 
 	// Start reminder cron job
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				logSvc.Error(context.Background(), "panic recovered", "goroutine", "reminder_cron", "recover", r)
@@ -286,7 +291,9 @@ func main() {
 	}()
 
 	// KRA retry queue processor
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				logSvc.Error(context.Background(), "panic recovered", "goroutine", "kra_retry_queue", "recover", r)
@@ -308,7 +315,9 @@ func main() {
 	}()
 
 	// Automation scheduler - runs every minute to check for triggers
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				logSvc.Error(context.Background(), "panic recovered", "goroutine", "automation_scheduler", "recover", r)
@@ -368,7 +377,9 @@ func main() {
 	billingWorker := worker.NewBillingWorker(db, subscriptionService, billingService)
 
 	// Start billing cron job (runs every hour)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				logSvc.Error(context.Background(), "panic recovered", "goroutine", "billing_cron", "recover", r)
@@ -390,7 +401,9 @@ func main() {
 	}()
 
 	// Overdue invoice cron job (runs every 30 minutes)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				logSvc.Error(context.Background(), "panic recovered", "goroutine", "overdue_cron", "recover", r)
@@ -416,7 +429,7 @@ func main() {
 	// Initialize PDF service
 	pdfService := &services.PDFService{}
 
-	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService, pdfWorker, settingsService)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, emailService, whatsappService, pdfWorker, settingsService)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db, thankYouService)
@@ -463,7 +476,7 @@ func main() {
 
 	// Item library routes
 	itemLibraryHandler := handlers.NewItemLibraryHandler(itemLibraryService)
-	routes.ItemLibraryRoutes(app, itemLibraryHandler, authService, db)
+	routes.ItemLibraryRoutes(app, itemLibraryHandler, authService, db, subMiddleware)
 
 	// Recurring invoice routes
 	recurringInvoiceHandler := handlers.NewRecurringInvoiceHandler(recurringInvoiceService)
@@ -473,7 +486,7 @@ func main() {
 	routes.LateFeeRoutes(app, lateFeeHandler, authService, db)
 
 	// Expense routes
-	routes.ExpenseRoutes(app, expenseHandler, authService, db)
+	routes.ExpenseRoutes(app, expenseHandler, authService, db, subMiddleware)
 
 	// Bulk action routes
 	bulkActionHandler := handlers.NewBulkActionHandler(legacyReminderService)
@@ -488,7 +501,9 @@ func main() {
 	discrepancyService := services.NewPaymentDiscrepancyService(db, emailService)
 
 	// Payment discrepancy check cron job (every 15 minutes)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				logSvc.Error(context.Background(), "panic recovered", "goroutine", "discrepancy_check", "recover", r)
@@ -525,7 +540,7 @@ func main() {
 	// Reminder sequence routes
 	reminderSequenceService := services.NewReminderSequenceService(db, emailService)
 	reminderSequenceHandler := handlers.NewReminderSequenceHandler(reminderSequenceService)
-	routes.ReminderSequenceRoutes(app, reminderSequenceHandler, authService, db)
+	routes.ReminderSequenceRoutes(app, reminderSequenceHandler, authService, db, subMiddleware)
 
 	// Integration routes
 	routes.IntegrationRoutes(app, integrationHandler, authService, db)
@@ -644,39 +659,29 @@ func main() {
 
 	logSvc.Info(context.Background(), "Shutting down")
 	close(stopCh)
-	exchangeRateService.Stop()
-	notificationService.Stop()
+
+	// Stop accepting new HTTP connections first
 	if err := app.ShutdownWithTimeout(30 * time.Second); err != nil {
 		logSvc.Warn(context.Background(), "Shutdown error", "error", err.Error())
 	}
+
+	// Stop background services
+	exchangeRateService.Stop()
+	notificationService.Stop()
+
+	// Wait for all goroutines to finish (with timeout)
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		logSvc.Info(context.Background(), "All goroutines completed")
+	case <-time.After(10 * time.Second):
+		logSvc.Warn(context.Background(), "Timed out waiting for goroutines")
+	}
 	logSvc.Info(context.Background(), "Server exited")
-}
-
-func customErrorHandler(c *fiber.Ctx, err error) error {
-	code := fiber.StatusInternalServerError
-	if e, ok := err.(*fiber.Error); ok {
-		code = e.Code
-	}
-
-	appLogger.Get().Error(context.Background(), "Unhandled error", "method", c.Method(), "path", c.Path(), "error", err.Error())
-
-	message := "An unexpected error occurred"
-	if code >= 400 && code < 500 {
-		message = "The request could not be processed"
-	}
-
-	// JSON error for API routes
-	if strings.HasPrefix(c.Path(), "/api/") {
-		return c.Status(code).JSON(fiber.Map{
-			"error": message,
-		})
-	}
-
-	// HTML error for web routes
-	return c.Status(code).Render("error", fiber.Map{
-		"Status": code,
-		"Error":  message,
-	})
 }
 
 func setupRoutes(app *fiber.App, cfg *config.Config,
@@ -710,9 +715,10 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.PublicAuthRoutes(app, publicHandler)
 
 	// Protected tenant routes (require authentication)
+	subMiddleware := middleware.NewSubscriptionMiddleware(subscriptionService)
 	routes.TenantRoutes(app, authHandler, authService, db)
-	routes.InvoiceRoutes(app, invoiceHandler, authService, db)
-	routes.ClientRoutes(app, clientHandler, authService, db)
+	routes.InvoiceRoutes(app, invoiceHandler, authService, db, subMiddleware)
+	routes.ClientRoutes(app, clientHandler, authService, db, subMiddleware)
 	routes.SettingsRoutes(app, settingsHandler, authService, db)
 	routes.DashboardRoutes(app, dashboardHandler, authService, db)
 	routes.PaymentRoutes(app, paymentHandler, idempotencySvc, webhookVerifier, rateLimiter)

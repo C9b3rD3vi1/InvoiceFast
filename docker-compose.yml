@@ -10,18 +10,35 @@ services:
       - "${PORT:-8082}:8082"
     environment:
       - PORT=8082
+      - APP_ENV=${APP_ENV:-production}
+      # Database
       - DB_DRIVER=${DB_DRIVER:-sqlite3}
       - DB_DSN=/app/data/invoicefast.db
+      # Security (CRITICAL - must be set)
       - JWT_SECRET=${JWT_SECRET}
-      - APP_ENV=${APP_ENV:-production}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      # INTASEND
       - INTASEND_PUBLISHABLE_KEY=${INTASEND_PUBLISHABLE_KEY}
       - INTASEND_SECRET_KEY=${INTASEND_SECRET_KEY}
       - INTASEND_API_URL=${INTASEND_API_URL:-https://sandbox.intasend.com}
+      - INTASEND_WEBHOOK_SECRET=${INTASEND_WEBHOOK_SECRET}
+      # Email
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - FROM_EMAIL=${FROM_EMAIL}
+      # M-Pesa
+      - MPESA_ENABLED=${MPESA_ENABLED:-false}
+      - MPESA_CONSUMER_KEY=${MPESA_CONSUMER_KEY}
+      - MPESA_CONSUMER_SECRET=${MPESA_CONSUMER_SECRET}
+      - MPESA_BUSINESS_SHORT_CODE=${MPESA_BUSINESS_SHORT_CODE}
+      - MPESA_PASS_KEY=${MPESA_PASS_KEY}
+      - MPESA_CALLBACK_URL=${MPESA_CALLBACK_URL}
+      - MPESA_ENVIRONMENT=${MPESA_ENVIRONMENT:-sandbox}
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      # Callbacks
       - CALLBACK_URL=${CALLBACK_URL}
     volumes:
       - invoicefast_data:/app/data
@@ -32,6 +49,11 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   # Optional: PostgreSQL (for production)
   postgres:

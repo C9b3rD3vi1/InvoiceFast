@@ -9,12 +9,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *services.AuthService, db *database.DB, subMiddleware *middleware.SubscriptionMiddleware) fiber.Router {
 	group := app.Group("/api/v1/tenant/invoices")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 
-	group.Post("/", h.CreateInvoice)
+	group.Post("/", subMiddleware.EnforceLimits("invoices"), h.CreateInvoice)
 	group.Get("/", h.GetInvoices)
 
 	// STATIC ROUTES FIRST
@@ -46,6 +46,7 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 	group.Post("/kra/submit-all", h.SubmitAllPendingToKRA)
 
 	group.Post("/:id/payments", h.RecordPayment)
+	group.Post("/:id/cancel", h.CancelInvoice)
 
 	// Credit/Debit Note routes
 	group.Post("/:id/credit-note", h.CreateCreditNote)
@@ -55,12 +56,12 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 }
 
 // ClientRoutes configures /api/v1/tenant/clients endpoints
-func ClientRoutes(app fiber.Router, h *handlers.ClientHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+func ClientRoutes(app fiber.Router, h *handlers.ClientHandler, authService *services.AuthService, db *database.DB, subMiddleware *middleware.SubscriptionMiddleware) fiber.Router {
 	group := app.Group("/api/v1/tenant/clients")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 
-	group.Post("/", h.CreateClient)
+	group.Post("/", subMiddleware.EnforceLimits("clients"), h.CreateClient)
 	group.Get("/", h.GetClients)
 	group.Get("/stats", h.GetDashboardStats)
 

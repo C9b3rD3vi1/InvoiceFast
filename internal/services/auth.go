@@ -959,7 +959,11 @@ func (s *AuthService) SetupTwoFactor(tenantID, userID string) (*TwoFactorSetup, 
 
 	backupCodes := generateBackupCodes(8)
 
-	user.TwoFactorSecret = s.encryptSecret(key.Secret())
+	encrypted, err := s.encryptSecret(key.Secret())
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt 2FA secret: %w", err)
+	}
+	user.TwoFactorSecret = encrypted
 	if err := s.db.Save(user).Error; err != nil {
 		return nil, fmt.Errorf("failed to save 2FA secret: %w", err)
 	}
@@ -986,7 +990,10 @@ func (s *AuthService) VerifyAndEnableTwoFactor(tenantID, userID, code string) er
 		return errors.New("please set up 2FA first")
 	}
 
-	secret := s.decryptSecret(user.TwoFactorSecret)
+	secret, err := s.decryptSecret(user.TwoFactorSecret)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt 2FA secret: %w", err)
+	}
 	if !validateTOTP(secret, code) {
 		return errors.New("invalid verification code")
 	}
@@ -996,7 +1003,11 @@ func (s *AuthService) VerifyAndEnableTwoFactor(tenantID, userID, code string) er
 	user.TwoFactorVerifiedAt = &now
 
 	backupCodes := generateBackupCodes(10)
-	user.TwoFactorSecret = s.encryptSecret(secret + "|" + strings.Join(backupCodes, ","))
+	encrypted, err := s.encryptSecret(secret + "|" + strings.Join(backupCodes, ","))
+	if err != nil {
+		return fmt.Errorf("failed to encrypt backup codes: %w", err)
+	}
+	user.TwoFactorSecret = encrypted
 
 	if err := s.db.Save(user).Error; err != nil {
 		return fmt.Errorf("failed to enable 2FA: %w", err)
@@ -1023,8 +1034,11 @@ func (s *AuthService) DisableTwoFactor(tenantID, userID, password, code string) 
 		return ErrWrongPassword
 	}
 
-	secret := s.decryptSecret(user.TwoFactorSecret)
-	parts := strings.Split(secret, "|")
+	decrypted, err := s.decryptSecret(user.TwoFactorSecret)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt 2FA secret: %w", err)
+	}
+	parts := strings.Split(decrypted, "|")
 	if len(parts) > 1 {
 		backupCodes := strings.Split(parts[1], ",")
 		for _, bc := range backupCodes {
@@ -1034,7 +1048,7 @@ func (s *AuthService) DisableTwoFactor(tenantID, userID, password, code string) 
 		}
 	}
 
-	if !validateTOTP(secret, code) {
+	if !validateTOTP(decrypted, code) {
 		return errors.New("invalid verification code")
 	}
 
@@ -1143,54 +1157,60 @@ func validateTOTP(secret, code string) bool {
 	return totp.Validate(code, plainSecret)
 }
 
-func (s *AuthService) encryptSecret(plaintext string) string {
-	if s.cfg == nil || plaintext == "" {
-		return plaintext
+func (s *AuthService) encryptSecret(plaintext string) (string, error) {
+	if s.cfg == nil {
+		return "", fmt.Errorf("encryption config is nil")
+	}
+	if plaintext == "" {
+		return "", fmt.Errorf("cannot encrypt empty value")
 	}
 	key := deriveEncryptionKey(s.cfg.JWT.Secret)
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 	aesGCM, err := cipher.NewGCM(block)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 	nonce := make([]byte, aesGCM.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return ""
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
 	ciphertext := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-func (s *AuthService) decryptSecret(encoded string) string {
-	if s.cfg == nil || encoded == "" {
-		return encoded
+func (s *AuthService) decryptSecret(encoded string) (string, error) {
+	if s.cfg == nil {
+		return "", fmt.Errorf("encryption config is nil")
+	}
+	if encoded == "" {
+		return "", fmt.Errorf("cannot decrypt empty value")
 	}
 	data, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("base64 decode failed: %w", err)
 	}
 	key := deriveEncryptionKey(s.cfg.JWT.Secret)
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 	aesGCM, err := cipher.NewGCM(block)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 	nonceSize := aesGCM.NonceSize()
 	if len(data) < nonceSize {
-		return ""
+		return "", fmt.Errorf("ciphertext too short")
 	}
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
 	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("decryption failed: %w", err)
 	}
-	return string(plaintext)
+	return string(plaintext), nil
 }
 
 func deriveEncryptionKey(secret string) []byte {
@@ -1371,4 +1391,14 @@ func (s *AuthService) VerifyEmailCode(userID, code string) error {
 	}
 
 	return nil
+}
+
+// Test-only helpers
+
+func (s *AuthService) EncryptSecretForTest(plaintext string) (string, error) {
+	return s.encryptSecret(plaintext)
+}
+
+func (s *AuthService) DecryptSecretForTest(encoded string) (string, error) {
+	return s.decryptSecret(encoded)
 }

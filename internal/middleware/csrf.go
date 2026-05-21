@@ -9,6 +9,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// CSRFConfig holds CSRF protection configuration.
+// The zero value creates a default configuration.
 type CSRFConfig struct {
 	TokenLookup    string        `json:"token_lookup"`
 	CookieName     string        `json:"cookie_name"`
@@ -93,10 +95,30 @@ func DefaultCSRFConfig() CSRFConfig {
 	}
 }
 
+// NewCSRFMiddleware creates a CSRF middleware handler and returns it along with
+// a stop function that should be called on graceful shutdown to stop the
+// background cleanup goroutine.
+func NewCSRFMiddleware() (fiber.Handler, func()) {
+	config := DefaultCSRFConfig()
+	config.store.StartCleanup(10*time.Minute, config.stopCleanup)
+
+	return csrfHandler(config), func() {
+		close(config.stopCleanup)
+	}
+}
+
+// CSRF creates a CSRF middleware handler using default configuration.
+// Note: The background cleanup goroutine started by this function will not
+// be stopped cleanly on shutdown. Use NewCSRFMiddleware() instead for
+// proper lifecycle management.
 func CSRF() fiber.Handler {
 	config := DefaultCSRFConfig()
 	config.store.StartCleanup(10*time.Minute, config.stopCleanup)
 
+	return csrfHandler(config)
+}
+
+func csrfHandler(config CSRFConfig) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Skip safe methods (GET, HEAD, OPTIONS)
 		if c.Method() == "GET" || c.Method() == "HEAD" || c.Method() == "OPTIONS" {
@@ -146,8 +168,8 @@ func CSRF() fiber.Handler {
 			})
 		}
 
-		// Validate: must match stored token exactly
-		if config.store.Get(requestToken) == nil {
+		// Validate: request token must match cookie token exactly
+		if requestToken != cookieToken {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "Invalid CSRF token",
 				"code":  "CSRF_INVALID",
@@ -176,5 +198,3 @@ func generateCSRFToken(c *fiber.Ctx) string {
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
-
-

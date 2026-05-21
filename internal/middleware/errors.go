@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"strings"
 
 	"invoicefast/internal/logger"
 
@@ -47,16 +48,20 @@ func ErrorHandler(log *logger.Logger) fiber.ErrorHandler {
 			"method", c.Method(),
 		)
 
+		code := fiber.StatusInternalServerError
+		message := "An unexpected error occurred"
+
 		// Check if it's a fiber error (HTTP error)
 		if e, ok := err.(*fiber.Error); ok {
-			return handleFiberError(c, e, requestID.(string))
+			code = e.Code
+			message = mapFiberError(e)
 		}
 
 		// Check if it's an app error
 		if appErr, ok := err.(*AppError); ok {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error":     appErr.Message,
-				"code":      appErr.Code,
+				"error":      appErr.Message,
+				"code":       appErr.Code,
 				"request_id": appErr.RequestID,
 			})
 		}
@@ -64,13 +69,63 @@ func ErrorHandler(log *logger.Logger) fiber.ErrorHandler {
 		// Handle panic recovery
 		debug.PrintStack()
 
-		// Return generic error for unknown issues (don't leak internals)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":       "An unexpected error occurred",
-			"code":        ErrCodeInternalError,
-			"request_id":  requestID.(string),
-			"help":        "Please contact support if this persists",
+		// Don't leak internal details for 5xx
+		if code >= 500 {
+			message = "An unexpected error occurred"
+		}
+
+		// JSON error for API routes
+		if strings.HasPrefix(c.Path(), "/api/") {
+			return c.Status(code).JSON(fiber.Map{
+				"error":      message,
+				"code":       errorCodeForStatus(code),
+				"request_id": requestID,
+			})
+		}
+
+		// HTML error for web routes
+		return c.Status(code).Render("error", fiber.Map{
+			"Status": code,
+			"Error":  message,
 		})
+	}
+}
+
+func errorCodeForStatus(code int) string {
+	switch code {
+	case fiber.StatusNotFound:
+		return ErrCodeNotFound
+	case fiber.StatusUnauthorized:
+		return ErrCodeUnauthorized
+	case fiber.StatusForbidden:
+		return ErrCodeForbidden
+	case fiber.StatusBadRequest:
+		return ErrCodeValidationError
+	case fiber.StatusTooManyRequests:
+		return ErrCodeRateLimitExceeded
+	case fiber.StatusConflict:
+		return ErrCodeConflict
+	default:
+		return ErrCodeInternalError
+	}
+}
+
+func mapFiberError(e *fiber.Error) string {
+	switch e.Code {
+	case fiber.StatusNotFound:
+		return "Resource not found"
+	case fiber.StatusUnauthorized:
+		return "Authentication required"
+	case fiber.StatusForbidden:
+		return "Access denied"
+	case fiber.StatusBadRequest:
+		return e.Message
+	case fiber.StatusTooManyRequests:
+		return "Too many requests, please try again later"
+	case fiber.StatusConflict:
+		return e.Message
+	default:
+		return "An unexpected error occurred"
 	}
 }
 
@@ -200,10 +255,13 @@ func SecurityHeadersMiddleware() fiber.Handler {
 		c.Set("X-XSS-Protection", "1; mode=block")
 		c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
-		// CSP for API responses (more lenient for SPA)
-		if c.Path() == "/api/v1/health" || c.Method() == "GET" {
-			c.Set("Cache-Control", "no-store, private")
-		}
+	// CSP for API responses (more lenient for SPA)
+	c.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com; connect-src 'self'")
+	c.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	c.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	if c.Path() == "/api/v1/health" || c.Method() == "GET" {
+		c.Set("Cache-Control", "no-store, private")
+	}
 
 		return c.Next()
 	}

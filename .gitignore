@@ -24,8 +24,11 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# env files
 .env
+.env.dev
+.env.production
+.env.production.example
 
 # Compiled binary
 server

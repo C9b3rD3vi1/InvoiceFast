@@ -32,7 +32,7 @@ type InvoiceHandler struct {
 }
 
 // NewInvoiceHandler creates InvoiceHandler
-func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, whatsappSvc *services.WhatsAppService, pdfWorker *worker.PDFWorker, settingsSvc *services.SettingsService) *InvoiceHandler {
+func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRAService, mpesaSvc *services.MPesaService, subSvc *services.SubscriptionService, attachmentSvc *services.AttachmentService, pdfSvc *services.PDFService, pdfGen *pdf.PDFGenerator, emailSvc *services.EmailService, whatsappSvc *services.WhatsAppService, pdfWorker *worker.PDFWorker, settingsSvc *services.SettingsService) *InvoiceHandler {
 	return &InvoiceHandler{
 		invoiceService:    invoiceSvc,
 		kraService:        kraSvc,
@@ -41,6 +41,7 @@ func NewInvoiceHandler(invoiceSvc *services.InvoiceService, kraSvc *services.KRA
 		attachmentService: attachmentSvc,
 		pdfService:        pdfSvc,
 		pdfGenerator:      pdfGen,
+		emailService:      emailSvc,
 		whatsappService:   whatsappSvc,
 		pdfWorker:         pdfWorker,
 		settingsService:   settingsSvc,

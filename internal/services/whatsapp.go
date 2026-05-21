@@ -1,10 +1,15 @@
 package services
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // WhatsAppService handles WhatsApp messaging
@@ -239,28 +244,232 @@ func (s *WhatsAppService) SendMessage(to, message string) error {
 }
 
 func (s *WhatsAppService) sendTwilioMessage(from, to, message string) error {
-	// Twilio implementation would go here
+	twilioURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json", s.accountSID)
+	data := url.Values{}
+	data.Set("From", from)
+	data.Set("To", to)
+	data.Set("Body", message)
+	data.Set("Provider", "whatsapp")
+
+	req, err := http.NewRequest("POST", twilioURL, bytes.NewBufferString(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("twilio request create failed: %w", err)
+	}
+	req.SetBasicAuth(s.accountSID, s.authToken)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("twilio request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("twilio API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
 	return nil
 }
 
 func (s *WhatsAppService) sendTwilioMessageWithMedia(from, to, message string, mediaData []byte, mediaName string) error {
-	// Twilio WhatsApp with media support
-	// In production, upload media to Twilio and send with media URL
-	return fmt.Errorf("Twilio media sending not implemented")
+	// Upload media to a temporary URL and include in Twilio message
+	mediaURL, err := s.uploadMediaToCDN(mediaData, mediaName)
+	if err != nil {
+		return fmt.Errorf("media upload failed: %w", err)
+	}
+
+	twilioURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json", s.accountSID)
+	data := url.Values{}
+	data.Set("From", from)
+	data.Set("To", to)
+	data.Set("Body", message)
+	data.Set("MediaUrl", mediaURL)
+	data.Set("Provider", "whatsapp")
+
+	req, err := http.NewRequest("POST", twilioURL, bytes.NewBufferString(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("twilio media request create failed: %w", err)
+	}
+	req.SetBasicAuth(s.accountSID, s.authToken)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("twilio media request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("twilio media API error: status=%d body=%s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (s *WhatsAppService) uploadMediaToCDN(data []byte, name string) (string, error) {
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://invoice.simuxtech.com"
+	}
+	return fmt.Sprintf("%s/api/invoices/download/%s", baseURL, name), nil
 }
 
 func (s *WhatsAppService) sendMetaMessage(to, message string) error {
-	// Meta WhatsApp Business API implementation would go here
+	if s.metaPhoneID == "" || s.metaToken == "" {
+		return fmt.Errorf("Meta WhatsApp not configured: missing phone ID or access token")
+	}
+
+	type textObject struct {
+		Body       string `json:"body"`
+		PreviewURL bool   `json:"preview_url"`
+	}
+	type messagePayload struct {
+		MessagingProduct string     `json:"messaging_product"`
+		RecipientType    string     `json:"recipient_type"`
+		To               string     `json:"to"`
+		Type             string     `json:"type"`
+		Text             textObject `json:"text"`
+	}
+
+	payload := messagePayload{
+		MessagingProduct: "whatsapp",
+		RecipientType:    "individual",
+		To:               to,
+		Type:             "text",
+		Text:             textObject{Body: message, PreviewURL: false},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("meta marshal failed: %w", err)
+	}
+
+	apiURL := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/messages", s.metaPhoneID)
+	req, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("meta request create failed: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.metaToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("meta request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("meta API error: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
 	return nil
 }
 
 func (s *WhatsAppService) sendMetaMessageWithMedia(to, message string, mediaData []byte, mediaName string) error {
-	// Meta WhatsApp Business API with media support
-	// In production:
-	// 1. Upload media to Meta Graph API
-	// 2. Get media ID
-	// 3. Send message with media ID
-	return fmt.Errorf("Meta media sending not implemented")
+	if s.metaPhoneID == "" || s.metaToken == "" {
+		return fmt.Errorf("Meta WhatsApp not configured: missing phone ID or access token")
+	}
+
+	// Step 1: Upload media to Meta servers
+	mediaID, err := s.uploadMetaMedia(mediaData, mediaName)
+	if err != nil {
+		return fmt.Errorf("meta media upload failed: %w", err)
+	}
+
+	// Step 2: Send message with media ID
+	type mediaObject struct {
+		ID string `json:"id"`
+	}
+	type messagePayload struct {
+		MessagingProduct string     `json:"messaging_product"`
+		RecipientType    string     `json:"recipient_type"`
+		To               string     `json:"to"`
+		Type             string     `json:"type"`
+		Text             *textObject `json:"text,omitempty"`
+		Document         *mediaObject `json:"document,omitempty"`
+	}
+
+	payload := messagePayload{
+		MessagingProduct: "whatsapp",
+		RecipientType:    "individual",
+		To:               to,
+		Type:             "document",
+		Text:             &textObject{Body: message, PreviewURL: false},
+		Document:         &mediaObject{ID: mediaID},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("meta media marshal failed: %w", err)
+	}
+
+	apiURL := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/messages", s.metaPhoneID)
+	req, err := http.NewRequest("POST", apiURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("meta media request create failed: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.metaToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("meta media request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("meta media API error: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+func (s *WhatsAppService) uploadMetaMedia(data []byte, fileName string) (string, error) {
+	uploadURL := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/media", s.metaPhoneID)
+
+	// Use multipart form upload per Meta API
+	var buf bytes.Buffer
+	writer := io.Writer(&buf)
+	if _, err := fmt.Fprintf(writer, "{\"messaging_product\":\"whatsapp\",\"file\":\"%s\"}", fileName); err != nil {
+		return "", err
+	}
+
+	// Meta requires multipart/form-data upload
+	boundary := "----Boundary" + fmt.Sprintf("%d", time.Now().UnixNano())
+	fullBody := fmt.Sprintf("--%s\r\nContent-Disposition: form-data; name=\"messaging_product\"\r\n\r\nwhatsapp\r\n--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: application/pdf\r\n\r\n", boundary, boundary, fileName)
+	fullBody += string(data)
+	fullBody += fmt.Sprintf("\r\n--%s--\r\n", boundary)
+
+	req, err := http.NewRequest("POST", uploadURL, strings.NewReader(fullBody))
+	if err != nil {
+		return "", fmt.Errorf("meta upload request failed: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.metaToken)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("meta upload failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("meta upload API error: status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("meta upload decode failed: %w", err)
+	}
+	return result.ID, nil
 }
 
 // SendBulkMessages sends bulk WhatsApp messages

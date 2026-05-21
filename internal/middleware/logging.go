@@ -2,12 +2,53 @@ package middleware
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"invoicefast/internal/logger"
 
 	"github.com/gofiber/fiber/v2"
 )
+
+// sensitiveFields are field names whose values should be redacted in logs.
+// This is used by SanitizeLogArgs to prevent sensitive data leakage.
+var sensitiveFields = []string{
+	"password", "password_hash", "secret", "token", "api_key",
+	"api_secret", "credit_card", "cvv", "pin", "ssn", "tin",
+	"private_key", "access_token", "refresh_token", "authorization",
+}
+
+// isSensitiveField checks if a field name matches any sensitive pattern.
+func isSensitiveField(field string) bool {
+	lower := strings.ToLower(field)
+	for _, sf := range sensitiveFields {
+		if strings.Contains(lower, sf) {
+			return true
+		}
+	}
+	return false
+}
+
+// SanitizeLogArgs filters sensitive data from key-value log arguments.
+// It accepts a slice of alternating key-value pairs (like slog args)
+// and redacts values whose keys match sensitive field names.
+// Usage: logger.Info(ctx, "msg", SanitizeLogArgs("key1", val1, "key2", val2)...)
+func SanitizeLogArgs(args ...any) []any {
+	result := make([]any, len(args))
+	for i := 0; i < len(args)-1; i += 2 {
+		result[i] = args[i]
+		if key, ok := args[i].(string); ok && isSensitiveField(key) {
+			result[i+1] = "[REDACTED]"
+		} else if i+1 < len(args) {
+			result[i+1] = args[i+1]
+		}
+	}
+	// Handle odd trailing arg (shouldn't happen but be safe)
+	if len(args)%2 != 0 && len(args) > 0 {
+		result[len(args)-1] = args[len(args)-1]
+	}
+	return result
+}
 
 func LoggingMiddleware(log *logger.Logger) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -122,7 +163,7 @@ func LogPaymentEvent(c *fiber.Ctx, event, paymentID, merchantReqID string, args 
 	if tenantID != "" {
 		logArgs = append(logArgs, "tenant_id", tenantID)
 	}
-	logArgs = append(logArgs, args...)
+	logArgs = append(logArgs, SanitizeLogArgs(args...)...)
 
 	log.Info(c.Context(), "Payment: "+event, logArgs...)
 }
@@ -135,7 +176,7 @@ func LogSecurityEvent(c *fiber.Ctx, event string, args ...any) {
 		"path", c.Path(),
 		"method", c.Method(),
 	}
-	logArgs = append(logArgs, args...)
+	logArgs = append(logArgs, SanitizeLogArgs(args...)...)
 
 	log.Warn(c.Context(), "Security: "+event, logArgs...)
 }

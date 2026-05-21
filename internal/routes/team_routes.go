@@ -15,12 +15,15 @@ func TeamRoutes(app *fiber.App, h *handlers.TeamHandler, authService *services.A
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 
+	// Read operations - available to all authenticated users
 	group.Get("/members", h.GetTeamMembers)
-	group.Post("/invite", h.InviteMember)
-	group.Delete("/member/:id", h.RemoveMember)
-	group.Put("/member/:id/role", h.UpdateMemberRole)
 	group.Get("/invitations", h.GetInvitations)
-	group.Delete("/invitation/:id", h.CancelInvitation)
+
+	// Write operations - require manager+ role
+	group.Post("/invite", middleware.CanManageUsers(), h.InviteMember)
+	group.Delete("/member/:id", middleware.CanManageUsers(), h.RemoveMember)
+	group.Put("/member/:id/role", middleware.CanManageUsers(), h.UpdateMemberRole)
+	group.Delete("/invitation/:id", middleware.CanManageUsers(), h.CancelInvitation)
 
 	return group
 }

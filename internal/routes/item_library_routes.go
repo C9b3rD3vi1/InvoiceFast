@@ -10,11 +10,12 @@ import (
 )
 
 // ItemLibraryRoutes configures /api/v1/tenant/item-library
-func ItemLibraryRoutes(app fiber.Router, h *handlers.ItemLibraryHandler, authService *services.AuthService, db *database.DB) fiber.Router {
+func ItemLibraryRoutes(app fiber.Router, h *handlers.ItemLibraryHandler, authService *services.AuthService, db *database.DB, subMiddleware *middleware.SubscriptionMiddleware) fiber.Router {
 	group := app.Group("/api/v1/tenant/item-library")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 
+	group.Post("/", subMiddleware.EnforceLimits("items"), h.CreateItem)
 	group.Get("/", h.GetItems)
 	group.Get("/:id", h.GetItem)
 	group.Put("/:id", h.UpdateItem)

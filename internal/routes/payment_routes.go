@@ -30,13 +30,8 @@ func PaymentRoutes(app *fiber.App, h *handlers.PaymentHandler, idempotencySvc *s
 // TenantPaymentRoutes - tenant-scoped payment routes
 func TenantPaymentRoutes(app fiber.Router, h *handlers.PaymentHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/payments")
-	group.Use(func(c *fiber.Ctx) error {
-		tenantID := c.Locals("tenant_id")
-		if tenantID == "" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
-		}
-		return c.Next()
-	})
+	group.Use(middleware.TenantMiddleware(authService, db))
+	group.Use(middleware.RequireEmailVerified(db))
 
 	// Main payment endpoints
 	group.Get("/", h.GetPayments)

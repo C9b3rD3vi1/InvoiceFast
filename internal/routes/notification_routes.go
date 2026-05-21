@@ -24,26 +24,28 @@ func NotificationRoutes(app *fiber.App, h *handlers.NotificationHandler, authSer
 }
 
 // NotificationAdminRoutes configures notification admin endpoints (preferences, templates, logs)
+// Template management and queue operations require manager+ role
 func NotificationAdminRoutes(app *fiber.App, h *services.NotificationHandler, authService *services.AuthService, db *database.DB) fiber.Router {
 	group := app.Group("/api/v1/tenant/notification-admin")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 
-	// Preferences
+	// Preferences - available to all authenticated users
 	group.Get("/preferences", h.GetPreferences)
 	group.Put("/preferences", h.UpdatePreferences)
 
-	// Delivery logs
+	// Delivery logs - available to all authenticated users
 	group.Get("/logs", h.GetDeliveryLogs)
 
-	// Templates
-	group.Get("/templates", h.GetTemplates)
-	group.Post("/templates", h.CreateTemplate)
-	group.Put("/templates/:id", h.UpdateTemplate)
-	group.Delete("/templates/:id", h.DeleteTemplate)
+	// Templates - require manager+ role (can modify notification content)
+	tmplGroup := group.Group("/templates")
+	tmplGroup.Get("/", h.GetTemplates)
+	tmplGroup.Post("/", middleware.CanManageSettings(), h.CreateTemplate)
+	tmplGroup.Put("/:id", middleware.CanManageSettings(), h.UpdateTemplate)
+	tmplGroup.Delete("/:id", middleware.CanManageSettings(), h.DeleteTemplate)
 
-	// Queue management
-	group.Post("/retry/:id", h.RetryNotification)
+	// Queue management - require manager+ role
+	group.Post("/retry/:id", middleware.CanManageSettings(), h.RetryNotification)
 
 	return group
 }

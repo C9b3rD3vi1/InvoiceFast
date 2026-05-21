@@ -26,7 +26,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 # Create directories
-RUN mkdir -p /app/data /app/templates /app/logs
+RUN mkdir -p /app/data /app/templates /app/logs /app/views /app/static
 
 # Copy binaries from builder
 COPY --from=builder /app/server /app/server
@@ -35,6 +35,10 @@ COPY --from=builder /app/migrate /app/migrate
 # Copy configuration
 COPY .env.example /app/.env
 COPY templates /app/templates
+
+# Copy web UI templates and static assets
+COPY views /app/views
+COPY static /app/static
 
 # Set permissions
 RUN chmod +x /app/server /app/migrate
