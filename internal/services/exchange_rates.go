@@ -21,12 +21,14 @@ type ExchangeRateService struct {
 	mu          sync.RWMutex
 	lastUpdated time.Time
 	cachedRates map[string]float64
+	stopCh      chan struct{}
 }
 
 func NewExchangeRateService(db *database.DB) *ExchangeRateService {
 	svc := &ExchangeRateService{
 		db:     db,
 		apiURL: "https://api.centralbank.go.ke/exchange-rates",
+		stopCh: make(chan struct{}),
 	}
 	// Fetch rates on startup
 	svc.fetchRates()
@@ -194,12 +196,22 @@ func (s *ExchangeRateService) StartCronJob() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			if err := s.FetchRatesFromCBK(); err != nil {
-				logger.Get().Error(context.Background(), "Failed to fetch rates", "error", err)
+		for {
+			select {
+			case <-ticker.C:
+				if err := s.FetchRatesFromCBK(); err != nil {
+					logger.Get().Error(context.Background(), "Failed to fetch rates", "error", err)
+				}
+			case <-s.stopCh:
+				logger.Get().Info(context.Background(), "Stopping exchange rate cron")
+				return
 			}
 		}
 	}()
+}
+
+func (s *ExchangeRateService) Stop() {
+	close(s.stopCh)
 }
 
 func (s *ExchangeRateService) StoreRateInDB(currency string, rate float64) error {

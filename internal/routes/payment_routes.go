@@ -10,15 +10,16 @@ import (
 )
 
 // PaymentRoutes configures payment routes with proper security
-func PaymentRoutes(app *fiber.App, h *handlers.PaymentHandler, idempotencySvc *services.IdempotencyService, mpesaVerifier *middleware.WebhookVerifierMiddleware) fiber.Router {
-	group := app.Group("/api/v1")
+func PaymentRoutes(app *fiber.App, h *handlers.PaymentHandler, idempotencySvc *services.IdempotencyService, mpesaVerifier *middleware.WebhookVerifierMiddleware, rateLimiter *middleware.FiberRateLimiter) fiber.Router {
+	group := app.Group("/api/v1/webhook")
+	group.Use(rateLimiter.WebhookRateLimiter())
 
-	group.Post("/webhook/mpesa",
+	group.Post("/mpesa",
 		middleware.IdempotencyMiddleware(idempotencySvc),
 		mpesaVerifier.MpesaVerification(),
 		h.HandleMpesaCallback)
 
-	group.Post("/webhook/intasend",
+	group.Post("/intasend",
 		middleware.IdempotencyMiddleware(idempotencySvc),
 		mpesaVerifier.IntasendVerification(),
 		h.HandleIntasendWebhook)

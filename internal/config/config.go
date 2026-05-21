@@ -193,8 +193,8 @@ type StripeConfig struct {
 }
 
 func Load() *Config {
-	ginMode := getEnv("GIN_MODE", "debug")
-	isProduction := ginMode == "production"
+	appEnv := getEnv("APP_ENV", "development")
+	isProduction := appEnv == "production"
 
 	// CRITICAL: Validate JWT secret in ALL environments (not just production)
 	// Weak secrets in development can be exploited if code is deployed elsewhere
@@ -212,7 +212,7 @@ func Load() *Config {
 			ReadTimeout:     getDurationEnv("READ_TIMEOUT", 30*time.Second),
 			WriteTimeout:    getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:     getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
-			Mode:            ginMode,
+			Mode:            appEnv,
 			DefaultCurrency: getEnv("DEFAULT_CURRENCY", "KES"),
 		},
 		Database: DatabaseConfig{
@@ -498,8 +498,8 @@ func hasLowEntropy(s string) bool {
 	return false
 }
 
-// validateProductionConfig validates critical production settings
-func validateProductionConfig() {
+// ValidateProductionConfig validates critical production settings
+func ValidateProductionConfig() {
 	// Check for critical production configurations
 	warnings := []string{}
 

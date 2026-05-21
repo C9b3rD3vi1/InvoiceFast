@@ -2,9 +2,10 @@ package services
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"html/template"
-	"math/rand"
+	"math/big"
 	"strings"
 	"time"
 
@@ -574,10 +575,14 @@ func (s *PDFService) GenerateReceiptHTML(invoice *models.Invoice, payment *model
 
 func generateReceiptNumber() string {
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, 8)
 	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			b[i] = '0'
+			continue
+		}
+		b[i] = chars[n.Int64()]
 	}
 	return "RCP-" + string(b) + "-" + time.Now().Format("060102")
 }

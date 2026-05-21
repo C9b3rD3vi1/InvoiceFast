@@ -15,6 +15,10 @@ import (
 	"gorm.io/gorm"
 )
 
+func init() {
+	// Ensure all allowed MIME types are registered for detection
+}
+
 // ExpenseAttachmentService handles file attachments for expenses
 type ExpenseAttachmentService struct {
 	db      *database.DB
@@ -75,7 +79,12 @@ func (s *ExpenseAttachmentService) UploadFile(tenantID, expenseID string, fileHe
 		}
 		return nil, fmt.Errorf("failed to validate expense: %w", err)
 	}
-	
+
+	// Validate file MIME type using magic bytes
+	if err := validateFileMIME(fileHeader); err != nil {
+		return nil, err
+	}
+
 	// Generate unique filename
 	fileExt := filepath.Ext(fileHeader.Filename)
 	fileName := uuid.New().String() + fileExt

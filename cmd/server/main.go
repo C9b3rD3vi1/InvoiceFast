@@ -42,6 +42,9 @@ func main() {
 		"port", cfg.Server.Port,
 	)
 
+	// Validate production config in all environments
+	config.ValidateProductionConfig()
+
 	// Initialize encryption BEFORE any database operations
 	// CRITICAL: Must be called before models are created/loaded
 	encryptionKey := os.Getenv("ENCRYPTION_KEY")
@@ -115,6 +118,9 @@ func main() {
 	// SECURITY: Security headers middleware
 	app.Use(middleware.SecurityHeadersMiddleware())
 
+	// SECURITY: Request logging middleware (after headers, before CSRF)
+	app.Use(middleware.LoggingMiddleware(logSvc))
+
 	// SECURITY: CSRF protection for state-changing requests
 	app.Use(middleware.CSRF())
 
@@ -154,7 +160,7 @@ func main() {
 	defer rateLimiter.Stop()
 
 	// Apply rate limiting globally
-	app.Use(rateLimiter.HeadersMiddleware())
+	app.Use(rateLimiter.Middleware())
 
 	// Initialize services
 	var idempotencySvc *services.IdempotencyService
@@ -190,6 +196,9 @@ func main() {
 	notificationService := services.NewNotificationService(db, emailService, smsService, whatsappService, cfg)
 	notificationService.Start()
 
+	// Initialize PDF generator
+	pdfGenerator := pdf.NewPDFGenerator("./templates", "./data/pdfs")
+
 	// Build invoice service with all dependencies
 	invoiceService := services.NewInvoiceServiceWithDeps(db, &services.ServiceDependencies{
 		DB:           db,
@@ -199,6 +208,7 @@ func main() {
 		Exchange:     exchangeRateService,
 		KRA:          kraService,
 		Config:       cfg,
+		PDFGen:       pdfGenerator,
 	})
 
 	clientService := services.NewClientService(db)
@@ -406,11 +416,6 @@ func main() {
 	// Initialize PDF service
 	pdfService := &services.PDFService{}
 
-	// Initialize PDF generator
-	pdfGenerator := pdf.NewPDFGenerator("./templates", "./data/pdfs")
-
-	// Reuse whatsappService created earlier
-
 	invoiceHandler := handlers.NewInvoiceHandler(invoiceService, kraService, mpesaService, subscriptionService, attachmentService, pdfService, pdfGenerator, whatsappService, pdfWorker, settingsService)
 	clientHandler := handlers.NewClientHandler(clientService, subscriptionService)
 	settingsHandler := handlers.NewSettingsHandler(settingsService)
@@ -574,14 +579,18 @@ func main() {
 		return c.Next()
 	})
 
+	// API documentation (OpenAPI/Swagger)
+	app.Get("/api/docs", func(c *fiber.Ctx) error {
+		return c.SendFile("./internal/swagger/swagger.json")
+	})
+
 	// Prometheus metrics endpoint
 	metricsGroup := app.Group("")
 	metricsGroup.Get("/metrics", metrics.Handler())
 	metricsGroup.Get("/api/v1/metrics", metrics.Handler())
 
-	// Health endpoint
+	// Health endpoint (liveness)
 	app.Get("/health", func(c *fiber.Ctx) error {
-		// Check database connection
 		dbErr := db.Ping()
 
 		status := "healthy"
@@ -598,6 +607,19 @@ func main() {
 			"version":  "1.0.0",
 			"database": dbErr == nil,
 			"redis":    redisCache != nil,
+		})
+	})
+
+	// Readiness endpoint (for Kubernetes)
+	app.Get("/ready", func(c *fiber.Ctx) error {
+		if err := db.Ping(); err != nil {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"status": "not ready",
+				"error":  "database unavailable",
+			})
+		}
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ready",
 		})
 	})
 
@@ -621,6 +643,9 @@ func main() {
 	<-quit
 
 	logSvc.Info(context.Background(), "Shutting down")
+	close(stopCh)
+	exchangeRateService.Stop()
+	notificationService.Stop()
 	if err := app.ShutdownWithTimeout(30 * time.Second); err != nil {
 		logSvc.Warn(context.Background(), "Shutdown error", "error", err.Error())
 	}
@@ -635,17 +660,22 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 
 	appLogger.Get().Error(context.Background(), "Unhandled error", "method", c.Method(), "path", c.Path(), "error", err.Error())
 
+	message := "An unexpected error occurred"
+	if code >= 400 && code < 500 {
+		message = "The request could not be processed"
+	}
+
 	// JSON error for API routes
 	if strings.HasPrefix(c.Path(), "/api/") {
 		return c.Status(code).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": message,
 		})
 	}
 
 	// HTML error for web routes
 	return c.Status(code).Render("error", fiber.Map{
 		"Status": code,
-		"Error":  err.Error(),
+		"Error":  message,
 	})
 }
 
@@ -685,19 +715,14 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.ClientRoutes(app, clientHandler, authService, db)
 	routes.SettingsRoutes(app, settingsHandler, authService, db)
 	routes.DashboardRoutes(app, dashboardHandler, authService, db)
-	routes.PaymentRoutes(app, paymentHandler, idempotencySvc, webhookVerifier)
+	routes.PaymentRoutes(app, paymentHandler, idempotencySvc, webhookVerifier, rateLimiter)
 	routes.TenantPaymentRoutes(app, paymentHandler, authService, db)
 	routes.ReportRoutes(app, reportHandler, authService, db)
 	routes.TeamRoutes(app, teamHandler, authService, db)
 	routes.AutomationRoutes(app, db, authService)
 	routes.NotificationRoutes(app, notificationHandler, authService, db)
 	routes.NotificationAdminRoutes(app, notificationAdminHandler, authService, db)
-	routes.BillingRoutes(app, billingHandler, authService, db, webhookVerifier, idempotencySvc)
-
-	// Webhook endpoints (rate limited separately)
-	webhook := app.Group("/api/v1/webhook")
-	webhook.Use(rateLimiter.WebhookRateLimiter())
-	// Add webhook routes here if needed
+	routes.BillingRoutes(app, billingHandler, authService, db, webhookVerifier, idempotencySvc, rateLimiter)
 
 	// === Static Frontend Pages (SPA routes) ===
 	routes.StaticRoutes(app, authHandler)

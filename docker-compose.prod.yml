@@ -11,7 +11,7 @@ services:
     ports:
       - "8082:8082"
     environment:
-      - NODE_ENV=production
+      - APP_ENV=production
       - DB_PATH=/app/data/invoicefast.db
     volumes:
       - invoicefast_data:/app/data

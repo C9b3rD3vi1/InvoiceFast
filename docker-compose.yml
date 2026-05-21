@@ -13,7 +13,7 @@ services:
       - DB_DRIVER=${DB_DRIVER:-sqlite3}
       - DB_DSN=/app/data/invoicefast.db
       - JWT_SECRET=${JWT_SECRET}
-      - GIN_MODE=${GIN_MODE:-release}
+      - APP_ENV=${APP_ENV:-production}
       - INTASEND_PUBLISHABLE_KEY=${INTASEND_PUBLISHABLE_KEY}
       - INTASEND_SECRET_KEY=${INTASEND_SECRET_KEY}
       - INTASEND_API_URL=${INTASEND_API_URL:-https://sandbox.intasend.com}

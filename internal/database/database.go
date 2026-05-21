@@ -180,23 +180,27 @@ func buildPostgresDSN(cfg *config.DatabaseConfig) string {
 
 // Migrate runs database migrations based on the database type
 func (db *DB) Migrate() error {
-	logger.Get().Info(context.Background(), "Running database migrations...")
+	log := logger.Get()
+	log.Info(context.Background(), "Running database migrations...")
 
 	// PostgreSQL-specific settings
 	if db.isPostgres {
-		// PostgreSQL doesn't need WAL mode
-		logger.Get().Info(context.Background(), "Using PostgreSQL - migrations ready")
+		log.Info(context.Background(), "Using PostgreSQL - migrations ready")
 	} else {
-		// SQLite-specific settings
 		if err := db.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
-			logger.Get().Warn(context.Background(), "Failed to set WAL mode", "error", err)
+			log.Warn(context.Background(), "Failed to set WAL mode", "error", err)
 		}
 		if err := db.Exec("PRAGMA busy_timeout = 5000").Error; err != nil {
-			logger.Get().Warn(context.Background(), "Failed to set busy timeout", "error", err)
+			log.Warn(context.Background(), "Failed to set busy timeout", "error", err)
 		}
 	}
 
-	// Auto migrate all models
+	// Run versioned SQL migrations first (if directory exists)
+	if err := db.RunMigrations("migrations"); err != nil {
+		log.Warn(context.Background(), "Versioned SQL migrations failed (continuing with AutoMigrate)", "error", err)
+	}
+
+	// Auto migrate all models (keeps GORM model definitions in sync)
 	err := db.AutoMigrate(
 		&models.User{},
 		&models.Client{},
@@ -238,15 +242,11 @@ func (db *DB) Migrate() error {
 		&models.UnallocatedPayment{},
 		&models.ReminderSequence{},
 		&models.ReminderSequenceLog{},
-		// Expense models
 		&models.Expense{},
 		&models.ExpenseCategory{},
 		&models.ExpenseAttachment{},
-		// Integration models
 		&models.Integration{},
-		// Security models
 		&models.UserSession{},
-		// Automation Module Models - Enterprise Edition
 		&models.AutomationJob{},
 		&models.RecurringInvoice{},
 		&models.ReminderRule{},
@@ -260,10 +260,10 @@ func (db *DB) Migrate() error {
 
 	// Fix any incorrect unique constraints
 	if err := db.fixPaymentConstraints(); err != nil {
-		logger.Get().Warn(context.Background(), "Failed to fix payment constraints", "error", err)
+		log.Warn(context.Background(), "Failed to fix payment constraints", "error", err)
 	}
 
-	logger.Get().Info(context.Background(), "Migrations completed successfully")
+	log.Info(context.Background(), "Migrations completed successfully")
 	return nil
 }
 

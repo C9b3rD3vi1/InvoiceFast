@@ -3,8 +3,10 @@ package services
 import (
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,6 +18,40 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+var allowedMIMETypes = map[string]string{
+	"image/jpeg":           ".jpg",
+	"image/png":            ".png",
+	"image/gif":            ".gif",
+	"image/webp":           ".webp",
+	"application/pdf":      ".pdf",
+	"text/plain":           ".txt",
+	"application/msword":   ".doc",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+	"application/vnd.ms-excel":        ".xls",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":       ".xlsx",
+	"application/zip":                 ".zip",
+}
+
+func validateFileMIME(fileHeader *multipart.FileHeader) error {
+	file, err := fileHeader.Open()
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	buf := make([]byte, 512)
+	if _, err := io.ReadFull(file, buf); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	detected := http.DetectContentType(buf)
+	if _, ok := allowedMIMETypes[detected]; !ok {
+		return fmt.Errorf("file type %s is not allowed", detected)
+	}
+
+	return nil
+}
 
 // AttachmentService handles file attachments for invoices
 type AttachmentService struct {
@@ -80,6 +116,11 @@ func (s *AttachmentService) UploadFile(tenantID, invoiceID string, fileHeader *m
 	}
 	if contentType == "" {
 		contentType = "application/octet-stream"
+	}
+
+	// Validate file MIME type using magic bytes
+	if err := validateFileMIME(fileHeader); err != nil {
+		return nil, err
 	}
 
 	// Generate unique filename

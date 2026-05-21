@@ -223,7 +223,7 @@ func (p *PDFGenerator) loadTemplates() {
 		"round":        func(a float64, p int) float64 { return round(a, p) },
 		"upper":        strings.ToUpper,
 		"lower":        strings.ToLower,
-		"safe":         func(s string) template.HTML { return template.HTML(s) },
+		"safe":         func(s string) template.HTML { return template.HTML(template.HTMLEscapeString(s)) },
 	}
 
 	// Load invoice template

@@ -9,7 +9,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *services.AuthService, db *database.DB, webhookVerifier *middleware.WebhookVerifierMiddleware, idempotencySvc *services.IdempotencyService) fiber.Router {
+func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *services.AuthService, db *database.DB, webhookVerifier *middleware.WebhookVerifierMiddleware, idempotencySvc *services.IdempotencyService, rateLimiter *middleware.FiberRateLimiter) fiber.Router {
+	// Tenant-facing billing routes (require JWT auth)
 	group := app.Group("/api/v1/tenant/billing")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
@@ -38,19 +39,23 @@ func BillingRoutes(app *fiber.App, h *handlers.BillingHandler, authService *serv
 
 	group.Get("/usage", h.GetUsage)
 
-	// BILLING WEBHOOKS - with signature verification + idempotency
-	group.Post("/webhook/mpesa",
+	// Billing webhooks — no JWT auth, signature verification only
+	webhookGroup := app.Group("/api/v1/webhook/billing")
+	webhookGroup.Use(rateLimiter.WebhookRateLimiter())
+
+	webhookGroup.Post("/mpesa",
 		middleware.IdempotencyMiddleware(idempotencySvc),
 		webhookVerifier.MpesaVerification(),
 		h.HandleMpesaWebhook)
-	
-	group.Post("/webhook/intasend",
+
+	webhookGroup.Post("/intasend",
 		middleware.IdempotencyMiddleware(idempotencySvc),
 		webhookVerifier.IntasendVerification(),
 		h.HandleIntasendWebhook)
 
-	group.Post("/webhook/stripe",
+	webhookGroup.Post("/stripe",
 		middleware.IdempotencyMiddleware(idempotencySvc),
+		webhookVerifier.StripeVerification(),
 		h.HandleStripeWebhook)
 
 	return group

@@ -47,6 +47,8 @@ type User struct {
 	TwoFactorVerifiedAt *time.Time `json:"two_factor_verified_at"`
 	PasswordChangedAt  *time.Time `json:"password_changed_at"`
 	LastLoginAt        *time.Time `json:"last_login_at"`
+	LoginAttempts      int        `json:"-" gorm:"default:0"`
+	LockedUntil        *time.Time `json:"-"`
 	LoginAlertEnabled  bool      `json:"login_alert_enabled" gorm:"default:true"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`

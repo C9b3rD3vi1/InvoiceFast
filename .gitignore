@@ -33,6 +33,10 @@ server
 cmd/server/server
 cmd/migrate/migrate
 cmd/seed/seed
+invoicefast
+invoicefast_old
+bin/
+build/
 
 # Database files
 data/*.db

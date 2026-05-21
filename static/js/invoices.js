@@ -30,7 +30,7 @@ function invoices() {
             if (this.statusFilter) params.append('status', this.statusFilter);
 
             try {
-                const response = await fetch(`/api/v1/invoices?${params}`, {
+                const response = await fetch(`/api/v1/tenant/invoices?${params}`, {
                     headers: {
                         'Authorization': 'Bearer ' + token,
                         'Content-Type': 'application/json'
@@ -71,7 +71,7 @@ function invoices() {
         async sendInvoice(invoice) {
             const token = InvoiceFastAuth.getAccessToken();
             try {
-                const response = await fetch(`/api/v1/invoices/${invoice.id}/send`, {
+                const response = await fetch(`/api/v1/tenant/invoices/${invoice.id}/send`, {
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer ' + token

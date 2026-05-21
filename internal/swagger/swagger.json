@@ -1,0 +1,421 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "InvoiceFast API",
+    "description": "Production-ready invoicing, payments, and client management API for African businesses.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "InvoiceFast Support",
+      "email": "support@invoicefast.app"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://invoice.simuxtech.com",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:8082",
+      "description": "Local development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token from /api/v1/auth/login"
+      },
+      "APIKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key for server-to-server communication"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "description": "Error message" }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "invoice_number": { "type": "string" },
+          "client_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "cancelled"] },
+          "subtotal": { "type": "number", "format": "float" },
+          "tax_amount": { "type": "number", "format": "float" },
+          "discount": { "type": "number", "format": "float" },
+          "total": { "type": "number", "format": "float" },
+          "paid_amount": { "type": "number", "format": "float" },
+          "currency": { "type": "string" },
+          "due_date": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Client": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "type": "string" },
+          "currency": { "type": "string" },
+          "payment_terms": { "type": "integer" },
+          "total_billed": { "type": "number" },
+          "total_paid": { "type": "number" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "invoice_id": { "type": "string", "format": "uuid" },
+          "amount": { "type": "number", "format": "float" },
+          "currency": { "type": "string" },
+          "method": { "type": "string", "enum": ["mpesa", "card", "bank", "cash", "intasend"] },
+          "status": { "type": "string", "enum": ["pending", "completed", "failed", "refunded"] },
+          "reference": { "type": "string" },
+          "phone_number": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Login with email and password",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "format": "password" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": { "type": "string" },
+                    "refresh_token": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout and invalidate refresh token",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Logout successful" }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Refresh access token",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh_token"],
+                "properties": {
+                  "refresh_token": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": { "type": "string" },
+                    "refresh_token": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenant/invoices": {
+      "get": {
+        "tags": ["Invoices"],
+        "summary": "List invoices for the authenticated tenant",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of invoices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invoices": { "type": "array", "items": { "$ref": "#/components/schemas/Invoice" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Invoices"],
+        "summary": "Create a new invoice",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["client_id", "items", "due_date"],
+                "properties": {
+                  "client_id": { "type": "string", "format": "uuid" },
+                  "due_date": { "type": "string", "format": "date" },
+                  "currency": { "type": "string", "default": "KES" },
+                  "notes": { "type": "string" },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["description", "quantity", "unit_price"],
+                      "properties": {
+                        "description": { "type": "string" },
+                        "quantity": { "type": "number" },
+                        "unit_price": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Invoice created" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/api/v1/tenant/invoices/{id}": {
+      "get": {
+        "tags": ["Invoices"],
+        "summary": "Get invoice by ID",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Invoice details" },
+          "404": { "description": "Invoice not found" }
+        }
+      }
+    },
+    "/api/v1/tenant/invoices/{id}/send": {
+      "post": {
+        "tags": ["Invoices"],
+        "summary": "Send invoice via email",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Invoice sent" }
+        }
+      }
+    },
+    "/api/v1/tenant/clients": {
+      "get": {
+        "tags": ["Clients"],
+        "summary": "List clients",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "clients": { "type": "array", "items": { "$ref": "#/components/schemas/Client" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Clients"],
+        "summary": "Create a new client",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "phone": { "type": "string" },
+                  "currency": { "type": "string", "default": "KES" },
+                  "payment_terms": { "type": "integer", "default": 30 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Client created" }
+        }
+      }
+    },
+    "/api/v1/tenant/dashboard": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get dashboard summary metrics",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Dashboard metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_invoices": { "type": "integer" },
+                    "total_paid": { "type": "number" },
+                    "total_outstanding": { "type": "number" },
+                    "recent_invoices": { "type": "array", "items": { "$ref": "#/components/schemas/Invoice" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenant/payments": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "List payments",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of payments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "payments": { "type": "array", "items": { "$ref": "#/components/schemas/Payment" } },
+                    "total": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenant/me": {
+      "get": {
+        "tags": ["User"],
+        "summary": "Get current user profile and tenant info",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "User profile with email verification status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "email": { "type": "string" },
+                    "name": { "type": "string" },
+                    "company_name": { "type": "string" },
+                    "role": { "type": "string" },
+                    "email_verified": { "type": "boolean" },
+                    "tenant_id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Infrastructure"],
+        "summary": "Liveness check",
+        "security": [],
+        "responses": {
+          "200": { "description": "Service is healthy" }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["Infrastructure"],
+        "summary": "Readiness check (for Kubernetes)",
+        "security": [],
+        "responses": {
+          "200": { "description": "Service is ready to serve traffic" },
+          "503": { "description": "Service is not ready (e.g. database down)" }
+        }
+      }
+    }
+  }
+}

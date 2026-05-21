@@ -139,8 +139,12 @@ func (h *TeamHandler) InviteMember(c *fiber.Ctx) error {
 					logger.Get().Error(context.Background(), "panic recovered", "category", "panic", "recover", r)
 				}
 			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
 			inviteLink := fmt.Sprintf("/register?invite=%s", inviteToken)
-			_ = h.emailService.SendTeamInvite(req.Email, req.Name, "Your Company", inviteLink)
+			if err := h.emailService.SendTeamInvite(req.Email, req.Name, "Your Company", inviteLink); err != nil {
+				logger.Get().Error(ctx, "Failed to send team invite email", "category", "email", "error", err)
+			}
 		}()
 	}
 

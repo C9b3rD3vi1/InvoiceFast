@@ -545,7 +545,7 @@ func Explain(db *gorm.DB, model interface{}) (string, error) {
 	var result string
 	stmt := db.Session(&gorm.Session{DryRun: true}).Model(model).Find(nil).Statement
 	sql := db.Dialector.Explain(stmt.SQL.String(), stmt.Vars...)
-	err := db.Raw("EXPLAIN QUERY PLAN " + sql).Scan(&result).Error
+	err := db.Raw("EXPLAIN QUERY PLAN ?", sql).Scan(&result).Error
 	if err != nil {
 		return "", err
 	}

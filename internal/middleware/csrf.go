@@ -1,48 +1,26 @@
 package middleware
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"crypto/rand"
+	"encoding/base64"
 	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
 
-// CSRFConfig holds CSRF middleware configuration
 type CSRFConfig struct {
-	// TokenLookup is how to look up the CSRF token
-	// Options: "header:Name", "query:Name", "form:Name"
-	TokenLookup string `json:"token_lookup"`
-
-	// CookieName is the name of the CSRF cookie
-	CookieName string `json:"cookie_name"`
-
-	// CookieDomain is the domain for the CSRF cookie
-	CookieDomain string `json:"cookie_domain"`
-
-	// CookiePath is the path for the CSRF cookie
-	CookiePath string `json:"cookie_path"`
-
-	// CookieSecure sets the secure flag on the CSRF cookie
-	CookieSecure bool `json:"cookie_secure"`
-
-	// CookieHTTPOnly sets the HttpOnly flag on the CSRF cookie
-	CookieHTTPOnly bool `json:"cookie_http_only"`
-
-	// CookieSameSite sets the SameSite mode on the CSRF cookie
-	CookieSameSite string `json:"cookie_same_site"`
-
-	// Expiration is how long the CSRF token is valid
-	Expiration time.Duration `json:"expiration"`
-
-	// Storage for tokens (in production, use Redis)
-	store *csrfStore
-
-	// Single token per user (set to true for higher security)
-	SingleToken bool `json:"single_token"`
+	TokenLookup    string        `json:"token_lookup"`
+	CookieName     string        `json:"cookie_name"`
+	CookieDomain   string        `json:"cookie_domain"`
+	CookiePath     string        `json:"cookie_path"`
+	CookieSecure   bool          `json:"cookie_secure"`
+	CookieHTTPOnly bool          `json:"cookie_http_only"`
+	CookieSameSite string        `json:"cookie_same_site"`
+	Expiration     time.Duration `json:"expiration"`
+	store          *csrfStore
+	SingleToken    bool `json:"single_token"`
+	stopCleanup    chan struct{}
 }
 
 type csrfToken struct {
@@ -71,10 +49,7 @@ func (s *csrfStore) Get(token string) *csrfToken {
 func (s *csrfStore) Set(userID string, token *csrfToken) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	// Clean up expired tokens periodically
 	s.cleanup()
-
 	s.tokens[token.Value] = token
 	s.tokens[token.Value].UserID = userID
 }
@@ -88,96 +63,78 @@ func (s *csrfStore) cleanup() {
 	}
 }
 
-func (s *csrfStore) StartCleanup(interval time.Duration) {
+func (s *csrfStore) StartCleanup(interval time.Duration, stopCh chan struct{}) {
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("PANIC in CSRF cleanup: %v\n", r)
-			}
-		}()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
-			s.cleanup()
+		for {
+			select {
+			case <-ticker.C:
+				s.cleanup()
+			case <-stopCh:
+				return
+			}
 		}
 	}()
 }
 
-// DefaultCSRFConfig returns default CSRF configuration
 func DefaultCSRFConfig() CSRFConfig {
 	return CSRFConfig{
 		TokenLookup:    "header:X-CSRF-Token",
 		CookieName:     "csrf_token",
 		CookiePath:     "/",
 		CookieSecure:   true,
-		CookieHTTPOnly: true,
+		CookieHTTPOnly: false, // SPA needs to read this for header-based submission
 		CookieSameSite: "Strict",
 		Expiration:     24 * time.Hour,
 		store:          newCSRFStore(),
 		SingleToken:    false,
+		stopCleanup:    make(chan struct{}),
 	}
 }
 
-// CSRF returns a CSRF protection middleware
 func CSRF() fiber.Handler {
 	config := DefaultCSRFConfig()
-	config.store.StartCleanup(10 * time.Minute)
+	config.store.StartCleanup(10*time.Minute, config.stopCleanup)
 
 	return func(c *fiber.Ctx) error {
-		// Skip for GET, HEAD, OPTIONS (safe methods)
+		// Skip safe methods (GET, HEAD, OPTIONS)
 		if c.Method() == "GET" || c.Method() == "HEAD" || c.Method() == "OPTIONS" {
 			return c.Next()
 		}
 
-		// Skip for API paths without authentication
-		if c.Path() == "/api/v1/health" || c.Path() == "/health" {
+		// Skip health endpoints
+		if c.Path() == "/api/v1/health" || c.Path() == "/health" ||
+			c.Path() == "/ready" || c.Path() == "/api/v1/metrics" ||
+			c.Path() == "/metrics" {
 			return c.Next()
 		}
 
-		// Check if user is authenticated (skip for public endpoints)
-		if c.Locals("user_id") == nil {
-			return c.Next() // Skip for public endpoints
-		}
-
-		// Get the token from storage
+		// ALL state-changing requests require CSRF validation, authenticated or not
 		cookieToken := c.Cookies(config.CookieName)
 
-		// Validate token
+		// If no cookie exists, generate one but still reject the request
 		if cookieToken == "" {
-			// Generate new token for initial request
 			token := generateCSRFToken(c)
-			c.Cookie(&fiber.Cookie{
-				Name:      config.CookieName,
-				Value:     token,
-				Expires:   time.Now().Add(config.Expiration),
-				Path:      config.CookiePath,
-				Domain:    config.CookieDomain,
-				Secure:    config.CookieSecure,
-				HTTPOnly:  config.CookieHTTPOnly,
-				SameSite:  config.CookieSameSite,
+			setCSRFCookie(c, config, token)
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "CSRF token required",
+				"code":  "CSRF_MISSING",
 			})
-			return c.Next()
 		}
 
-		// Validate the token
+		// Look up the token in the store
 		storedToken := config.store.Get(cookieToken)
 		if storedToken == nil || storedToken.ExpiresAt.Before(time.Now()) {
-			// Token expired or invalid, generate new one
 			token := generateCSRFToken(c)
-			c.Cookie(&fiber.Cookie{
-				Name:      config.CookieName,
-				Value:     token,
-				Expires:   time.Now().Add(config.Expiration),
-				Path:      config.CookiePath,
-				Domain:    config.CookieDomain,
-				Secure:    config.CookieSecure,
-				HTTPOnly:  config.CookieHTTPOnly,
-				SameSite:  config.CookieSameSite,
+			setCSRFCookie(c, config, token)
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "CSRF token expired or invalid",
+				"code":  "CSRF_INVALID",
 			})
-			return c.Next()
 		}
 
-		// Check token in request (can be in header, query, or form)
+		// Get request token from header, query, or form
 		requestToken := c.Get("X-CSRF-Token")
 		if requestToken == "" {
 			requestToken = c.Query("csrf_token")
@@ -189,30 +146,35 @@ func CSRF() fiber.Handler {
 			})
 		}
 
-		// Validate request token matches stored token
-		if requestToken != cookieToken {
-			// Also check if it's in our store
-			if config.store.Get(requestToken) == nil {
-				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-					"error": "Invalid CSRF token",
-					"code":  "CSRF_INVALID",
-				})
-			}
+		// Validate: must match stored token exactly
+		if config.store.Get(requestToken) == nil {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Invalid CSRF token",
+				"code":  "CSRF_INVALID",
+			})
 		}
 
 		return c.Next()
 	}
 }
 
-// generateCSRFToken generates a secure CSRF token
-func generateCSRFToken(c *fiber.Ctx) string {
-	// Create unique token based on user session + random
-	userID := ""
-	if u := c.Locals("user_id"); u != nil {
-		userID = u.(string)
-	}
-
-	raw := fmt.Sprintf("%s:%s:%d:%s", userID, c.IP(), time.Now().UnixNano(), uuid.New().String())
-	hash := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(hash[:])
+func setCSRFCookie(c *fiber.Ctx, config CSRFConfig, token string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     config.CookieName,
+		Value:    token,
+		Expires:  time.Now().Add(config.Expiration),
+		Path:     config.CookiePath,
+		Domain:   config.CookieDomain,
+		Secure:   config.CookieSecure,
+		HTTPOnly: config.CookieHTTPOnly,
+		SameSite: config.CookieSameSite,
+	})
 }
+
+func generateCSRFToken(c *fiber.Ctx) string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+

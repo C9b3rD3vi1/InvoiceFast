@@ -423,11 +423,13 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	s.db.SeedDefaultTemplates(user.ID)
 
 	if s.auditService != nil {
-		_ = s.auditService.LogAction(context.Background(), user.TenantID, user.ID, AuditActionUserRegister, AuditEntityUser, user.ID, map[string]interface{}{
+		if err := s.auditService.LogAction(context.Background(), user.TenantID, user.ID, AuditActionUserRegister, AuditEntityUser, user.ID, map[string]interface{}{
 			"email":   user.Email,
 			"company": user.CompanyName,
 			"phone":   user.Phone,
-		})
+		}); err != nil {
+			logger.Get().Error(context.Background(), "audit log failed", "category", "audit", "error", err)
+		}
 	}
 
 	return &AuthResponse{
@@ -450,9 +452,26 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 		return nil, errors.New("account is deactivated")
 	}
 
+	if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+		return nil, errors.New("account is temporarily locked due to too many failed login attempts")
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		s.db.Model(&user).UpdateColumn("login_attempts", gorm.Expr("login_attempts + 1"))
+		if user.LoginAttempts+1 >= 5 {
+			lockedUntil := time.Now().Add(15 * time.Minute)
+			s.db.Model(&user).UpdateColumns(map[string]interface{}{
+				"locked_until":  lockedUntil,
+				"login_attempts": 0,
+			})
+		}
 		return nil, ErrWrongPassword
 	}
+
+	s.db.Model(&user).UpdateColumns(map[string]interface{}{
+		"login_attempts": 0,
+		"locked_until":   nil,
+	})
 
 	accessToken, err := s.generateAccessToken(&user)
 	if err != nil {
@@ -480,8 +499,11 @@ func (s *AuthService) RefreshToken(tenantID, refreshToken string) (*AuthResponse
 		return nil, errors.New("tenant_id is required")
 	}
 
+	hash := sha256.Sum256([]byte(refreshToken))
+	tokenHash := fmt.Sprintf("%x", hash[:])
+
 	var storedToken models.RefreshToken
-	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&storedToken, "token = ? AND expires_at > ?", refreshToken, time.Now()).Error; err != nil {
+	if err := s.db.Scopes(database.TenantFilter(tenantID)).First(&storedToken, "token = ? AND expires_at > ?", tokenHash, time.Now()).Error; err != nil {
 		return nil, ErrInvalidToken
 	}
 
@@ -625,7 +647,9 @@ func (s *AuthService) Logout(refreshToken string) error {
 	if strings.TrimSpace(refreshToken) == "" {
 		return nil
 	}
-	return s.db.Where("token = ?", refreshToken).Delete(&models.RefreshToken{}).Error
+	hash := sha256.Sum256([]byte(refreshToken))
+	tokenHash := fmt.Sprintf("%x", hash[:])
+	return s.db.Where("token = ?", tokenHash).Delete(&models.RefreshToken{}).Error
 }
 
 func (s *AuthService) GenerateAPIKey(userID, keyName string) (string, error) {
@@ -734,11 +758,14 @@ func (s *AuthService) GenerateRefreshTokenWithTenant(userID, tenantID string) (s
 		tenantID = userID
 	}
 
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := fmt.Sprintf("%x", hash[:])
+
 	refreshToken := &models.RefreshToken{
 		ID:        uuid.New().String(),
 		TenantID:  tenantID,
 		UserID:    userID,
-		Token:     token,
+		Token:     tokenHash,
 		ExpiresAt: time.Now().Add(s.cfg.JWT.RefreshExpiry),
 	}
 
@@ -1117,43 +1144,58 @@ func validateTOTP(secret, code string) bool {
 }
 
 func (s *AuthService) encryptSecret(plaintext string) string {
-	if s.cfg == nil {
+	if s.cfg == nil || plaintext == "" {
 		return plaintext
 	}
-	key := []byte(s.cfg.JWT.Secret)
-	if len(key) < 32 {
-		key = append(key, make([]byte, 32-len(key))...)
+	key := deriveEncryptionKey(s.cfg.JWT.Secret)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return ""
 	}
-	block, _ := aes.NewCipher(key[:32])
-	iv := make([]byte, block.BlockSize())
-	rand.Read(iv)
-	cfb := cipher.NewCFBEncrypter(block, iv)
-	ciphertext := make([]byte, len(plaintext))
-	cfb.XORKeyStream(ciphertext, []byte(plaintext))
-	result := append(iv, ciphertext...)
-	return base64.StdEncoding.EncodeToString(result)
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return ""
+	}
+	nonce := make([]byte, aesGCM.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return ""
+	}
+	ciphertext := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
+	return base64.StdEncoding.EncodeToString(ciphertext)
 }
 
 func (s *AuthService) decryptSecret(encoded string) string {
-	if s.cfg == nil {
+	if s.cfg == nil || encoded == "" {
 		return encoded
 	}
 	data, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return ""
 	}
-	key := []byte(s.cfg.JWT.Secret)
-	if len(key) < 32 {
-		key = append(key, make([]byte, 32-len(key))...)
+	key := deriveEncryptionKey(s.cfg.JWT.Secret)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return ""
 	}
-	block, _ := aes.NewCipher(key[:32])
-	iv := data[:block.BlockSize()]
-	ciphertext := data[block.BlockSize():]
-	block2, _ := aes.NewCipher(key[:32])
-	plaintext := make([]byte, len(ciphertext))
-	cfb := cipher.NewCFBDecrypter(block2, iv)
-	cfb.XORKeyStream(plaintext, ciphertext)
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return ""
+	}
+	nonceSize := aesGCM.NonceSize()
+	if len(data) < nonceSize {
+		return ""
+	}
+	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return ""
+	}
 	return string(plaintext)
+}
+
+func deriveEncryptionKey(secret string) []byte {
+	h := sha256.Sum256([]byte(secret))
+	return h[:]
 }
 
 // SendVerificationCode generates a 6-digit code, stores it, and emails it.
