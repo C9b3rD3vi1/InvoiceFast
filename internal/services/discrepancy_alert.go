@@ -11,18 +11,18 @@ import (
 )
 
 type DiscrepancyAlert struct {
-	ID             string     `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID       string     `json:"tenant_id" gorm:"type:uuid;index"`
-	PaymentID      string     `json:"payment_id" gorm:"type:uuid;index"`
-	InvoiceID      string     `json:"invoice_id" gorm:"type:uuid;index"`
-	ExpectedAmount float64    `json:"expected_amount"`
-	ActualAmount   float64    `json:"actual_amount"`
-	Discrepancy    float64    `json:"discrepancy"`
-	Status         string     `json:"status"` // detected, resolved, ignored
-	Resolution     string     `json:"resolution"`
-	ResolvedAt     *time.Time `json:"resolved_at"`
-	ResolvedBy     string     `json:"resolved_by"`
-	CreatedAt      time.Time  `json:"created_at"`
+	ID             string       `json:"id" gorm:"type:uuid;primaryKey"`
+	TenantID       string       `json:"tenant_id" gorm:"type:uuid;index"`
+	PaymentID      string       `json:"payment_id" gorm:"type:uuid;index"`
+	InvoiceID      string       `json:"invoice_id" gorm:"type:uuid;index"`
+	ExpectedAmount models.Money `json:"expected_amount"`
+	ActualAmount   models.Money `json:"actual_amount"`
+	Discrepancy    models.Money `json:"discrepancy"`
+	Status         string       `json:"status"` // detected, resolved, ignored
+	Resolution     string       `json:"resolution"`
+	ResolvedAt     *time.Time   `json:"resolved_at"`
+	ResolvedBy     string       `json:"resolved_by"`
+	CreatedAt      time.Time    `json:"created_at"`
 }
 
 func (DiscrepancyAlert) TableName() string {
@@ -54,14 +54,14 @@ func (s *PaymentDiscrepancyService) CheckAndCreateAlerts() error {
 			continue
 		}
 
-		expectedAmount := invoice.Total - invoice.PaidAmount + payment.Amount
-		discrepancy := payment.Amount - expectedAmount
-		if discrepancy < 0 {
-			discrepancy = -discrepancy
+		expectedAmount := invoice.Total.Subtract(invoice.PaidAmount).Add(payment.Amount)
+		discrepancy := payment.Amount.Subtract(expectedAmount)
+		if discrepancy.LessThan(0) {
+			discrepancy = discrepancy.Multiply(-1)
 		}
 
-		threshold := invoice.Total * 0.01
-		if discrepancy > threshold && discrepancy > 10 {
+		threshold := invoice.Total.Multiply(0.01)
+		if discrepancy.GreaterThan(threshold) && discrepancy.GreaterThan(models.ToCents(10)) {
 			s.createAlert(payment, &invoice, expectedAmount, discrepancy)
 		}
 	}
@@ -69,7 +69,7 @@ func (s *PaymentDiscrepancyService) CheckAndCreateAlerts() error {
 	return nil
 }
 
-func (s *PaymentDiscrepancyService) createAlert(payment *models.Payment, invoice *models.Invoice, expected, discrepancy float64) {
+func (s *PaymentDiscrepancyService) createAlert(payment *models.Payment, invoice *models.Invoice, expected, discrepancy models.Money) {
 	var existing DiscrepancyAlert
 	err := s.db.Where("payment_id = ? AND status = ?", payment.ID, "detected").First(&existing).Error
 	if err == nil {

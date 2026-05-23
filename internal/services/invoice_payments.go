@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 
 	"invoicefast/internal/database"
 	"invoicefast/internal/logger"
+	"invoicefast/internal/metrics"
 	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -86,12 +85,12 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 					ItemDescription: item.Description,
 					Quantity:      item.Quantity,
 					UnitOfMeasure:  item.Unit,
-					UnitPrice:    item.UnitPrice,
-					Discount:     item.DiscountAmt,
+					UnitPrice:    item.UnitPrice.Float64(),
+					Discount:     item.DiscountAmt.Float64(),
 					DiscountRate: item.DiscountRate,
 					VATRate:      item.TaxRate,
-					VATAmount:    item.TaxAmount,
-					Total:       item.Total,
+					VATAmount:    item.TaxAmount.Float64(),
+					Total:       item.Total.Float64(),
 				}
 			}
 
@@ -112,11 +111,11 @@ func (s *InvoiceService) SendInvoice(tenantID, invoiceID, userID string) (*model
 					RegistrationNumber: cli.KRAPIN,
 				},
 				Items:             kraPayloadItems,
-				SubTotal:          subtotal,
-				TotalExcludingVAT: subtotal - discount,
+				SubTotal:          subtotal.Float64(),
+				TotalExcludingVAT: subtotal.Subtract(discount).Float64(),
 				VATRate:           taxRate,
-				VATAmount:         taxAmount,
-				TotalIncludingVAT: total,
+				VATAmount:         taxAmount.Float64(),
+				TotalIncludingVAT: total.Float64(),
 				Currency:          currency,
 			}
 
@@ -185,7 +184,7 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 
 	// Build notification data
 	invoiceLink := fmt.Sprintf("%s/invoice/%s", s.BaseURL(), invoice.MagicToken)
-	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
+	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total.Float64())
 	
 	// Use NotificationService if available
 	if s.notificationSvc != nil {
@@ -222,7 +221,7 @@ func (s *InvoiceService) sendInvoiceNotifications(invoice *models.Invoice, userI
 			ClientEmail:   client.Email,
 			InvoiceNumber: invoice.InvoiceNumber,
 			InvoiceLink:   invoiceLink,
-			Amount:        invoice.Total,
+			Amount:        invoice.Total.Float64(),
 			Currency:      invoice.Currency,
 			DueDate:       invoice.DueDate.Format("02 Jan 2006"),
 		}
@@ -261,7 +260,7 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 	}
 
 	// Use transaction for payment processing
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var invoice models.Invoice
 		if err := tx.Scopes(database.TenantFilter(tenantID)).
 			Preload("Items").
@@ -292,18 +291,15 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 			return errors.New("payment amount must be positive")
 		}
 
-		// Calculate new balance using decimal for precision
-		oldPaidAmount := decimal.NewFromFloat(invoice.PaidAmount)
-		paymentDecimal := decimal.NewFromFloat(payment.Amount)
-		newPaidAmount := oldPaidAmount.Add(paymentDecimal)
-		total := decimal.NewFromFloat(invoice.Total)
+		// Calculate new balance using exact Money arithmetic
+		newPaidAmount := invoice.PaidAmount.Add(payment.Amount)
+		total := invoice.Total
 
 		// Handle overpayment gracefully
 		if newPaidAmount.GreaterThan(total) {
-			overpayment := newPaidAmount.Sub(total)
+			overpayment := newPaidAmount.Subtract(total)
 			newPaidAmount = total
-			overpaymentFloat, _ := overpayment.Float64()
-			payment.Amount = overpaymentFloat
+			payment.Amount = overpayment
 		}
 
 		// Set payment details
@@ -313,26 +309,33 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 			payment.ID = uuid.New().String()
 		}
 
+		// Check for duplicate idempotency key at DB level
+		if payment.IdempotencyKey != "" {
+			var existing int64
+			tx.Model(&models.Payment{}).Where("idempotency_key = ?", payment.IdempotencyKey).Count(&existing)
+			if existing > 0 {
+				return nil // Already processed, silently succeed
+			}
+		}
+
 		// Save payment
 		if err := tx.Create(payment).Error; err != nil {
 			return fmt.Errorf("failed to record payment: %w", err)
 		}
 
-		// Update invoice with optimistic locking
-		invoice.PaidAmount, _ = newPaidAmount.Float64()
-		invoice.PaidAmount = math.Round(invoice.PaidAmount*100) / 100
-		balanceDue := total.Sub(newPaidAmount)
-		invoice.BalanceDue, _ = balanceDue.Float64()
-		invoice.BalanceDue = math.Round(invoice.BalanceDue*100) / 100
+		// Update invoice
+		invoice.PaidAmount = newPaidAmount
+		balanceDue := total.Subtract(newPaidAmount)
+		invoice.BalanceDue = balanceDue
 
 		// Determine new status based on paid amount
 		newStatus := invoice.Status
-		if newPaidAmount.Equal(total) || invoice.BalanceDue <= 0.01 {
+		if newPaidAmount.Equals(total) || invoice.BalanceDue <= 0 {
 			// Full payment
 			newStatus = models.InvoiceStatusPaid
 			now := time.Now()
 			invoice.PaidAt = &now
-		} else if newPaidAmount.GreaterThan(decimal.Zero) {
+		} else if newPaidAmount.GreaterThan(0) {
 			// Partial payment
 			newStatus = models.InvoiceStatusPartiallyPaid
 		}
@@ -356,7 +359,7 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 			Action:     "payment.received",
 			EntityType: "payment",
 			EntityID:   payment.ID,
-			Details:    fmt.Sprintf(`{"invoice_id": "%s", "amount": %f, "method": "%s", "status": "%s"}`, invoiceID, payment.Amount, payment.Method, newStatus),
+			Details:    fmt.Sprintf(`{"invoice_id": "%s", "amount": %f, "method": "%s", "status": "%s"}`, invoiceID, payment.Amount.Float64(), payment.Method, newStatus),
 		})
 
 		// Send payment notification
@@ -364,6 +367,12 @@ func (s *InvoiceService) RecordPayment(tenantID, invoiceID string, payment *mode
 
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	metrics.RecordInvoicePaid()
+	return nil
 }
 
 // sendPaymentNotification sends payment received notifications
@@ -375,7 +384,7 @@ func (s *InvoiceService) sendPaymentNotification(tenantID string, invoice *model
 	var client models.Client
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
 
-	amount := fmt.Sprintf("%s %.2f", invoice.Currency, payment.Amount)
+	amount := fmt.Sprintf("%s %.2f", invoice.Currency, payment.Amount.Float64())
 	
 		s.notificationSvc.Send(context.Background(), &NotificationRequest{
 			TenantID:   tenantID,

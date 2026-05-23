@@ -14,7 +14,7 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
 
-	group.Post("/", subMiddleware.EnforceLimits("invoices"), h.CreateInvoice)
+	group.Post("/", middleware.CanEditInvoice(), subMiddleware.EnforceLimits("invoices"), h.CreateInvoice)
 	group.Get("/", h.GetInvoices)
 
 	// STATIC ROUTES FIRST
@@ -24,33 +24,37 @@ func InvoiceRoutes(app fiber.Router, h *handlers.InvoiceHandler, authService *se
 
 	// DYNAMIC ROUTES AFTER
 	group.Get("/:id", h.GetInvoice)
-	group.Put("/:id", h.UpdateInvoice)
-	group.Delete("/:id", h.DeleteInvoice)
+	group.Put("/:id", middleware.CanEditInvoice(), h.UpdateInvoice)
+	group.Delete("/:id", middleware.CanDeleteInvoice(), h.DeleteInvoice)
 
-	group.Post("/:id/send", h.SendInvoice)
-	group.Post("/:id/whatsapp", h.SendWhatsApp)
-	group.Post("/:id/reminder", h.SendReminder)
+	group.Post("/:id/send", middleware.CanEditInvoice(), h.SendInvoice)
+	group.Post("/:id/whatsapp", middleware.CanEditInvoice(), h.SendWhatsApp)
+	group.Post("/:id/reminder", middleware.CanEditInvoice(), h.SendReminder)
 
-	group.Post("/:id/attachments", h.CreateInvoiceAttachment)
+	group.Post("/:id/attachments", middleware.CanEditInvoice(), h.CreateInvoiceAttachment)
 	group.Get("/:id/attachments", h.GetInvoiceAttachments)
-	group.Delete("/:id/attachments/:attachmentId", h.DeleteInvoiceAttachment)
+	group.Delete("/:id/attachments/:attachmentId", middleware.CanEditInvoice(), h.DeleteInvoiceAttachment)
 
 	group.Get("/:id/pdf", h.GetInvoicePDF)
 
-	group.Post("/:id/kra/submit", h.SubmitToKRA)
+	group.Post("/:id/kra/submit", middleware.CanEditInvoice(), h.SubmitToKRA)
 	group.Get("/:id/kra/status", h.GetKRAStatus)
-	group.Post("/:id/kra/retry", h.RetryKRA)
+	group.Post("/:id/kra/retry", middleware.CanEditInvoice(), h.RetryKRA)
 
 	// KRA bulk operations
 	group.Get("/kra/activity", h.GetKRAActivityFeed)
-	group.Post("/kra/submit-all", h.SubmitAllPendingToKRA)
+	group.Post("/kra/submit-all", middleware.CanEditInvoice(), h.SubmitAllPendingToKRA)
 
-	group.Post("/:id/payments", h.RecordPayment)
-	group.Post("/:id/cancel", h.CancelInvoice)
+	group.Post("/:id/payments", middleware.CanEditInvoice(), h.RecordPayment)
+	group.Post("/:id/cancel", middleware.CanEditInvoice(), h.CancelInvoice)
+
+	// Duplicate and payment request
+	group.Post("/:id/duplicate", middleware.CanEditInvoice(), h.DuplicateInvoice)
+	group.Post("/:id/payment-request", middleware.CanEditInvoice(), h.RequestPayment)
 
 	// Credit/Debit Note routes
-	group.Post("/:id/credit-note", h.CreateCreditNote)
-	group.Post("/:id/debit-note", h.CreateDebitNote)
+	group.Post("/:id/credit-note", middleware.CanEditInvoice(), h.CreateCreditNote)
+	group.Post("/:id/debit-note", middleware.CanEditInvoice(), h.CreateDebitNote)
 
 	return group
 }

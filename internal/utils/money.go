@@ -6,70 +6,28 @@ import (
 	"strconv"
 	"strings"
 
+	"invoicefast/internal/models"
+
 	"github.com/shopspring/decimal"
 )
 
-// Money represents monetary values in cents to avoid floating-point errors
-// This is the PRIMARY type for all financial calculations
-type Money int64
-
-// String returns the amount as a string (in cents)
-func (m Money) String() string {
-	return strconv.FormatInt(int64(m), 10)
-}
-
-// Float64 returns the amount as a float64 (for display purposes only)
-func (m Money) Float64() float64 {
-	return float64(m) / 100
-}
+// Money is a type alias for models.Money.
+type Money = models.Money
 
 // ToCents converts a float64 to Money (cents)
 func ToCents(amount float64) Money {
-	return Money(math.Round(amount * 100))
+	return models.ToCents(amount)
 }
 
 // FromCents creates Money from cents
 func FromCents(cents int64) Money {
-	return Money(cents)
-}
-
-// Add adds two Money values
-func (m Money) Add(other Money) Money {
-	return m + other
-}
-
-// Subtract subtracts two Money values
-func (m Money) Subtract(other Money) Money {
-	return m - other
-}
-
-// Multiply multiplies Money by a factor (e.g., for tax calculation)
-func (m Money) Multiply(factor float64) Money {
-	return Money(math.Round(float64(m) * factor))
-}
-
-// Divide divides Money by a divisor
-func (m Money) Divide(divisor float64) Money {
-	if divisor == 0 {
-		return 0
-	}
-	return Money(math.Round(float64(m) / divisor))
-}
-
-// IsZero checks if Money is zero
-func (m Money) IsZero() bool {
-	return m == 0
-}
-
-// IsPositive checks if Money is greater than zero
-func (m Money) IsPositive() bool {
-	return m > 0
+	return models.FromCents(cents)
 }
 
 // FormatCurrency formats Money as currency string
-func (m Money) FormatCurrency(currency string) string {
-	decimal := decimal.NewFromInt(int64(m)).Div(decimal.NewFromInt(100))
-	return fmt.Sprintf("%s %s", decimal.String(), currency)
+func FormatCurrency(m Money, currency string) string {
+	d := decimal.NewFromInt(int64(m)).Div(decimal.NewFromInt(100))
+	return fmt.Sprintf("%s %s", d.String(), currency)
 }
 
 // ParseCurrency parses a currency string like "1000 KES" to Money
@@ -92,11 +50,6 @@ func ParseCurrency(input string) (Money, error) {
 // MoneyFromDecimal creates Money from shopspring/decimal
 func MoneyFromDecimal(d decimal.Decimal) Money {
 	return Money(d.Mul(decimal.NewFromInt(100)).IntPart())
-}
-
-// Decimal converts Money to shopspring/decimal
-func (m Money) Decimal() decimal.Decimal {
-	return decimal.NewFromInt(int64(m)).Div(decimal.NewFromInt(100))
 }
 
 // ============================================================================
@@ -173,21 +126,6 @@ func CalculateLateFee(balance Money, rate float64, cap Money, gracePeriodDays in
 	}
 
 	return fee
-}
-
-// GreaterThan compares two Money values
-func (m Money) GreaterThan(other Money) bool {
-	return m > other
-}
-
-// LessThan compares two Money values
-func (m Money) LessThan(other Money) bool {
-	return m < other
-}
-
-// Equals compares two Money values
-func (m Money) Equals(other Money) bool {
-	return m == other
 }
 
 // ============================================================================

@@ -14,6 +14,7 @@ func ReportRoutes(app *fiber.App, h *handlers.ReportHandler, authService *servic
 	group := app.Group("/api/v1/tenant/reports")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
+	group.Use(middleware.CanViewReports())
 
 	// Core Reports
 	group.Get("/overview", h.GetOverview)

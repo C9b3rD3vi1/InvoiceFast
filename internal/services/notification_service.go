@@ -276,6 +276,9 @@ func (s *NotificationService) Init() error {
 }
 
 func (s *NotificationService) Send(ctx context.Context, req *NotificationRequest) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	prefs, _ := s.GetPreferences(ctx, req.TenantID, req.UserID)
 
 	// Fallback: if no per-user preferences exist, use tenant-level defaults
@@ -518,12 +521,18 @@ func (s *NotificationService) logDelivery(req *NotificationRequest, channel, pro
 }
 
 func (s *NotificationService) GetPreferences(ctx context.Context, tenantID, userID string) ([]models.NotificationPreference, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var prefs []models.NotificationPreference
 	err := s.db.Where("tenant_id = ? AND user_id = ?", tenantID, userID).Find(&prefs).Error
 	return prefs, err
 }
 
 func (s *NotificationService) SetPreference(ctx context.Context, pref *models.NotificationPreference) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	var existing models.NotificationPreference
 	err := s.db.Where("tenant_id = ? AND user_id = ? AND event_type = ?",
 		pref.TenantID, pref.UserID, pref.EventType).First(&existing).Error

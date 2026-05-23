@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -33,8 +34,9 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
-	Mode            string // "development", "production"
-	DefaultCurrency string // Default currency (default: KES)
+	Mode            string   // "development", "production"
+	DefaultCurrency string   // Default currency (default: KES)
+	AllowedDomains  []string // Host header allowlist for subdomain routing
 }
 
 type CORSConfig struct {
@@ -156,15 +158,6 @@ type RateLimitConfig struct {
 	Window          time.Duration // time window
 	Burst           int           // burst allowance
 	CleanupInterval time.Duration
-	// Plan-based limits (requests per minute)
-	FreeLimit       int `json:"free_limit" env:"RATE_FREE_LIMIT"`
-	ProLimit        int `json:"pro_limit" env:"RATE_PRO_LIMIT"`
-	AgencyLimit     int `json:"agency_limit" env:"RATE_AGENCY_LIMIT"`
-	EnterpriseLimit int `json:"enterprise_limit" env:"RATE_ENTERPRISE_LIMIT"`
-	// Environment overrides
-	ProductionLimit  int `json:"production_limit" env:"RATE_PRODUCTION_LIMIT"`
-	StagingLimit     int `json:"staging_limit" env:"RATE_STAGING_LIMIT"`
-	DevelopmentLimit int `json:"development_limit" env:"RATE_DEVELOPMENT_LIMIT"`
 }
 
 type TimeoutsConfig struct {
@@ -214,6 +207,7 @@ func Load() *Config {
 			IdleTimeout:     getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
 			Mode:            appEnv,
 			DefaultCurrency: getEnv("DEFAULT_CURRENCY", "KES"),
+			AllowedDomains:  splitAndTrim(getEnv("ALLOWED_DOMAINS", ""), ","),
 		},
 		Database: DatabaseConfig{
 			Driver: getEnv("DB_DRIVER", "sqlite3"),
@@ -284,7 +278,7 @@ func Load() *Config {
 		},
 		CORS: CORSConfig{
 			Enabled:        getBoolEnv("CORS_ENABLED", true),
-			AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8082"),
+			AllowedOrigins: getEnv("ALLOWED_ORIGINS", ""),
 			AllowedMethods: getEnv("ALLOWED_METHODS", "GET,POST,PUT,DELETE,OPTIONS,PATCH"),
 			AllowedHeaders: getEnv("ALLOWED_HEADERS", "Content-Type,Authorization,X-API-Key,Accept,Origin"),
 			ExposeHeaders:  getEnv("EXPOSE_HEADERS", "Content-Length,X-Request-ID"),
@@ -474,28 +468,29 @@ func validateEncryptionKey(key string, isProduction bool) error {
 	return nil
 }
 
-// hasLowEntropy checks if a string has predictable patterns
+// hasLowEntropy checks if a string has predictable patterns using Shannon entropy
 func hasLowEntropy(s string) bool {
-	// Check for repeated characters
-	repeated := 0
-	for i := 1; i < len(s); i++ {
-		if s[i] == s[i-1] {
-			repeated++
-		}
-	}
-	if repeated > len(s)/3 {
+	if len(s) < 4 {
 		return true
 	}
 
-	// Check for common patterns
-	patterns := []string{"123456", "qwerty", "abcdef", "password", "secret"}
-	for _, p := range patterns {
-		if strings.Contains(strings.ToLower(s), p) {
-			return true
+	freq := make(map[rune]int)
+	for _, ch := range s {
+		freq[ch]++
+	}
+
+	var entropy float64
+	length := float64(len(s))
+	for _, count := range freq {
+		p := float64(count) / length
+		if p > 0 {
+			entropy -= p * math.Log2(p)
 		}
 	}
 
-	return false
+	// Shannon entropy < 2.5 bits per character indicates low entropy
+	threshold := 2.5
+	return entropy < threshold
 }
 
 // ValidateProductionConfig validates critical production settings
@@ -505,8 +500,8 @@ func ValidateProductionConfig() {
 
 	// Validate CORS origins
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
-	if allowedOrigins == "" || allowedOrigins == "http://localhost:3000,http://localhost:8082" {
-		log.Println("WARNING: ALLOWED_ORIGINS not properly configured for production")
+	if allowedOrigins == "" {
+		log.Println("WARNING: ALLOWED_ORIGINS not configured - CORS headers disabled")
 	}
 
 	// Validate webhook secret
@@ -542,4 +537,19 @@ func ValidateProductionConfig() {
 			log.Printf("  - %s\n", w)
 		}
 	}
+}
+
+func splitAndTrim(s, sep string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, sep)
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }

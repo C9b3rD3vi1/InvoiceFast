@@ -68,7 +68,7 @@ func (s *LateFeeService) UpdateConfig(tenantID string, req *UpdateLateFeeConfigR
 		config.GracePeriodDays = *req.GracePeriodDays
 	}
 	if req.MaxLateFees != nil {
-		config.MaxLateFees = *req.MaxLateFees
+		config.MaxLateFees = models.ToCents(*req.MaxLateFees)
 	}
 	if req.ApplyOnTax != nil {
 		config.ApplyOnTax = *req.ApplyOnTax
@@ -114,13 +114,13 @@ func (s *LateFeeService) CalculateLateFee(tenantID, invoiceID string) (float64, 
 
 	var fee float64
 	if config.FeeType == "percentage" {
-		fee = baseAmount * (config.FeeAmount / 100)
+		fee = baseAmount.Float64() * (config.FeeAmount / 100)
 	} else {
 		fee = config.FeeAmount * float64(daysOverdue)
 	}
 
-	if config.MaxLateFees > 0 && fee > config.MaxLateFees {
-		fee = config.MaxLateFees
+	if config.MaxLateFees > 0 && fee > config.MaxLateFees.Float64() {
+		fee = config.MaxLateFees.Float64()
 	}
 
 	existingFee := s.getExistingLateFee(invoiceID)
@@ -155,7 +155,7 @@ func (s *LateFeeService) ApplyLateFee(tenantID, invoiceID, reason string) (*mode
 		ID:        uuid.New().String(),
 		TenantID:  invoice.TenantID,
 		InvoiceID: invoiceID,
-		FeeAmount: feeAmount,
+		FeeAmount: models.ToCents(feeAmount),
 		FeeType:   "automatic",
 		Reason:    reason,
 		AppliedAt: time.Now(),
@@ -165,7 +165,7 @@ func (s *LateFeeService) ApplyLateFee(tenantID, invoiceID, reason string) (*mode
 		return nil, fmt.Errorf("failed to apply late fee: %w", err)
 	}
 
-	s.db.Model(&invoice).Update("total", invoice.Total+feeAmount)
+	s.db.Model(&invoice).Update("total", invoice.Total.Add(models.ToCents(feeAmount)))
 
 	return lateFee, nil
 }

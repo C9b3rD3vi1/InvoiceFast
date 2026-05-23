@@ -1,3 +1,11 @@
+// DEPRECATED: This service manages the is_recurring flag on the Invoice model.
+// The new AutoRecurringInvoiceService (in automation.go) uses a dedicated
+// RecurringInvoice template model with job-queue scheduling and is the
+// preferred system going forward.
+//
+// This service is kept for backward compatibility with existing invoices
+// that have is_recurring=true. New development should use the automation
+// sub-system at POST /api/v1/tenant/automations/recurring/.
 package services
 
 import (

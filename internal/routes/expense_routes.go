@@ -17,6 +17,10 @@ func ExpenseRoutes(app *fiber.App, h *handlers.ExpenseHandler, authService *serv
 
 	group.Post("/", subMiddleware.EnforceLimits("expenses"), h.CreateExpense)
 	group.Get("/", h.GetExpenses)
+	group.Get("/summary", h.GetExpenseSummary)
+	group.Get("/categories", h.GetCategories)
+	group.Post("/categories", h.CreateCategory)
+	group.Post("/bulk-actions", h.BulkExpenseAction)
 	group.Get("/:id", h.GetExpense)
 	group.Put("/:id", h.UpdateExpense)
 	group.Delete("/:id", h.DeleteExpense)

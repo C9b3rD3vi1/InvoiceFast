@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"invoicefast/internal/database"
+	"invoicefast/internal/metrics"
 	"invoicefast/internal/models"
 
 	"github.com/google/uuid"
@@ -83,14 +84,14 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 			ID:           uuid.New().String(),
 			Description:  strings.TrimSpace(item.Description),
 			Quantity:     item.Quantity,
-			UnitPrice:    item.UnitPrice,
-			Subtotal:     math.Round(lineSubtotal*100) / 100,
+			UnitPrice:    models.ToCents(item.UnitPrice),
+			Subtotal:     models.ToCents(lineSubtotal),
 			Unit:         item.Unit,
 			TaxRate:      itemTaxRate,
-			TaxAmount:    math.Round(itemTaxAmt*100) / 100,
+			TaxAmount:    models.ToCents(itemTaxAmt),
 			DiscountRate: itemDiscountRate,
-			DiscountAmt:  math.Round(itemDiscountAmt*100) / 100,
-			Total:        math.Round(lineTotal*100) / 100,
+			DiscountAmt:  models.ToCents(itemDiscountAmt),
+			Total:        models.ToCents(lineTotal),
 			SortOrder:    i,
 		})
 	}
@@ -100,7 +101,7 @@ func (s *InvoiceService) CreateInvoice(tenantID, userID, clientID string, req *C
 		currency = s.getTenantCurrency(tenantID)
 	}
 	if !validCurrencies[currency] {
-		currency = s.getTenantCurrency(tenantID)
+		return nil, fmt.Errorf("unsupported currency: %s", currency)
 	}
 
 	taxRate := math.Max(0, math.Min(100, req.TaxRate))
@@ -151,16 +152,16 @@ magicTokenExpires := time.Now().AddDate(0, 3, 0)
 		ClientID:          clientID,
 		Reference:         strings.TrimSpace(req.Reference),
 		Currency:          currency,
-		KESEquivalent:      math.Round(kesEquivalent*100) / 100,
+		KESEquivalent:     models.ToCents(kesEquivalent),
 		ExchangeRate:      exchangeRate,
 		ExchangeRateAt:    time.Now(),
-		Subtotal:          math.Round(subtotal*100) / 100,
+		Subtotal:          models.ToCents(subtotal),
 		TaxRate:           taxRate,
-		TotalTax:          math.Round(totalTax*100) / 100,
-		TaxAmount:         math.Round(totalTax*100) / 100,
-		Discount:          math.Round(discount*100) / 100,
-		Total:             math.Round(total*100) / 100,
-		BalanceDue:        math.Round(total*100) / 100,
+		TotalTax:          models.ToCents(totalTax),
+		TaxAmount:         models.ToCents(totalTax),
+		Discount:          models.ToCents(discount),
+		Total:             models.ToCents(total),
+		BalanceDue:        models.ToCents(total),
 		TaxType:          models.TaxTypeStandard,
 		Status:           models.InvoiceStatusDraft,
 		DueDate:         req.DueDate,
@@ -217,6 +218,8 @@ magicTokenExpires := time.Now().AddDate(0, 3, 0)
 
 	invoice.Items = kraPayloadItems
 	invoice.Client = *client
+
+	metrics.RecordInvoiceCreated()
 
 	return invoice, nil
 }
@@ -480,7 +483,7 @@ func (s *InvoiceService) UpdateInvoice(tenantID, invoiceID string, req *UpdateIn
 		invoice.TaxRate = math.Max(0, math.Min(100, *req.TaxRate))
 	}
 	if req.Discount != nil {
-		invoice.Discount = math.Max(0, *req.Discount)
+		invoice.Discount = models.ToCents(math.Max(0, *req.Discount))
 	}
 	if req.Notes != nil {
 		invoice.Notes = strings.TrimSpace(*req.Notes)
@@ -566,13 +569,13 @@ func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, kraPaylo
 				InvoiceID:    invoiceID,
 				Description:  strings.TrimSpace(item.Description),
 				Quantity:     item.Quantity,
-				UnitPrice:    item.UnitPrice,
+				UnitPrice:    models.ToCents(item.UnitPrice),
 				Unit:         item.Unit,
 				TaxRate:      itemTaxRate,
-				TaxAmount:    math.Round(itemTaxAmt*100) / 100,
+				TaxAmount:    models.ToCents(itemTaxAmt),
 				DiscountRate: itemDiscountRate,
-				DiscountAmt:  math.Round(itemDiscountAmt*100) / 100,
-				Total:        math.Round(lineTotal*100) / 100,
+				DiscountAmt:  models.ToCents(itemDiscountAmt),
+				Total:        models.ToCents(lineTotal),
 				SortOrder:    i,
 			})
 		}
@@ -601,19 +604,17 @@ func (s *InvoiceService) UpdateInvoiceItems(tenantID, invoiceID string, kraPaylo
 
 // recalculateInvoiceTotals recalculates invoice totals from line items
 func (s *InvoiceService) recalculateInvoiceTotals(invoice *models.Invoice) {
-	var subtotal float64
-	var totalTax float64
+	var subtotal, totalTax models.Money
 	for _, item := range invoice.Items {
 		subtotal += item.Total
 		totalTax += item.TaxAmount
 	}
-	invoice.Subtotal = math.Round(subtotal*100) / 100
-	invoice.TotalTax = math.Round(totalTax*100) / 100
+	invoice.Subtotal = subtotal
+	invoice.TotalTax = totalTax
 	invoice.TaxAmount = invoice.TotalTax
-	invoice.Total = math.Round((subtotal-invoice.Discount)*100) / 100
+	invoice.Total = subtotal.Subtract(invoice.Discount)
 
-	// Ensure total is not negative
-	if invoice.Total < 0 {
+	if invoice.Total.LessThan(0) {
 		invoice.Total = 0
 	}
 }

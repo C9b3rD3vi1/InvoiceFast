@@ -235,10 +235,10 @@ func (c *DBHealthChecker) Check(ctx context.Context) ComponentStatus {
 
 // RedisHealthChecker checks Redis connectivity
 type RedisHealthChecker struct {
-	client *redis.Client
+	client redis.UniversalClient
 }
 
-func NewRedisHealthChecker(client *redis.Client) *RedisHealthChecker {
+func NewRedisHealthChecker(client redis.UniversalClient) *RedisHealthChecker {
 	return &RedisHealthChecker{client: client}
 }
 
@@ -509,12 +509,12 @@ func (c *ExternalAPIHealthChecker) Check(ctx context.Context) ComponentStatus {
 }
 
 // CreateDefaultHealthChecks creates the default health check registry
-func CreateDefaultHealthChecks(db *sql.DB, redisClient *redis.Client) *Registry {
+func CreateDefaultHealthChecks(sqlDB *sql.DB, redisClient redis.UniversalClient) *Registry {
 	registry := NewRegistry(nil)
 
 	// Register database check
-	if db != nil {
-		registry.Register(NewDBHealthChecker(db))
+	if sqlDB != nil {
+		registry.Register(NewDBHealthChecker(sqlDB))
 	}
 
 	// Register Redis check

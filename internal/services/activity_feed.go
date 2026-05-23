@@ -71,7 +71,7 @@ func (s *ActivityService) GetRecentActivity(tenantID string, limit int) ([]Activ
 			ID:          inv.ID,
 			Type:        "invoice_created",
 			Title:       fmt.Sprintf("Invoice %s created", inv.InvoiceNumber),
-			Description: fmt.Sprintf("%s - %s %.2f", inv.ClientID, inv.Currency, inv.Total),
+			Description: fmt.Sprintf("%s - %s %.2f", inv.ClientID, inv.Currency, inv.Total.Float64()),
 			EntityType:  "invoice",
 			EntityID:    inv.ID,
 			UserID:      inv.UserID,
@@ -97,7 +97,7 @@ func (s *ActivityService) GetRecentActivity(tenantID string, limit int) ([]Activ
 		activities = append(activities, ActivityItem{
 			ID:          pay.ID,
 			Type:        "payment_received",
-			Title:       fmt.Sprintf("Payment of %s %.2f received", pay.Currency, pay.Amount),
+			Title:       fmt.Sprintf("Payment of %s %.2f received", pay.Currency, pay.Amount.Float64()),
 			Description: fmt.Sprintf("Invoice: %s", inv.InvoiceNumber),
 			EntityType:  "payment",
 			EntityID:    pay.ID,

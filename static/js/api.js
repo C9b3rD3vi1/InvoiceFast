@@ -185,7 +185,7 @@ const InvoiceFastAPI = {
     // Item Library
     itemLibrary: {
         async list() {
-            return InvoiceFastAPI.request('/tenant/items');
+            return InvoiceFastAPI.request('/tenant/item-library');
         },
         
         async get(id) {
@@ -193,7 +193,7 @@ const InvoiceFastAPI = {
         },
         
         async create(data) {
-            return InvoiceFastAPI.request('/tenant/items', {
+            return InvoiceFastAPI.request('/tenant/item-library', {
                 method: 'POST',
                 body: JSON.stringify(data),
             });
@@ -258,7 +258,7 @@ const InvoiceFastAPI = {
         
         async saveConfig(data) {
             return InvoiceFastAPI.request('/tenant/late-fees/config', {
-                method: 'POST',
+                method: 'PUT',
                 body: JSON.stringify(data),
             });
         },
@@ -379,11 +379,11 @@ const InvoiceFastAPI = {
     // Payment Matching
     paymentMatching: {
         async getUnallocated() {
-            return InvoiceFastAPI.request('/tenant/payments/unallocated');
+            return InvoiceFastAPI.request('/tenant/payments/matching/unallocated');
         },
         
         async match(paymentID, invoiceID) {
-            return InvoiceFastAPI.request('/tenant/payments/' + paymentID + '/match', {
+            return InvoiceFastAPI.request('/tenant/payments/matching/' + paymentID + '/match', {
                 method: 'POST',
                 body: JSON.stringify({ invoice_id: invoiceID }),
             });
@@ -542,7 +542,7 @@ const InvoiceFastAPI = {
         },
         
         async remind(id) {
-            return InvoiceFastAPI.request('/tenant/invoices/' + id + '/remind', {
+            return InvoiceFastAPI.request('/tenant/invoices/' + id + '/reminder', {
                 method: 'POST',
             });
         },
@@ -578,29 +578,22 @@ const InvoiceFastAPI = {
         },
         
         async getPdf(id) {
-            const token = this.getToken() || localStorage.getItem('token');
+            const token = this.getToken();
             if (!token) {
                 throw new Error('No token available');
             }
             try {
-                console.log('Downloading PDF for invoice:', id);
-                const response = await fetch('/api/v1/tenant/invoices/' + id + '/pdf?token=' + encodeURIComponent(token));
-                console.log('Response status:', response.status);
-                console.log('Response headers:', response.headers.get('content-type'));
-                
+                const response = await fetch('/api/v1/tenant/invoices/' + id + '/pdf', {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                });
                 if (!response.ok) {
                     const text = await response.text();
-                    console.error('Download error response:', text);
                     throw new Error(text || 'Download failed with status ' + response.status);
                 }
-                
                 const blob = await response.blob();
-                console.log('Blob size:', blob.size, 'Blob type:', blob.type);
-                
                 if (blob.size === 0) {
                     throw new Error('Downloaded file is empty');
                 }
-                
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -611,7 +604,6 @@ const InvoiceFastAPI = {
                 setTimeout(() => window.URL.revokeObjectURL(url), 100);
                 return true;
             } catch(err) {
-                console.error('PDF download failed:', err);
                 throw err;
             }
         },
@@ -713,24 +705,24 @@ const InvoiceFastAPI = {
         },
         
         async stats() {
-            return InvoiceFastAPI.request('/tenant/payments/stats');
+            return InvoiceFastAPI.request('/tenant/payments/summary');
         },
         
         async reconcile() {
-            return InvoiceFastAPI.request('/tenant/payments/reconcile', {
+            return InvoiceFastAPI.request('/tenant/payments/matching/reconcile', {
                 method: 'POST',
             });
         },
         
         async create(data) {
-            return InvoiceFastAPI.request('/tenant/payments', {
+            return InvoiceFastAPI.request('/tenant/payments/matching', {
                 method: 'POST',
                 body: JSON.stringify(data),
             });
         },
         
         async request(data) {
-            return InvoiceFastAPI.request('/tenant/payments/request', {
+            return InvoiceFastAPI.request('/tenant/payments/matching/request', {
                 method: 'POST',
                 body: JSON.stringify(data),
             });
@@ -744,7 +736,7 @@ const InvoiceFastAPI = {
         },
         
         async reconcile(id) {
-            return InvoiceFastAPI.request('/tenant/payments/' + id + '/reconcile', {
+            return InvoiceFastAPI.request('/tenant/payments/matching/' + id + '/reconcile', {
                 method: 'POST',
             });
         },
@@ -759,7 +751,7 @@ const InvoiceFastAPI = {
         async getReceipt(id) {
             const token = InvoiceFastAPI.getToken();
             if (token) {
-                window.location.href = '/api/v1/tenant/payments/' + id + '/receipt';
+                window.location.href = '/api/v1/tenant/payments/matching/' + id + '/receipt';
             }
         },
         
@@ -778,7 +770,7 @@ const InvoiceFastAPI = {
         },
         
         async matchPayment(paymentId, invoiceId, amount) {
-            return InvoiceFastAPI.request('/tenant/payments/' + paymentId + '/match', {
+            return InvoiceFastAPI.request('/tenant/payments/matching/' + paymentId + '/match', {
                 method: 'POST',
                 body: JSON.stringify({ invoice_id: invoiceId, amount }),
             });
@@ -925,20 +917,28 @@ const InvoiceFastAPI = {
     // Notification Preferences
     notifications: {
         async getPreferences() {
-            return InvoiceFastAPI.request('/tenant/notifications/preferences');
+            return InvoiceFastAPI.request('/tenant/notification-admin/preferences');
         },
         async updatePreferences(data) {
-            return InvoiceFastAPI.request('/tenant/notifications/preferences', {
+            return InvoiceFastAPI.request('/tenant/notification-admin/preferences', {
                 method: 'PUT',
                 body: JSON.stringify(data),
             });
         },
         async getTemplates() {
-            return InvoiceFastAPI.request('/tenant/notifications/templates');
+            return InvoiceFastAPI.request('/tenant/notification-admin/templates');
         },
         async getLogs(status) {
             const params = status ? '?status=' + status : '';
-            return InvoiceFastAPI.request('/tenant/notifications/logs' + params);
+            return InvoiceFastAPI.request('/tenant/notification-admin/logs' + params);
+        },
+        async list() {
+            return InvoiceFastAPI.request('/tenant/notifications/');
+        },
+        async markRead(id) {
+            return InvoiceFastAPI.request('/tenant/notifications/' + id + '/read', {
+                method: 'PUT',
+            });
         },
     },
 

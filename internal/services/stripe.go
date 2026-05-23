@@ -130,7 +130,7 @@ func (s *StripeService) handlePaymentSuccess(data interface{}) error {
 		return fmt.Errorf("invoice not found: %w", err)
 	}
 
-	amount := float64(pi.Amount) / 100
+	amount := models.Money(pi.Amount)
 
 	chargeID := ""
 	if pi.Charges != nil && len(pi.Charges.Data) > 0 {
@@ -156,8 +156,8 @@ func (s *StripeService) handlePaymentSuccess(data interface{}) error {
 		return fmt.Errorf("failed to create payment: %w", err)
 	}
 
-	invoice.PaidAmount += amount
-	if invoice.PaidAmount >= invoice.Total {
+	invoice.PaidAmount = invoice.PaidAmount.Add(amount)
+	if invoice.PaidAmount.GreaterThan(invoice.Total) || invoice.PaidAmount.Equals(invoice.Total) {
 		invoice.Status = models.InvoiceStatusPaid
 		invoice.PaidAt = &now
 	}
@@ -218,7 +218,7 @@ func (s *StripeService) CreateCheckoutSession(invoice *models.Invoice, successUR
 		return "", errors.New("stripe not configured")
 	}
 
-	amountCents := int64(invoice.Total * 100)
+	amountCents := int64(invoice.Total)
 
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),

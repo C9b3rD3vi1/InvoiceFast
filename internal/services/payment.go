@@ -61,6 +61,9 @@ type PaymentResult struct {
 // SECURITY: Does NOT create payment record before STK push succeeds
 // The payment is only recorded AFTER successful callback
 func (s *PaymentService) InitiatePayment(ctx context.Context, req *PaymentRequest) (*PaymentResult, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	// Validate tenant
 	if req.TenantID == "" {
 		return nil, errors.New("tenant_id is required")
@@ -79,7 +82,7 @@ func (s *PaymentService) InitiatePayment(ctx context.Context, req *PaymentReques
 	}
 
 	// Calculate remaining amount
-	remainingAmount := invoice.Total - invoice.PaidAmount
+	remainingAmount := invoice.Total.Subtract(invoice.PaidAmount).Float64()
 	if remainingAmount <= 0 {
 		s.log.Warn(ctx, "Payment: Invoice already paid",
 			"invoice_id", invoice.ID,
@@ -119,6 +122,9 @@ func (s *PaymentService) InitiatePayment(ctx context.Context, req *PaymentReques
 // CompletePaymentFromCallback processes payment completion from webhook callback
 // This is the CRITICAL function that must be idempotent and secure
 func (s *PaymentService) CompletePaymentFromCallback(ctx context.Context, provider string, callbackData interface{}) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	var paymentRef string
 	var amount float64
 	var receipt string
@@ -183,7 +189,7 @@ func (s *PaymentService) CompletePaymentFromCallback(ctx context.Context, provid
 			return ErrInvoiceNotFound
 		}
 
-		remaining := invoice.Total - invoice.PaidAmount
+		remaining := invoice.Total.Subtract(invoice.PaidAmount).Float64()
 		if amount > remaining {
 			s.log.Error(ctx, "Payment: Amount exceeds remaining balance",
 				"amount", amount,
@@ -202,8 +208,8 @@ func (s *PaymentService) CompletePaymentFromCallback(ctx context.Context, provid
 		}
 
 		// Update invoice status
-		invoice.PaidAmount += amount
-		if invoice.PaidAmount >= invoice.Total {
+		invoice.PaidAmount = invoice.PaidAmount.Add(models.ToCents(amount))
+		if invoice.PaidAmount.GreaterThan(invoice.Total) || invoice.PaidAmount.Equals(invoice.Total) {
 			invoice.PaidAmount = invoice.Total
 			invoice.Status = models.InvoiceStatusPaid
 			now := time.Now()
@@ -231,6 +237,9 @@ func (s *PaymentService) CompletePaymentFromCallback(ctx context.Context, provid
 
 // MarkPaymentFailed marks a payment as failed with proper tenant isolation
 func (s *PaymentService) MarkPaymentFailed(ctx context.Context, tenantID, paymentID, reason string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if tenantID == "" {
 		return errors.New("tenant_id is required")
 	}
@@ -257,6 +266,9 @@ func (s *PaymentService) MarkPaymentFailed(ctx context.Context, tenantID, paymen
 
 // getInvoiceWithTenant retrieves invoice with proper tenant isolation
 func (s *PaymentService) getInvoiceWithTenant(ctx context.Context, tenantID, invoiceID string) (*models.Invoice, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var invoice models.Invoice
 	err := s.db.Scopes(database.TenantFilter(tenantID)).
 		Preload("Client").
@@ -272,6 +284,9 @@ func (s *PaymentService) getInvoiceWithTenant(ctx context.Context, tenantID, inv
 
 // GetPaymentWithTenant retrieves payment with proper tenant isolation
 func (s *PaymentService) GetPaymentWithTenant(ctx context.Context, tenantID, paymentID string) (*models.Payment, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
 	}
@@ -297,6 +312,9 @@ func (s *PaymentService) GetPaymentWithTenant(ctx context.Context, tenantID, pay
 
 // GetPaymentsByInvoice retrieves all payments for an invoice (tenant-scoped)
 func (s *PaymentService) GetPaymentsByInvoice(ctx context.Context, tenantID, invoiceID string) ([]models.Payment, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if tenantID == "" {
 		return nil, errors.New("tenant_id is required")
 	}
@@ -326,6 +344,9 @@ type PaymentFilter struct {
 
 // GetTenantPayments retrieves all payments for a tenant (tenant-scoped)
 func (s *PaymentService) GetTenantPayments(ctx context.Context, tenantID string, filter PaymentFilter) ([]models.Payment, int64, error) {
+	if ctx.Err() != nil {
+		return nil, 0, ctx.Err()
+	}
 	if tenantID == "" {
 		return nil, 0, errors.New("tenant_id is required")
 	}
@@ -370,7 +391,7 @@ func (s *PaymentService) ValidatePaymentAmount(invoice *models.Invoice, amount f
 		return ErrInvalidPaymentAmount
 	}
 
-	remaining := invoice.Total - invoice.PaidAmount
+	remaining := invoice.Total.Subtract(invoice.PaidAmount).Float64()
 	if amount > remaining {
 		return fmt.Errorf("amount %.2f exceeds remaining balance %.2f", amount, remaining)
 	}
@@ -380,6 +401,9 @@ func (s *PaymentService) ValidatePaymentAmount(invoice *models.Invoice, amount f
 
 // CreatePendingPayment creates a pending payment record (used when we need to track initiation)
 func (s *PaymentService) CreatePendingPayment(ctx context.Context, invoice *models.Invoice, phoneNumber, providerRef string, amount float64) (*models.Payment, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	// Validate amount first
 	if err := s.ValidatePaymentAmount(invoice, amount); err != nil {
 		return nil, err
@@ -390,7 +414,7 @@ func (s *PaymentService) CreatePendingPayment(ctx context.Context, invoice *mode
 		TenantID:    invoice.TenantID,
 		InvoiceID:   invoice.ID,
 		UserID:      invoice.UserID,
-		Amount:      amount,
+		Amount:      models.ToCents(amount),
 		Currency:    invoice.Currency,
 		Method:      models.PaymentMethodMpesa,
 		Status:      models.PaymentStatusPending,
@@ -413,6 +437,9 @@ func (s *PaymentService) CreatePendingPayment(ctx context.Context, invoice *mode
 
 // ReversePayment reverses a completed payment (for chargebacks/refunds)
 func (s *PaymentService) ReversePayment(ctx context.Context, tenantID, paymentID, reason string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if tenantID == "" {
 		return errors.New("tenant_id is required")
 	}
@@ -478,6 +505,9 @@ type WebhookPayload struct {
 
 // ProcessWebhook processes an incoming payment webhook (tenant-aware)
 func (s *PaymentService) ProcessWebhook(ctx context.Context, tenantID string, payload *WebhookPayload) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	s.log.Info(ctx, "Payment: Processing webhook",
 		"tenant_id", tenantID,
 		"event", payload.Event,
@@ -546,8 +576,8 @@ func (s *PaymentService) completePaymentFromWebhook(payment *models.Payment, pay
 			return ErrInvoiceNotFound
 		}
 
-		invoice.PaidAmount += amount
-		if invoice.PaidAmount >= invoice.Total {
+		invoice.PaidAmount = invoice.PaidAmount.Add(models.ToCents(amount))
+		if invoice.PaidAmount.GreaterThan(invoice.Total) || invoice.PaidAmount.Equals(invoice.Total) {
 			invoice.PaidAmount = invoice.Total
 			invoice.Status = models.InvoiceStatusPaid
 			invoice.PaidAt = &now

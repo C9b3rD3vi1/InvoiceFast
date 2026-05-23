@@ -72,10 +72,10 @@ func (s *PDFService) GenerateInvoiceHTML(invoice *models.Invoice, user *models.U
 			Description:  item.Description,
 			Quantity:     item.Quantity,
 			Unit:         item.Unit,
-			UnitPrice:    item.UnitPrice,
+			UnitPrice:    item.UnitPrice.Float64(),
 			TaxRate:      item.TaxRate,
 			DiscountRate: item.DiscountRate,
-			Total:        item.Total,
+			Total:        item.Total.Float64(),
 		}
 	}
 
@@ -84,7 +84,7 @@ func (s *PDFService) GenerateInvoiceHTML(invoice *models.Invoice, user *models.U
 	dueDate := invoice.DueDate.Format("02 Jan 2006")
 
 	// Format totals
-	balanceDue := invoice.Total - invoice.PaidAmount
+	balanceDue := invoice.Total.Subtract(invoice.PaidAmount).Float64()
 	if balanceDue < 0 {
 		balanceDue = 0
 	}
@@ -112,12 +112,12 @@ func (s *PDFService) GenerateInvoiceHTML(invoice *models.Invoice, user *models.U
 		ClientKRAPIN:  invoice.Client.KRAPIN,
 
 		Items:      items,
-		Subtotal:   invoice.Subtotal,
+		Subtotal:   invoice.Subtotal.Float64(),
 		TaxRate:    invoice.TaxRate,
-		TaxAmount:  invoice.TaxAmount,
-		Discount:   invoice.Discount,
-		Total:      invoice.Total,
-		PaidAmount: invoice.PaidAmount,
+		TaxAmount:  invoice.TaxAmount.Float64(),
+		Discount:   invoice.Discount.Float64(),
+		Total:      invoice.Total.Float64(),
+		PaidAmount: invoice.PaidAmount.Float64(),
 		BalanceDue: balanceDue,
 
 		Notes:               invoice.Notes,
@@ -128,7 +128,7 @@ func (s *PDFService) GenerateInvoiceHTML(invoice *models.Invoice, user *models.U
 
 	// Generate QR code content (for KRA compliance)
 	qrContent := fmt.Sprintf("INV:%s|AMT:%.2f|DATE:%s|TIN:%s",
-		invoice.InvoiceNumber, invoice.Total, issueDate, user.KRAPIN)
+		invoice.InvoiceNumber, invoice.Total.Float64(), issueDate, user.KRAPIN)
 	_ = qrContent
 
 	// Render template
@@ -500,12 +500,12 @@ func (s *PDFService) GenerateReceiptHTML(invoice *models.Invoice, payment *model
 		"CompanyPhone":  user.Phone,
 		"KRAPIN":        user.KRAPIN,
 		"ClientName":    invoice.Client.Name,
-		"Amount":        payment.Amount,
+		"Amount":        payment.Amount.Float64(),
 		"Currency":      payment.Currency,
 		"Method":        payment.Method,
 		"Reference":     payment.Reference,
-		"TotalInvoice":  invoice.Total,
-		"BalanceBefore": invoice.Total,
+		"TotalInvoice":  invoice.Total.Float64(),
+		"BalanceBefore": invoice.Total.Float64(),
 		"BalanceAfter":  0.0,
 	}
 

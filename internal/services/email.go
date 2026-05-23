@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/metrics"
 )
 
 // EmailService handles sending emails
@@ -110,9 +111,11 @@ func (s *EmailService) Send(req EmailRequest) error {
 
 	err := smtp.SendMail(addr, auth, s.cfg.Mail.FromEmail, req.To, msg.Bytes())
 	if err != nil {
+		metrics.RecordEmailFailed()
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
+	metrics.RecordEmailSent()
 	return nil
 }
 

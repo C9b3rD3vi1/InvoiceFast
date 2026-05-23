@@ -19,6 +19,7 @@ func AuthRoutes(app fiber.Router, h *handlers.AuthHandler) fiber.Router {
 	group.Post("/forgot-password", h.ForgotPassword)
 	group.Post("/reset-password", h.ResetPassword)
 	group.Post("/send-verification-link", h.HandleSendVerificationLink)
+	group.Post("/verify-2fa-login", h.VerifyTwoFactorLogin)
 
 	return group
 }

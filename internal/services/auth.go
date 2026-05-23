@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -133,7 +131,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 		TenantID:  tenantID,
 		UserID:    user.ID,
 		Token:     tokenHash,
-		RawToken:  rawToken, // Will be cleared before returning
+		RawToken:  "", // Never store raw token in DB
 		Email:     email,
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 		IPAddress: ipAddress,
@@ -145,8 +143,7 @@ func (s *AuthService) InitiatePasswordReset(tenantID, email, ipAddress, userAgen
 		return nil, fmt.Errorf("failed to create reset token: %w", err)
 	}
 
-	// SECURITY: Clear raw token before returning - never expose in API response
-	resetToken.RawToken = ""
+	// The raw token is held in the local variable `rawToken` for email delivery
 
 	logger.Get().Info(context.Background(), "Password reset initiated", "user_id", user.ID, "ip_address", ipAddress)
 
@@ -283,9 +280,11 @@ type Claims struct {
 }
 
 type AuthResponse struct {
-	AccessToken  string       `json:"access_token"`
-	RefreshToken string       `json:"refresh_token"`
-	User         *models.User `json:"user"`
+	AccessToken       string       `json:"access_token,omitempty"`
+	RefreshToken      string       `json:"refresh_token,omitempty"`
+	User              *models.User `json:"user,omitempty"`
+	RequiresTwoFactor bool         `json:"requires_two_factor,omitempty"`
+	TwoFactorToken    string       `json:"two_factor_token,omitempty"`
 }
 
 func NewAuthService(db *database.DB, cfg *config.Config, emailSvc *EmailService, auditSvc *AuditService, exchangeRateSvc *ExchangeRateService) *AuthService {
@@ -457,13 +456,28 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		s.db.Model(&user).UpdateColumn("login_attempts", gorm.Expr("login_attempts + 1"))
-		if user.LoginAttempts+1 >= 5 {
-			lockedUntil := time.Now().Add(15 * time.Minute)
-			s.db.Model(&user).UpdateColumns(map[string]interface{}{
-				"locked_until":  lockedUntil,
-				"login_attempts": 0,
-			})
+		// Use transaction to prevent race conditions on login_attempts
+		txErr := s.db.Transaction(func(tx *gorm.DB) error {
+			var u models.User
+			if err := tx.First(&u, "id = ?", user.ID).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&u).UpdateColumn("login_attempts", gorm.Expr("login_attempts + 1")).Error; err != nil {
+				return err
+			}
+			if u.LoginAttempts+1 >= 5 {
+				lockedUntil := time.Now().Add(15 * time.Minute)
+				if err := tx.Model(&u).UpdateColumns(map[string]interface{}{
+					"locked_until":   lockedUntil,
+					"login_attempts": 0,
+				}).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if txErr != nil {
+			logger.Get().Error(context.Background(), "failed to update login attempts", "error", txErr.Error())
 		}
 		return nil, ErrWrongPassword
 	}
@@ -472,6 +486,17 @@ func (s *AuthService) Login(email, password string) (*AuthResponse, error) {
 		"login_attempts": 0,
 		"locked_until":   nil,
 	})
+
+	if user.TwoFactorEnabled {
+		twoFactorToken, err := s.generateTwoFactorToken(&user)
+		if err != nil {
+			return nil, err
+		}
+		return &AuthResponse{
+			RequiresTwoFactor: true,
+			TwoFactorToken:    twoFactorToken,
+		}, nil
+	}
 
 	accessToken, err := s.generateAccessToken(&user)
 	if err != nil {
@@ -678,6 +703,11 @@ func (s *AuthService) GenerateAPIKey(userID, keyName string) (string, error) {
 		return "", fmt.Errorf("failed to create API key: %w", err)
 	}
 
+	// Clear raw key from DB after storing hash
+	if err := s.db.Model(apiKeyModel).Update("key", "").Error; err != nil {
+		return "", fmt.Errorf("failed to clear raw key: %w", err)
+	}
+
 	return apiKey, nil
 }
 
@@ -743,6 +773,106 @@ func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.cfg.JWT.Secret))
+}
+
+func (s *AuthService) generateTwoFactorToken(user *models.User) (string, error) {
+	claims := &Claims{
+		UserID:   user.ID,
+		TenantID: user.TenantID,
+		Email:    user.Email,
+		Role:     user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "invoicefast-2fa",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.cfg.JWT.Secret))
+}
+
+func (s *AuthService) VerifyTwoFactorLogin(twoFactorToken, code string) (*AuthResponse, error) {
+	// Parse and validate the 2FA token
+	token, err := jwt.ParseWithClaims(twoFactorToken, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(s.cfg.JWT.Secret), nil
+	})
+	if err != nil {
+		return nil, errors.New("invalid or expired 2FA token")
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, errors.New("invalid 2FA token")
+	}
+
+	// Verify the token was issued for 2FA purpose
+	if claims.Issuer != "invoicefast-2fa" {
+		return nil, errors.New("invalid token purpose")
+	}
+
+	// Load user with 2FA secret
+	var user models.User
+	if err := s.db.First(&user, "id = ?", claims.UserID).Error; err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if !user.TwoFactorEnabled {
+		return nil, errors.New("2FA is not enabled for this user")
+	}
+
+	if user.TwoFactorSecret == "" {
+		return nil, errors.New("2FA not configured")
+	}
+
+	decrypted, err := s.decryptSecret(user.TwoFactorSecret)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt 2FA secret: %w", err)
+	}
+	parts := strings.Split(decrypted, "|")
+	plainSecret := parts[0]
+
+	// Check backup codes
+	if len(parts) > 1 {
+		backupCodes := strings.Split(parts[1], ",")
+		for _, bc := range backupCodes {
+			if bc == code {
+				goto issueTokens
+			}
+		}
+	}
+
+	if !validateTOTP(plainSecret, code) {
+		return nil, errors.New("invalid 2FA code")
+	}
+
+issueTokens:
+	accessToken, err := s.generateAccessToken(&user)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := s.GenerateRefreshTokenWithTenant(user.ID, user.TenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	user.TwoFactorVerifiedAt = &now
+	s.db.Model(&user).UpdateColumn("two_factor_verified_at", now)
+
+	if s.auditService != nil {
+		_ = s.auditService.LogLoginAttempt(context.Background(), user.TenantID, user.Email, "", true, "2fa_verified")
+	}
+
+	return &AuthResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User:         &user,
+	}, nil
 }
 
 func (s *AuthService) generateRefreshToken(userID string) (string, error) {
@@ -959,7 +1089,7 @@ func (s *AuthService) SetupTwoFactor(tenantID, userID string) (*TwoFactorSetup, 
 
 	backupCodes := generateBackupCodes(8)
 
-	encrypted, err := s.encryptSecret(key.Secret())
+	encrypted, err := s.encryptSecret(key.Secret() + "|" + strings.Join(backupCodes, ","))
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt 2FA secret: %w", err)
 	}
@@ -987,27 +1117,33 @@ func (s *AuthService) VerifyAndEnableTwoFactor(tenantID, userID, code string) er
 	}
 
 	if user.TwoFactorSecret == "" {
-		return errors.New("please set up 2FA first")
+		return errors.New("2FA not set up - call SetupTwoFactor first")
 	}
 
 	secret, err := s.decryptSecret(user.TwoFactorSecret)
 	if err != nil {
 		return fmt.Errorf("failed to decrypt 2FA secret: %w", err)
 	}
-	if !validateTOTP(secret, code) {
+
+	// Check if code is a backup code
+	parts := strings.Split(secret, "|")
+	backupCodes := strings.Split(parts[1], ",")
+
+	isBackupCode := false
+	for _, bc := range backupCodes {
+		if bc == code {
+			isBackupCode = true
+			break
+		}
+	}
+
+	if !isBackupCode && !validateTOTP(secret, code) {
 		return errors.New("invalid verification code")
 	}
 
 	now := time.Now()
 	user.TwoFactorEnabled = true
 	user.TwoFactorVerifiedAt = &now
-
-	backupCodes := generateBackupCodes(10)
-	encrypted, err := s.encryptSecret(secret + "|" + strings.Join(backupCodes, ","))
-	if err != nil {
-		return fmt.Errorf("failed to encrypt backup codes: %w", err)
-	}
-	user.TwoFactorSecret = encrypted
 
 	if err := s.db.Save(user).Error; err != nil {
 		return fmt.Errorf("failed to enable 2FA: %w", err)
@@ -1039,6 +1175,7 @@ func (s *AuthService) DisableTwoFactor(tenantID, userID, password, code string) 
 		return fmt.Errorf("failed to decrypt 2FA secret: %w", err)
 	}
 	parts := strings.Split(decrypted, "|")
+	plainSecret := parts[0]
 	if len(parts) > 1 {
 		backupCodes := strings.Split(parts[1], ",")
 		for _, bc := range backupCodes {
@@ -1048,7 +1185,7 @@ func (s *AuthService) DisableTwoFactor(tenantID, userID, password, code string) 
 		}
 	}
 
-	if !validateTOTP(decrypted, code) {
+	if !validateTOTP(plainSecret, code) {
 		return errors.New("invalid verification code")
 	}
 
@@ -1158,64 +1295,11 @@ func validateTOTP(secret, code string) bool {
 }
 
 func (s *AuthService) encryptSecret(plaintext string) (string, error) {
-	if s.cfg == nil {
-		return "", fmt.Errorf("encryption config is nil")
-	}
-	if plaintext == "" {
-		return "", fmt.Errorf("cannot encrypt empty value")
-	}
-	key := deriveEncryptionKey(s.cfg.JWT.Secret)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-	nonce := make([]byte, aesGCM.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
-	ciphertext := aesGCM.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return models.EncryptValue(plaintext)
 }
 
 func (s *AuthService) decryptSecret(encoded string) (string, error) {
-	if s.cfg == nil {
-		return "", fmt.Errorf("encryption config is nil")
-	}
-	if encoded == "" {
-		return "", fmt.Errorf("cannot decrypt empty value")
-	}
-	data, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return "", fmt.Errorf("base64 decode failed: %w", err)
-	}
-	key := deriveEncryptionKey(s.cfg.JWT.Secret)
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-	aesGCM, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-	nonceSize := aesGCM.NonceSize()
-	if len(data) < nonceSize {
-		return "", fmt.Errorf("ciphertext too short")
-	}
-	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return "", fmt.Errorf("decryption failed: %w", err)
-	}
-	return string(plaintext), nil
-}
-
-func deriveEncryptionKey(secret string) []byte {
-	h := sha256.Sum256([]byte(secret))
-	return h[:]
+	return models.DecryptValue(encoded)
 }
 
 // SendVerificationCode generates a 6-digit code, stores it, and emails it.
@@ -1240,7 +1324,7 @@ func (s *AuthService) SendVerificationCode(userID, email string) error {
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		Token:     hashed,
-		RawToken:  code,
+		RawToken:  "", // Never store raw code in DB
 		Email:     email,
 		ExpiresAt: time.Now().Add(10 * time.Minute),
 	}
@@ -1291,7 +1375,7 @@ func (s *AuthService) SendVerificationLink(userID string) error {
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		Token:     hashed,
-		RawToken:  rawToken,
+		RawToken:  "", // Never store raw token in DB
 		Email:     user.Email,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}

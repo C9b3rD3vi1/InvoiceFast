@@ -101,8 +101,8 @@ type Client struct {
 	Tags                 string       `json:"-" gorm:"tags"`  // Stored as JSON string in DB
 	InternalNotes        string       `json:"internal_notes"` // Private notes visible only to team
 	Notes                string       `json:"notes"`          // Client-facing notes
-	TotalBilled          float64      `json:"total_billed" gorm:"default:0"`
-	TotalPaid            float64      `json:"total_paid" gorm:"default:0"`
+	TotalBilled          Money        `json:"total_billed" gorm:"default:0"`
+	TotalPaid            Money        `json:"total_paid" gorm:"default:0"`
 	InvoiceCount         int64        `json:"invoice_count" gorm:"-"`
 	TagsList             []string     `json:"tags" gorm:"-"` // For API response only
 	LastPaymentDate      *time.Time   `json:"last_payment_date"`
@@ -179,7 +179,7 @@ type Invoice struct {
 	Reference         string           `json:"reference"`
 	Title             string           `json:"title"` // Invoice title/subject
 	Currency          string           `json:"currency" gorm:"default:'KES'"`
-	KESEquivalent     float64          `json:"kes_equivalent" gorm:"default:0"`     // KES value for forex
+	KESEquivalent     Money            `json:"kes_equivalent" gorm:"default:0"`     // KES value for forex
 	ExchangeRate      float64          `json:"exchange_rate" gorm:"default:1"`      // Rate at invoice creation
 	ExchangeRateAt    time.Time        `json:"exchange_rate_at"`                   // When rate was captured
 	InvoiceType       string           `json:"invoice_type" gorm:"default:'invoice'"` // invoice, credit_note, debit_note
@@ -191,26 +191,26 @@ type Invoice struct {
 	RecurringNextDate  time.Time     `json:"recurring_next_date"`
 	RecurringParentID  string        `json:"recurring_parent_id" gorm:"type:uuid;index"` // Child invoice from recurring
 
-	// Monetary fields - Using float64 for DB compatibility, but MUST use decimal in code
-	Subtotal     float64 `json:"subtotal"`
-	Discount     float64 `json:"discount" gorm:"default:0"`
-	TotalTax     float64 `json:"total_tax" gorm:"default:0"`
-	TaxAmount    float64 `json:"tax_amount" gorm:"-"` // Alias for TotalTax (backward compatibility)
-	Total        float64 `json:"total" gorm:"not null"`
-	PaidAmount   float64 `json:"paid_amount" gorm:"default:0"`
-	BalanceDue   float64 `json:"balance_due" gorm:"default:0"` // Calculated: Total - PaidAmount
+	// Monetary fields
+	Subtotal     Money `json:"subtotal"`
+	Discount     Money `json:"discount" gorm:"default:0"`
+	TotalTax     Money `json:"total_tax" gorm:"default:0"`
+	TaxAmount    Money `json:"tax_amount" gorm:"-"` // Alias for TotalTax (backward compatibility)
+	Total        Money `json:"total" gorm:"not null"`
+	PaidAmount   Money `json:"paid_amount" gorm:"default:0"`
+	BalanceDue   Money `json:"balance_due" gorm:"default:0"` // Calculated: Total - PaidAmount
 
 	// Tax breakdown for KRA compliance
-	TaxType           TaxType  `json:"tax_type" gorm:"default:'standard'"`
+	TaxType           TaxType `json:"tax_type" gorm:"default:'standard'"`
 	TaxRate           float64 `json:"tax_rate" gorm:"default:16"` // 16% default for VAT
-	TaxableAmount     float64 `json:"taxable_amount"`              // Amount before tax
-	ExemptAmount      float64 `json:"exempt_amount"`               // Exempt portion
-	ZeroRatedAmount   float64 `json:"zero_rated_amount"`          // Zero-rated portion
+	TaxableAmount     Money   `json:"taxable_amount"`              // Amount before tax
+	ExemptAmount      Money   `json:"exempt_amount"`               // Exempt portion
+	ZeroRatedAmount   Money   `json:"zero_rated_amount"`          // Zero-rated portion
 
 	// Additional KRA compliance fields
 	InvoiceClassification string `json:"invoice_classification" gorm:"default:'normal'"` // normal, demo
 	OriginalICN           string `json:"original_icn"` // For credit/debit notes - links to original invoice
-	ExciseDuty            float64 `json:"excise_duty"` // Excise duty amount
+	ExciseDuty            Money  `json:"excise_duty"` // Excise duty amount
 	BuyerClassification  string `json:"buyer_classification" gorm:"default:'B2C'"` // B2C, B2B, B2E, EXPORT
 
 	Status InvoiceStatus `json:"status" gorm:"default:'draft'"`
@@ -256,6 +256,11 @@ type Invoice struct {
 	Payments []Payment     `json:"payments,omitempty" gorm:"foreignKey:InvoiceID"`
 }
 
+// BeforeSave ensures monetary values are stored as exact cents (already enforced by Money type).
+func (i *Invoice) BeforeSave(tx *gorm.DB) error {
+	return nil
+}
+
 // BeforeUpdate - Prevent modifications to immutable invoices
 func (i *Invoice) BeforeUpdate(tx *gorm.DB) error {
 	// Check if KRA REJECTED - immutable (can't modify after rejection)
@@ -281,12 +286,11 @@ func (i *Invoice) BeforeDelete(tx *gorm.DB) error {
 }
 
 // GetTaxAmount returns the tax amount (alias for TotalTax for backward compatibility)
-func (i *Invoice) GetTaxAmount() float64 {
+func (i *Invoice) GetTaxAmount() Money {
 	return i.TaxAmount
 }
 
-// SetTaxAmount sets the tax amount (alias for TotalTax for backward compatibility)
-func (i *Invoice) SetTaxAmount(amount float64) {
+func (i *Invoice) SetTaxAmount(amount Money) {
 	i.TaxAmount = amount
 	i.TotalTax = amount
 }
@@ -393,97 +397,70 @@ func FormatInvoiceNumber(prefix string, sequence int64, padding int) string {
 // FINANCIAL VALIDATION
 // ============================================
 
-// ValidateInvoiceTotals ensures financial integrity
+// ValidateInvoiceTotals ensures financial integrity using exact Money arithmetic.
 func ValidateInvoiceTotals(invoice *Invoice, items []InvoiceItem) error {
-	var calculatedSubtotal float64
-	var calculatedTax float64
-	var calculatedTotal float64
+	var calculatedSubtotal Money
+	var calculatedTax Money
+	var calculatedTotal Money
 
 	for _, item := range items {
-		// Subtotal = quantity * unit_price
-		itemSubtotal := item.Quantity * item.UnitPrice
+		itemSubtotal := ToCents(item.Quantity * item.UnitPrice.Float64())
 
-		// Discount
-		var discount float64
+		var discount Money
 		if item.DiscountRate > 0 {
-			discount = itemSubtotal * (item.DiscountRate / 100)
-		} else if item.DiscountAmt > 0 {
+			discount = itemSubtotal.Mul(item.DiscountRate / 100)
+		} else {
 			discount = item.DiscountAmt
 		}
 
-		// Taxable amount after discount
-		taxable := itemSubtotal - discount
+		taxable := itemSubtotal.Sub(discount)
 
-		// Tax amount
-		var tax float64
+		var tax Money
 		if item.TaxRate > 0 && item.TaxType != TaxTypeNone && item.TaxType != TaxTypeExempt {
-			tax = taxable * (item.TaxRate / 100)
+			tax = taxable.Mul(item.TaxRate / 100)
 		}
 
-		// Item total = taxable + tax (matches service calculation)
-		itemTotal := taxable + tax
+		itemTotal := taxable.Add(tax)
 
-		calculatedSubtotal += itemSubtotal
-		calculatedTax += tax
-		calculatedTotal += itemTotal
+		calculatedSubtotal = calculatedSubtotal.Add(itemSubtotal)
+		calculatedTax = calculatedTax.Add(tax)
+		calculatedTotal = calculatedTotal.Add(itemTotal)
 	}
 
-	// Apply global discount
-	calculatedTotal = calculatedSubtotal + calculatedTax - invoice.Discount
+	calculatedTotal = calculatedSubtotal.Add(calculatedTax).Sub(invoice.Discount)
 
-	// Allow 0.01 rounding tolerance for KES
-	const tolerance = 0.01
-
-	if !withinTolerance(invoice.Total, calculatedTotal, tolerance) {
-		return fmt.Errorf("total mismatch: stored=%v, calculated=%v", invoice.Total, calculatedTotal)
+	if invoice.Total != calculatedTotal {
+		return fmt.Errorf("total mismatch: stored=%.2f, calculated=%.2f", invoice.Total.Float64(), calculatedTotal.Float64())
 	}
 
-	// Validate non-negative
-	if invoice.Total < 0 {
+	if invoice.Total.Lt(0) {
 		return errors.New("invoice total cannot be negative")
 	}
-	if invoice.BalanceDue < 0 {
+	if invoice.BalanceDue.Lt(0) {
 		return errors.New("balance due cannot be negative")
 	}
 
 	return nil
 }
 
+// CalculateLineItemTax calculates tax for a single line item using exact Money arithmetic.
+func CalculateLineItemTax(quantity, unitPrice, discountRate, discountAmt, taxRate float64, taxType TaxType) (subtotal, taxAmount, total Money) {
+	subtotal = ToCents(quantity * unitPrice)
 
-func withinTolerance(a, b, tolerance float64) bool {
-	diff := a - b
-	if diff < 0 {
-		diff = -diff
-	}
-	return diff <= tolerance
-}
-
-// ============================================
-// TAX CALCULATION ENGINE
-// ============================================
-
-// CalculateLineItemTax calculates tax for a single line item
-func CalculateLineItemTax(quantity, unitPrice, discountRate, discountAmt, taxRate float64, taxType TaxType) (subtotal, taxAmount, total float64) {
-	subtotal = quantity * unitPrice
-
-	// Calculate discount
-	var discount float64
+	var discount Money
 	if discountRate > 0 {
-		discount = subtotal * (discountRate / 100)
+		discount = subtotal.Mul(discountRate / 100)
 	} else {
-		discount = discountAmt
+		discount = ToCents(discountAmt)
 	}
 
-	afterDiscount := subtotal - discount
+	afterDiscount := subtotal.Sub(discount)
 
-	// Calculate tax based on type
 	if taxType == TaxTypeStandard && taxRate > 0 {
-		taxAmount = afterDiscount * (taxRate / 100)
-	} else {
-		taxAmount = 0
+		taxAmount = afterDiscount.Mul(taxRate / 100)
 	}
 
-	total = afterDiscount + taxAmount
+	total = afterDiscount.Add(taxAmount)
 	return
 }
 
@@ -495,26 +472,31 @@ type InvoiceItem struct {
 	ItemCode        string   `json:"item_code" gorm:"type:varchar(100)"`       // KRA item code
 	ItemDescription string `json:"item_description" gorm:"type:varchar(500)"` // KRA item description
 	Quantity      float64  `json:"quantity" gorm:"default:1"`
-	UnitPrice     float64  `json:"unit_price" gorm:"not null"` // Unit price before tax/discount
+	UnitPrice     Money    `json:"unit_price" gorm:"not null"` // Unit price before tax/discount
 	Unit          string   `json:"unit" gorm:"type:varchar(50)"`                     // e.g., "hours", "items", "pieces"
 	UnitOfMeasure string   `json:"unit_of_measure" gorm:"type:varchar(50)"`    // KRA unit of measure
 
 	// Tax per line item
-	TaxType   TaxType  `json:"tax_type" gorm:"default:'standard'"`
-	TaxRate   float64  `json:"tax_rate" gorm:"default:0"`  // e.g., 16 for 16%
-	TaxAmount float64  `json:"tax_amount" gorm:"default:0"` // Calculated tax
+	TaxType   TaxType `json:"tax_type" gorm:"default:'standard'"`
+	TaxRate   float64 `json:"tax_rate" gorm:"default:0"`  // e.g., 16 for 16%
+	TaxAmount Money   `json:"tax_amount" gorm:"default:0"` // Calculated tax
 
 	// Discount per line item
 	DiscountRate float64 `json:"discount_rate" gorm:"default:0"` // Percentage discount
-	DiscountAmt  float64 `json:"discount_amount" gorm:"default:0"` // Fixed discount amount
+	DiscountAmt  Money   `json:"discount_amount" gorm:"default:0"` // Fixed discount amount
 
 	// Calculated fields (MUST match: quantity * unit_price + tax - discount)
-	Subtotal    float64 `json:"subtotal"`    // quantity * unit_price
-	Total       float64 `json:"total" gorm:"not null"`       // Subtotal + TaxAmount - DiscountAmt
+	Subtotal    Money `json:"subtotal"`    // quantity * unit_price
+	Total       Money `json:"total" gorm:"not null"`       // Subtotal + TaxAmount - DiscountAmt
 
 	SortOrder int       `json:"sort_order" gorm:"default:0"`
 	DeletedAt  *time.Time `json:"-" gorm:"index"`
 	CreatedAt time.Time  `json:"created_at"`
+}
+
+// BeforeSave — no-op; Money type stores exact cents.
+func (item *InvoiceItem) BeforeSave(tx *gorm.DB) error {
+	return nil
 }
 
 // PaymentMethod represents the payment method
@@ -543,11 +525,11 @@ type Payment struct {
 	ID              string        `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID        string        `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID         string        `json:"user_id" gorm:"type:uuid;index"`
-	InvoiceID     string        `json:"invoice_id" gorm:"type:uuid;index;not null"`
-	Amount         float64       `json:"amount" gorm:"not null"`
+	InvoiceID     string        `json:"invoice_id" gorm:"type:uuid;index:idx_payment_invoice_status,priority:1;not null"`
+	Amount         Money         `json:"amount" gorm:"not null"`
 	Currency      string        `json:"currency" gorm:"default:'KES'"`
 	Method         PaymentMethod `json:"method" gorm:"not null"`
-	Status         PaymentStatus `json:"status" gorm:"default:'pending'"`
+	Status         PaymentStatus `json:"status" gorm:"default:'pending';index:idx_payment_invoice_status,priority:2"`
 	Reference     string        `json:"reference" gorm:"index"` // M-Pesa receipt number
 	IntasendID    string        `json:"intasend_id"`
 	StripeChargeID string       `json:"stripe_charge_id"`
@@ -563,6 +545,11 @@ type Payment struct {
 	PaymentType string `json:"payment_type" gorm:"default:'invoice'"` // invoice (merchant)
 	
 	Invoice Invoice `json:"-" gorm:"foreignKey:InvoiceID"`
+}
+
+// BeforeSave — no-op; Money type stores exact cents.
+func (p *Payment) BeforeSave(tx *gorm.DB) error {
+	return nil
 }
 
 // Reminder represents an automated reminder
@@ -583,7 +570,7 @@ type Reminder struct {
 type UnallocatedPayment struct {
 	ID          string     `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID    string     `json:"tenant_id" gorm:"type:uuid;index;not null"`
-	Amount      float64    `json:"amount" gorm:"not null"`
+	Amount      Money      `json:"amount" gorm:"not null"`
 	Currency    string     `json:"currency" gorm:"default:'KES'"`
 	Reference   string     `json:"reference" gorm:"index"` // Payment reference (e.g., M-Pesa receipt)
 	PhoneNumber string     `json:"phone_number"`
@@ -619,14 +606,14 @@ type RefreshToken struct {
 // AuditLog for tracking changes
 type AuditLog struct {
 	ID         string    `json:"id" gorm:"type:uuid;primaryKey"`
-	TenantID   string    `json:"tenant_id" gorm:"type:uuid;index"`
+	TenantID   string    `json:"tenant_id" gorm:"type:uuid;index:idx_audit_tenant_action_created,priority:1"`
 	UserID     string    `json:"user_id" gorm:"type:uuid;index"`
-	Action     string    `json:"action" gorm:"not null"`
+	Action     string    `json:"action" gorm:"not null;index:idx_audit_tenant_action_created,priority:2"`
 	EntityType string    `json:"entity_type"` // invoice, client, payment
 	EntityID   string    `json:"entity_id"`
 	Details    string    `json:"details"` // JSON blob
 	IPAddress  string    `json:"ip_address"`
-	CreatedAt  time.Time `json:"created_at"`
+	CreatedAt  time.Time `json:"created_at;index:idx_audit_tenant_action_created,priority:3"`
 }
 
 // APIKey for programmatic access
@@ -698,13 +685,13 @@ type KRAAuditLog struct {
 type Notification struct {
 	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
 	TenantID  string    `json:"tenant_id" gorm:"type:uuid;index"`
-	UserID    string    `json:"user_id" gorm:"type:uuid;index"`
+	UserID    string    `json:"user_id" gorm:"type:uuid;index:idx_notif_user_read,priority:1"`
 	Title     string    `json:"title"`
 	Message   string    `json:"message"`
 	Category  string    `json:"category"` // Invoices, Payments, Clients, System
 	Icon      string    `json:"icon"`     // bell, file-text, credit-card, users, settings
 	Actor     string    `json:"actor"`
-	Read      bool      `json:"read" gorm:"default:false"`
+	Read      bool      `json:"read" gorm:"default:false;index:idx_notif_user_read,priority:2"`
 	Link      string    `json:"link"`
 	Data      string    `json:"data"` // JSON additional data
 	CreatedAt time.Time `json:"created_at"`

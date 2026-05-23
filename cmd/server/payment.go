@@ -107,7 +107,7 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 		fmt.Sscanf(req.Amount, "%f", &amount)
 	}
 	if amount == 0 {
-		amount = invoice.Total
+		amount = invoice.Total.Float64()
 	}
 
 	// IDEMPOTENCY: Check for duplicate M-Pesa receipt number (Reference) WITHIN TRANSACTION
@@ -133,7 +133,7 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 			TenantID:    invoice.TenantID,
 			InvoiceID:   invoice.ID,
 			UserID:      invoice.UserID,
-			Amount:      amount,
+			Amount:      models.ToCents(amount),
 			Currency:    invoice.Currency,
 			Method:      models.PaymentMethodMpesa,
 			Status:      models.PaymentStatusCompleted,
@@ -152,7 +152,7 @@ func processSuccessfulPayment(c *fiber.Ctx, db *database.DB, invoice *models.Inv
 		// 2. Update invoice status
 		// Check if partial payment or full
 		newStatus := models.InvoiceStatusPaid
-		if invoice.PaidAmount+amount < invoice.Total {
+		if invoice.PaidAmount.Add(models.ToCents(amount)).LessThan(invoice.Total) {
 			newStatus = models.InvoiceStatusPartiallyPaid
 		}
 

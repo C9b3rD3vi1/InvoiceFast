@@ -134,7 +134,7 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 
 	// Use NotificationService if available
 	if s.notificationSvc != nil {
-		amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total)
+		amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.Total.Float64())
 		s.notificationSvc.Send(context.Background(), &NotificationRequest{
 			TenantID:   tenantID,
 			UserID:    invoice.UserID,
@@ -161,7 +161,7 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 			ClientName:    client.Name,
 			ClientEmail:   client.Email,
 			InvoiceNumber: invoice.InvoiceNumber,
-			Amount:        invoice.Total,
+			Amount:        invoice.Total.Float64(),
 			Currency:      invoice.Currency,
 			DueDate:       FormatDate(invoice.DueDate),
 			DaysOverdue:   0,
@@ -175,7 +175,7 @@ func (s *ReminderService) sendDueSoonReminder(invoice *models.Invoice) error {
 			invoice.InvoiceNumber,
 			FormatDate(invoice.DueDate),
 			invoice.Currency,
-			invoice.Total,
+			invoice.Total.Float64(),
 		)
 		logger.Get().Info(context.Background(), "Would send WhatsApp", "message", waMsg)
 	}
@@ -219,7 +219,7 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 
 	// Use NotificationService if available
 	if s.notificationSvc != nil {
-		amount := fmt.Sprintf("%s %.2f", invoice.Currency, balanceDue)
+		amount := fmt.Sprintf("%s %.2f", invoice.Currency, balanceDue.Float64())
 		s.notificationSvc.Send(context.Background(), &NotificationRequest{
 			TenantID:   tenantID,
 			UserID:    invoice.UserID,
@@ -247,7 +247,7 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 			ClientName:    client.Name,
 			ClientEmail:   client.Email,
 			InvoiceNumber: invoice.InvoiceNumber,
-			Amount:        balanceDue,
+			Amount:        balanceDue.Float64(),
 			Currency:      invoice.Currency,
 			DueDate:       FormatDate(invoice.DueDate),
 			DaysOverdue:   daysOverdue,
@@ -261,7 +261,7 @@ func (s *ReminderService) sendOverdueReminder(invoice *models.Invoice, daysOverd
 			invoice.InvoiceNumber,
 			daysOverdue,
 			invoice.Currency,
-			balanceDue,
+			balanceDue.Float64(),
 		)
 		logger.Get().Info(context.Background(), "Would send WhatsApp", "message", msg)
 	}
@@ -279,9 +279,9 @@ func (s *ReminderService) applyLateFee(invoice *models.Invoice, daysOverdue int)
 	}
 
 	// Calculate late fee
-	lateFee := (invoice.Total - invoice.PaidAmount) * (defaultReminderConfig.LateFeePercent / 100)
+	balance := invoice.Total.Subtract(invoice.PaidAmount).Float64()
+	lateFee := balance * (defaultReminderConfig.LateFeePercent / 100)
 
-	// Cap the late fee
 	if lateFee > defaultReminderConfig.LateFeeCap {
 		lateFee = defaultReminderConfig.LateFeeCap
 	}
@@ -292,10 +292,10 @@ func (s *ReminderService) applyLateFee(invoice *models.Invoice, daysOverdue int)
 
 	logger.Get().Info(context.Background(), "Applying late fee", "amount", lateFee, "invoice_number", invoice.InvoiceNumber)
 
-	// Update invoice
-	invoice.TaxRate = defaultReminderConfig.LateFeePercent // Reuse field for late fee indicator
-	invoice.TaxAmount = lateFee
-	invoice.Total = invoice.Subtotal + lateFee - invoice.Discount
+	lateFeeMoney := models.ToCents(lateFee)
+	invoice.TaxRate = defaultReminderConfig.LateFeePercent
+	invoice.TaxAmount = lateFeeMoney
+	invoice.Total = invoice.Subtotal.Add(lateFeeMoney).Subtract(invoice.Discount)
 
 	// Note: in production, add actual late fee line item
 	s.db.Save(invoice)

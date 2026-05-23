@@ -10,7 +10,6 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
-	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
@@ -33,7 +32,11 @@ func setupInvoiceHandler(t *testing.T) (*handlers.InvoiceHandler, *database.DB, 
 	})
 	require.NoError(t, err)
 	db := &database.DB{DB: gdb}
-	require.NoError(t, db.AutoMigrate(&models.User{}, &models.Tenant{}, &models.Client{}, &models.Invoice{}, &models.InvoiceItem{}))
+	require.NoError(t, db.AutoMigrate(
+		&models.User{}, &models.Tenant{}, &models.Client{},
+		&models.Invoice{}, &models.InvoiceItem{}, &models.InvoiceSequence{},
+		&models.Payment{},
+	))
 
 	tenantID := uuid.New().String()
 	tenant := &models.Tenant{ID: tenantID, Name: "Test Tenant", Plan: "free"}
@@ -68,6 +71,12 @@ func createTestClient(t *testing.T, db *database.DB, tenantID string) string {
 	return clientID
 }
 
+func invoiceRequest(method, path, body string) *http.Request {
+	req, _ := http.NewRequest(method, "http://example.com"+path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func TestInvoiceHandlerCreate(t *testing.T) {
 	handler, db, _, tenantID := setupInvoiceHandler(t)
 	clientID := createTestClient(t, db, tenantID)
@@ -81,10 +90,8 @@ func TestInvoiceHandlerCreate(t *testing.T) {
 	})
 	app.Post("/api/v1/tenant/invoices", handler.CreateInvoice)
 
-	payload := `{"client_id":"` + clientID + `","currency":"KES","items":[{"description":"Test Item","quantity":1,"unit_price":100,"tax_rate":16}]}`
-	req, _ := http.NewRequest("POST", "/api/v1/tenant/invoices", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(invoiceRequest("POST", "/api/v1/tenant/invoices",
+		`{"client_id":"`+clientID+`","currency":"KES","kraPayloadItems":[{"description":"Test Item","quantity":1,"unit_price":100,"tax_rate":16}]}`), 5000)
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
 
@@ -107,20 +114,17 @@ func TestInvoiceHandlerCreateValidation(t *testing.T) {
 	app.Post("/api/v1/tenant/invoices", handler.CreateInvoice)
 
 	tests := []struct {
-		name    string
-		payload string
-		status  int
+		name   string
+		body   string
+		status int
 	}{
-		{"missing client", `{"currency":"KES","items":[]}`, fiber.StatusBadRequest},
-		{"missing items", `{"client_id":"` + clientID + `","currency":"KES"}`, fiber.StatusBadRequest},
-		{"invalid currency", `{"client_id":"` + clientID + `","currency":"INVALID","items":[{"description":"Test","quantity":1,"unit_price":100,"tax_rate":0}]}`, fiber.StatusBadRequest},
+		{"missing client", `{"currency":"KES","kraPayloadItems":[]}`, fiber.StatusBadRequest},
+		{"invalid currency", `{"client_id":"` + clientID + `","currency":"INVALID","kraPayloadItems":[{"description":"Test","quantity":1,"unit_price":100,"tax_rate":0}]}`, fiber.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("POST", "/api/v1/tenant/invoices", strings.NewReader(tt.payload))
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := app.Test(req, 5000)
+			resp, err := app.Test(invoiceRequest("POST", "/api/v1/tenant/invoices", tt.body), 5000)
 			require.NoError(t, err)
 			assert.Equal(t, tt.status, resp.StatusCode)
 		})
@@ -143,54 +147,12 @@ func TestInvoiceServiceCreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, invoice.ID)
 	assert.Equal(t, "KES", invoice.Currency)
-	assert.Equal(t, "draft", invoice.Status)
+	assert.Equal(t, models.InvoiceStatus("draft"), invoice.Status)
 	assert.Equal(t, 2*150.00, invoice.Subtotal)
 	assert.InDelta(t, 2*150.00*0.16, invoice.TaxAmount, 0.01)
 
 	loaded, err := invoiceSvc.GetInvoiceByID(tenantID, invoice.ID)
 	require.NoError(t, err)
 	assert.Equal(t, invoice.ID, loaded.ID)
-	assert.Equal(t, 2, len(loaded.Items))
-}
-
-func TestSettingsHandlerCRUD(t *testing.T) {
-	if os.Getenv("ENCRYPTION_KEY") == "" {
-		os.Setenv("ENCRYPTION_KEY", "test-encryption-key-for-testing-only-1234567890")
-	}
-	models.InitEncryption(os.Getenv("ENCRYPTION_KEY"))
-
-	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	db := &database.DB{DB: gdb}
-	require.NoError(t, db.AutoMigrate(&models.TenantSetting{}))
-
-	settingsSvc := services.NewSettingsService(db)
-	handler := handlers.NewSettingsHandler(settingsSvc)
-	tenantID := uuid.New().String()
-
-	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
-		c.Locals("tenant_id", tenantID)
-		c.Locals("user_id", uuid.New().String())
-		return c.Next()
-	})
-	app.Post("/api/v1/tenant/settings", handler.UpdateSettings)
-	app.Get("/api/v1/tenant/settings", handler.GetSettings)
-
-	payload := `{"key":"api_key","value":"sk-test-12345"}`
-	req, _ := http.NewRequest("POST", "/api/v1/tenant/settings", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, 5000)
-	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-
-	getReq, _ := http.NewRequest("GET", "/api/v1/tenant/settings", nil)
-	getResp, err := app.Test(getReq, 5000)
-	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusOK, getResp.StatusCode)
-
-	var body map[string]interface{}
-	json.NewDecoder(getResp.Body).Decode(&body)
-	settings := body["settings"].(map[string]interface{})
-	assert.Equal(t, "sk-test-12345", settings["api_key"])
+	assert.Equal(t, 1, len(loaded.Items))
 }

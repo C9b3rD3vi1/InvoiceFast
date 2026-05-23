@@ -192,7 +192,7 @@ func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
 					return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Subscription already exists"})
 				}
 			} else {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+				return sendBadRequest(c, err)
 			}
 		}
 		
@@ -219,7 +219,7 @@ func (h *BillingHandler) CreateCheckoutSession(c *fiber.Ctx) error {
 			APIRef:       "subscription_" + req.PlanID,
 		})
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+			return sendBadRequest(c, err)
 		}
 		
 		return c.JSON(fiber.Map{
@@ -273,7 +273,7 @@ func (h *BillingHandler) CreateSubscription(c *fiber.Ctx) error {
 
 	sub, err := h.subService.CreateSubscription(tenantID, req.PlanID, billingCycle)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"subscription": sub})
@@ -286,7 +286,7 @@ func (h *BillingHandler) CancelSubscription(c *fiber.Ctx) error {
 	}
 
 	if err := h.subService.CancelSubscription(tenantID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"success": true})
@@ -299,7 +299,7 @@ func (h *BillingHandler) ReactivateSubscription(c *fiber.Ctx) error {
 	}
 
 	if err := h.subService.ReactivateSubscription(tenantID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"success": true})
@@ -326,7 +326,7 @@ func (h *BillingHandler) ChangePlan(c *fiber.Ctx) error {
 
 	sub, err := h.subService.UpgradePlan(tenantID, req.PlanID, req.BillingCycle)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"subscription": sub})
@@ -343,12 +343,7 @@ func (h *BillingHandler) GetBillingHistory(c *fiber.Ctx) error {
 
 	txs, count, _ := h.billingSvc.GetBillingHistory(tenantID, page, limit)
 
-	return c.JSON(fiber.Map{
-		"transactions": txs,
-		"total":        count,
-		"page":         page,
-		"limit":        limit,
-	})
+	return c.JSON(NewPaginatedResponse(txs, page, limit, count))
 }
 
 func (h *BillingHandler) InitiateMpesaPayment(c *fiber.Ctx) error {
@@ -372,7 +367,7 @@ func (h *BillingHandler) InitiateMpesaPayment(c *fiber.Ctx) error {
 
 	txID, err := h.billingSvc.InitiateMpesaSubscription(tenantID, req.Phone, req.Amount)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"transaction_id": txID})
@@ -401,7 +396,7 @@ func (h *BillingHandler) DeletePaymentMethod(c *fiber.Ctx) error {
 	}
 
 	if err := h.billingSvc.DeletePaymentMethod(tenantID, methodID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"success": true})
@@ -428,7 +423,7 @@ func (h *BillingHandler) UpdateSubscriptionPaymentMethod(c *fiber.Ctx) error {
 	}
 
 	if err := h.billingSvc.UpdateSubscriptionPaymentMethod(tenantID, req.PaymentMethod, req.Provider); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"success": true, "message": "Payment method updated"})
@@ -446,7 +441,7 @@ func (h *BillingHandler) SetDefaultPaymentMethod(c *fiber.Ctx) error {
 	}
 
 	if err := h.billingSvc.SetDefaultPaymentMethod(tenantID, methodID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"success": true})
@@ -467,7 +462,7 @@ func (h *BillingHandler) CheckLimits(c *fiber.Ctx) error {
 
 	allowed, reason, err := h.subService.CheckLimits(tenantID, resource, amount)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -484,7 +479,7 @@ func (h *BillingHandler) GetUsage(c *fiber.Ctx) error {
 
 	usage, err := h.subService.GetUsage(tenantID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	return c.JSON(fiber.Map{"usage": usage})
@@ -522,7 +517,7 @@ func (h *BillingHandler) HandleMpesaWebhook(c *fiber.Ctx) error {
 	}
 
 	if err := h.billingSvc.ProcessMpesaCallback(payload.CheckoutRequestID, status); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	// MARK IDEMPOTENCY
@@ -616,7 +611,7 @@ func (h *BillingHandler) HandleStripeWebhook(c *fiber.Ctx) error {
 
 	if err := h.billingSvc.HandleStripeWebhook(payload, signature); err != nil {
 		logger.Get().Error(c.UserContext(), "Stripe webhook handling failed", "error", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"success": true})

@@ -79,7 +79,7 @@ func (h *ExpenseHandler) GetExpenses(c *fiber.Ctx) error {
 
 	expenses, total, err := h.expenseService.GetExpenses(tenantID, filters)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	// Get categories map
@@ -102,12 +102,9 @@ func (h *ExpenseHandler) GetExpenses(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{
-		"expenses": result,
-		"total":    total,
-		"page":     filters["page"],
-		"limit":    filters["limit"],
-	})
+	page := filters["page"].(int)
+	limit := filters["limit"].(int)
+	return c.JSON(NewPaginatedResponse(result, page, limit, int64(total)))
 }
 
 func (h *ExpenseHandler) GetExpense(c *fiber.Ctx) error {
@@ -479,7 +476,7 @@ func (h *ExpenseHandler) bulkExportExpenses(c *fiber.Ctx, tenantID string, ids [
 			exp.Date.Format("2006-01-02"),
 			exp.Description,
 			category,
-			fmt.Sprintf("%.2f", exp.Amount),
+			fmt.Sprintf("%.2f", exp.Amount.Float64()),
 			exp.Currency,
 		})
 	}

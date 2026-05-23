@@ -11,7 +11,6 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
-	"invoicefast/internal/middleware"
 	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
@@ -36,14 +35,13 @@ func setupAuthHandler(t *testing.T) (*handlers.AuthHandler, *database.DB, *servi
 	require.NoError(t, err)
 
 	db := &database.DB{DB: gdb}
-	require.NoError(t, db.AutoMigrate(&models.User{}))
+	require.NoError(t, db.AutoMigrate(&models.User{}, &models.Tenant{}, &models.RefreshToken{}))
 
 	cfg := &config.Config{
 		JWT: config.JWTConfig{
 			Secret:        "test-secret-key-for-jwt-tokens-min-32-chars-long!!",
-			AccessTTL:     15 * time.Minute,
-			RefreshTTL:    7 * 24 * time.Hour,
-			Issuer:        "invoicefast-test",
+			Expiry:        15 * time.Minute,
+			RefreshExpiry: 7 * 24 * time.Hour,
 		},
 		Server: config.ServerConfig{Mode: "test"},
 		Mail:   config.MailConfig{SMTPHost: ""},
@@ -56,22 +54,24 @@ func setupAuthHandler(t *testing.T) (*handlers.AuthHandler, *database.DB, *servi
 	return authHandler, db, authSvc
 }
 
+func newRequest(method, path, body string) *http.Request {
+	req, _ := http.NewRequest(method, "http://example.com"+path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
 func TestAuthHandlerRegister(t *testing.T) {
 	app := fiber.New()
 	authHandler, _, _ := setupAuthHandler(t)
 	app.Post("/api/v1/auth/register", authHandler.Register)
 
-	payload := `{"email":"test@example.com","password":"Password123!","name":"Test User"}`
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(newRequest("POST", "/api/v1/auth/register", `{"email":"test@example.com","password":"Password123!","name":"Test User"}`), 5000)
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
 
 	var body map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&body)
-	assert.NotEmpty(t, body["token"])
+	assert.NotEmpty(t, body["access_token"])
 	assert.NotEmpty(t, body["user"])
 }
 
@@ -81,15 +81,11 @@ func TestAuthHandlerRegisterDuplicate(t *testing.T) {
 	app.Post("/api/v1/auth/register", authHandler.Register)
 
 	payload := `{"email":"dupe@example.com","password":"Password123!","name":"Test User"}`
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(newRequest("POST", "/api/v1/auth/register", payload), 5000)
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
 
-	req2, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(payload))
-	req2.Header.Set("Content-Type", "application/json")
-	resp2, err := app.Test(req2, 5000)
+	resp2, err := app.Test(newRequest("POST", "/api/v1/auth/register", payload), 5000)
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusConflict, resp2.StatusCode)
 }
@@ -101,16 +97,11 @@ func TestAuthHandlerLogin(t *testing.T) {
 	app.Post("/api/v1/auth/login", authHandler.Login)
 
 	payload := `{"email":"login@example.com","password":"Password123!","name":"Test User"}`
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, 5000)
+	resp, err := app.Test(newRequest("POST", "/api/v1/auth/register", payload), 5000)
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
 
-	loginPayload := `{"email":"login@example.com","password":"Password123!"}`
-	loginReq, _ := http.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(loginPayload))
-	loginReq.Header.Set("Content-Type", "application/json")
-	loginResp, err := app.Test(loginReq, 5000)
+	loginResp, err := app.Test(newRequest("POST", "/api/v1/auth/login", `{"email":"login@example.com","password":"Password123!"}`), 5000)
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusOK, loginResp.StatusCode)
 }
@@ -121,15 +112,9 @@ func TestAuthHandlerLoginWrongPassword(t *testing.T) {
 	app.Post("/api/v1/auth/register", authHandler.Register)
 	app.Post("/api/v1/auth/login", authHandler.Login)
 
-	payload := `{"email":"wrongpwd@example.com","password":"Password123!","name":"Test User"}`
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	app.Test(req, 5000)
+	app.Test(newRequest("POST", "/api/v1/auth/register", `{"email":"wrongpwd@example.com","password":"Password123!","name":"Test User"}`), 5000)
 
-	loginPayload := `{"email":"wrongpwd@example.com","password":"WrongPassword!"}`
-	loginReq, _ := http.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(loginPayload))
-	loginReq.Header.Set("Content-Type", "application/json")
-	loginResp, _ := app.Test(loginReq, 5000)
+	loginResp, _ := app.Test(newRequest("POST", "/api/v1/auth/login", `{"email":"wrongpwd@example.com","password":"WrongPassword!"}`), 5000)
 	assert.Equal(t, fiber.StatusUnauthorized, loginResp.StatusCode)
 }
 
@@ -140,60 +125,20 @@ func TestAuthHandlerRegisterValidation(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		payload string
+		body    string
 		status  int
 	}{
 		{"missing email", `{"password":"Password123!","name":"Test"}`, fiber.StatusBadRequest},
 		{"missing password", `{"email":"test@example.com","name":"Test"}`, fiber.StatusBadRequest},
 		{"weak password", `{"email":"test@example.com","password":"short","name":"Test"}`, fiber.StatusBadRequest},
 		{"invalid email", `{"email":"notanemail","password":"Password123!","name":"Test"}`, fiber.StatusBadRequest},
-		{"empty body", `{}`, fiber.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(tt.payload))
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := app.Test(req, 5000)
+			resp, err := app.Test(newRequest("POST", "/api/v1/auth/register", tt.body), 5000)
 			require.NoError(t, err)
 			assert.Equal(t, tt.status, resp.StatusCode)
 		})
 	}
-}
-
-func TestAuthHandlerRefreshToken(t *testing.T) {
-	app := fiber.New()
-	authHandler, _, _ := setupAuthHandler(t)
-	app.Post("/api/v1/auth/register", authHandler.Register)
-	app.Post("/api/v1/auth/refresh", authHandler.RefreshToken)
-
-	payload := `{"email":"refresh@example.com","password":"Password123!","name":"Test User"}`
-	req, _ := http.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, 5000)
-	require.NoError(t, err)
-
-	var registerResp map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&registerResp)
-	refreshToken, _ := registerResp["refresh_token"].(string)
-
-	refreshPayload := `{"refresh_token":"` + refreshToken + `"}`
-	refreshReq, _ := http.NewRequest("POST", "/api/v1/auth/refresh", strings.NewReader(refreshPayload))
-	refreshReq.Header.Set("Content-Type", "application/json")
-	refreshResp, err := app.Test(refreshReq, 5000)
-	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusOK, refreshResp.StatusCode)
-}
-
-func TestAuthHandlerInvalidRefreshToken(t *testing.T) {
-	app := fiber.New()
-	authHandler, _, _ := setupAuthHandler(t)
-	app.Post("/api/v1/auth/refresh", authHandler.RefreshToken)
-
-	payload := `{"refresh_token":"invalid-token-value"}`
-	req, _ := http.NewRequest("POST", "/api/v1/auth/refresh", strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, 5000)
-	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }

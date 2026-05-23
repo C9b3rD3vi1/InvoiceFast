@@ -2,11 +2,15 @@ package handlers
 
 import (
 	"strconv"
+	"time"
 
+	"invoicefast/internal/database"
 	"invoicefast/internal/middleware"
+	"invoicefast/internal/models"
 	"invoicefast/internal/services"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 // ============================================================================
@@ -14,6 +18,7 @@ import (
 // ============================================================================
 
 type AutomationHandler struct {
+	db                 *database.DB
 	jobQueue           *services.JobQueueService
 	recurringInvoice  *services.AutoRecurringInvoiceService
 	reminderService   *services.AutoReminderService
@@ -21,18 +26,22 @@ type AutomationHandler struct {
 }
 
 func NewAutomationHandler(
+	db *database.DB,
 	jobQueue *services.JobQueueService,
 	recurringInvoice *services.AutoRecurringInvoiceService,
 	reminder *services.AutoReminderService,
 	workflow *services.AutoWorkflowService,
 ) *AutomationHandler {
 	return &AutomationHandler{
+		db:                db,
 		jobQueue:           jobQueue,
 		recurringInvoice:  recurringInvoice,
-		reminderService:    reminder,
-		workflowService:   workflow,
+		reminderService:   reminder,
+		workflowService:  workflow,
 	}
 }
+
+
 
 // ============================================================================
 // RECURRING INVOICE HANDLERS
@@ -86,6 +95,30 @@ func (h *AutomationHandler) CreateRecurringInvoice(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(recurring)
+}
+
+func (h *AutomationHandler) UpdateRecurringInvoice(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	id := c.Params("id")
+	if id == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "id required"})
+	}
+
+	var req services.CreateRecurringInvoiceRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	recurring, err := h.recurringInvoice.UpdateRecurringInvoice(tenantID, id, &req)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(recurring)
 }
 
 func (h *AutomationHandler) DeleteRecurringInvoice(c *fiber.Ctx) error {
@@ -470,6 +503,162 @@ func (h *AutomationHandler) GetRecentJobs(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"jobs": jobs})
+}
+
+// ============================================================================
+// BASE AUTOMATION CRUD
+// ============================================================================
+
+func (h *AutomationHandler) GetAutomation(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	id := c.Params("id")
+	var auto models.Automation
+	if err := h.db.Where("id = ? AND tenant_id = ?", id, tenantID).First(&auto).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "automation not found"})
+	}
+	return c.JSON(auto)
+}
+
+func (h *AutomationHandler) CreateAutomation(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		TriggerType string `json:"trigger_type"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	automation := models.Automation{
+		ID:          uuid.New().String(),
+		TenantID:    tenantID,
+		UserID:      middleware.GetUserID(c),
+		Name:        req.Name,
+		Description: req.Description,
+		TriggerType: req.TriggerType,
+		IsActive:    true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	if err := h.db.Create(&automation).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.Status(fiber.StatusCreated).JSON(automation)
+}
+
+func (h *AutomationHandler) UpdateAutomation(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	id := c.Params("id")
+	var auto models.Automation
+	if err := h.db.Where("id = ? AND tenant_id = ?", id, tenantID).First(&auto).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "automation not found"})
+	}
+
+	var req struct {
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
+		TriggerType *string `json:"trigger_type"`
+		IsActive    *bool   `json:"is_active"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	if req.Name != nil {
+		auto.Name = *req.Name
+	}
+	if req.Description != nil {
+		auto.Description = *req.Description
+	}
+	if req.TriggerType != nil {
+		auto.TriggerType = *req.TriggerType
+	}
+	if req.IsActive != nil {
+		auto.IsActive = *req.IsActive
+	}
+	auto.UpdatedAt = time.Now()
+
+	if err := h.db.Save(&auto).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(auto)
+}
+
+func (h *AutomationHandler) DeleteAutomation(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	id := c.Params("id")
+	result := h.db.Where("id = ? AND tenant_id = ?", id, tenantID).Delete(&models.Automation{})
+	if result.Error != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": result.Error.Error()})
+	}
+	if result.RowsAffected == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "automation not found"})
+	}
+	return c.JSON(fiber.Map{"status": "deleted"})
+}
+
+func (h *AutomationHandler) RunAutomation(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	id := c.Params("id")
+	var auto models.Automation
+	if err := h.db.Where("id = ? AND tenant_id = ?", id, tenantID).First(&auto).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "automation not found"})
+	}
+
+	now := time.Now()
+	log := models.AutomationLog{
+		ID:           uuid.New().String(),
+		TenantID:     tenantID,
+		AutomationID: id,
+		Status:       "running",
+		StartedAt:    now,
+		CreatedAt:    now,
+	}
+	if err := h.db.Create(&log).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	log.Status = "completed"
+	log.CompletedAt = &now
+	h.db.Save(&log)
+
+	return c.JSON(fiber.Map{"status": "started", "log_id": log.ID})
+}
+
+func (h *AutomationHandler) GetAutomationLogs(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	id := c.Params("id")
+	var logs []models.AutomationLog
+	if err := h.db.Where("automation_id = ? AND tenant_id = ?", id, tenantID).Order("created_at DESC").Limit(20).Find(&logs).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(logs)
 }
 
 // ============================================================================

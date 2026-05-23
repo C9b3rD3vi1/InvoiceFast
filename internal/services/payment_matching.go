@@ -25,7 +25,7 @@ func (s *PaymentMatchingService) CreateUnallocated(tenantID, reference, phone st
 	payment := &models.UnallocatedPayment{
 		ID:          uuid.New().String(),
 		TenantID:    tenantID,
-		Amount:      amount,
+		Amount:      models.ToCents(amount),
 		Currency:    "KES",
 		Reference:   reference,
 		PhoneNumber: phone,
@@ -210,7 +210,7 @@ func (s *PaymentMatchingService) ManualMatch(tenantID, invoiceID, reference, pho
 			TenantID:    tenantID,
 			UserID:      userID,
 			InvoiceID:   invoiceID,
-			Amount:      amount,
+		Amount:      models.ToCents(amount),
 			Currency:    invoice.Currency,
 			Method:      models.PaymentMethodMpesa,
 			Status:      models.PaymentStatusCompleted,
@@ -224,8 +224,8 @@ func (s *PaymentMatchingService) ManualMatch(tenantID, invoiceID, reference, pho
 			return fmt.Errorf("failed to create payment: %w", err)
 		}
 
-		invoice.PaidAmount += amount
-		if invoice.PaidAmount >= invoice.Total {
+		invoice.PaidAmount = invoice.PaidAmount.Add(models.ToCents(amount))
+		if invoice.PaidAmount.GreaterThan(invoice.Total) || invoice.PaidAmount.Equals(invoice.Total) {
 			invoice.Status = models.InvoiceStatusPaid
 			invoice.PaidAt = &now
 		} else {
@@ -327,7 +327,7 @@ func (s *PaymentMatchingService) sendMatchNotification(tenantID string, invoice 
 	var client models.Client
 	s.db.Scopes(database.TenantFilter(tenantID)).First(&client, "id = ?", invoice.ClientID)
 
-	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.PaidAmount)
+	amount := fmt.Sprintf("%s %.2f", invoice.Currency, invoice.PaidAmount.Float64())
 	body := ""
 	subject := ""
 	switch eventType {

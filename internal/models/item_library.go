@@ -13,7 +13,7 @@ type ItemLibrary struct {
 	TenantID  string    `json:"tenant_id" gorm:"type:uuid;index;not null"`
 	UserID    string    `json:"user_id" gorm:"type:uuid;index;not null"`
 	Name      string    `json:"name" gorm:"not null"`        // Item name/description
-	UnitPrice float64   `json:"unit_price" gorm:"not null"`  // Default price
+	UnitPrice Money     `json:"unit_price" gorm:"not null"`  // Default price
 	Unit      string    `json:"unit"`                        // e.g., "hours", "items", "pieces"
 	Taxable   bool      `json:"taxable" gorm:"default:true"` // Whether item is taxable
 	Notes     string    `json:"notes"`                       // Optional notes

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"invoicefast/internal/cache"
@@ -66,9 +67,18 @@ func csrfHandlerWithRedis(config CSRFConfig, store *RedisCSRFStore) fiber.Handle
 			return c.Next()
 		}
 
-		if c.Path() == "/api/v1/health" || c.Path() == "/health" ||
+		if strings.HasPrefix(c.Path(), "/api/v1/webhook/") ||
+			c.Path() == "/api/v1/health" || c.Path() == "/health" ||
 			c.Path() == "/ready" || c.Path() == "/api/v1/metrics" ||
 			c.Path() == "/metrics" {
+			return c.Next()
+		}
+
+		if strings.HasPrefix(c.Path(), "/api/v1/auth/") {
+			return c.Next()
+		}
+
+		if strings.HasPrefix(c.Get("Authorization"), "Bearer ") {
 			return c.Next()
 		}
 

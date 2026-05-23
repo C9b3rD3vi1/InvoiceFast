@@ -192,7 +192,7 @@ func (h *PublicHandler) InitiateSTKPush(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "M-Pesa not configured"})
 	}
 
-	amountStr := fmt.Sprintf("%.2f", invoice.Total)
+	amountStr := fmt.Sprintf("%.2f", invoice.Total.Float64())
 	resp, err := h.mpesaService.InitiateSTKPush(c.Context(), invoice.TenantID, invoice.ID, req.Phone, amountStr, invoice.InvoiceNumber)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})

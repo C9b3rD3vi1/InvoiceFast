@@ -339,6 +339,52 @@ func (s *AutoRecurringInvoiceService) CreateRecurringInvoice(tenantID, userID st
 	return recurring, nil
 }
 
+// UpdateRecurringInvoice updates an existing recurring invoice
+func (s *AutoRecurringInvoiceService) UpdateRecurringInvoice(tenantID, id string, req *CreateRecurringInvoiceRequest) (*models.RecurringInvoice, error) {
+	recurring, err := s.GetRecurringInvoice(tenantID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if req.Name != "" {
+		recurring.Name = req.Name
+	}
+	if req.Description != "" {
+		recurring.Description = req.Description
+	}
+	if req.ClientID != "" {
+		recurring.ClientID = req.ClientID
+	}
+	if req.Frequency != "" {
+		recurring.Frequency = req.Frequency
+	}
+	if req.IntervalDays > 0 {
+		recurring.IntervalDays = req.IntervalDays
+	}
+	if !req.StartDate.IsZero() {
+		recurring.StartDate = req.StartDate
+		recurring.NextRunDate = calculateNextRunDate(req.StartDate, recurring.Frequency, recurring.IntervalDays)
+	}
+	if req.EndDate != nil {
+		recurring.EndDate = req.EndDate
+	}
+	if req.MaxCycles != nil {
+		recurring.MaxCycles = req.MaxCycles
+	}
+	if req.InvoiceTemplate != nil {
+		templateJSON, _ := json.Marshal(req.InvoiceTemplate)
+		recurring.InvoiceTemplate = string(templateJSON)
+	}
+	recurring.AutoSend = req.AutoSend
+	recurring.AutoSubmitKRA = req.AutoSubmitKRA
+	recurring.UpdatedAt = time.Now()
+
+	if err := s.db.Save(recurring).Error; err != nil {
+		return nil, err
+	}
+	return recurring, nil
+}
+
 // PauseRecurringInvoice pauses a recurring invoice
 func (s *AutoRecurringInvoiceService) PauseRecurringInvoice(tenantID, id string) error {
 	recurring, err := s.GetRecurringInvoice(tenantID, id)
@@ -483,25 +529,25 @@ func (s *AutoRecurringInvoiceService) ProcessRecurringInvoice(job *models.Automa
 	if lis, ok := lineItems.([]interface{}); ok {
 		for _, li := range lis {
 			if m, ok := li.(map[string]interface{}); ok {
-				item := models.InvoiceItem{
-					ID:          uuid.New().String(),
-					Description: getString(m, "description", "Item"),
-					Quantity:    getFloat(m, "quantity", 1),
-					UnitPrice:   getFloat(m, "rate", 0),
-					Total:      getFloat(m, "quantity", 1) * getFloat(m, "rate", 0),
-				}
+		item := models.InvoiceItem{
+				ID:          uuid.New().String(),
+				Description: getString(m, "description", "Item"),
+				Quantity:    getFloat(m, "quantity", 1),
+				UnitPrice:   models.ToCents(getFloat(m, "rate", 0)),
+				Total:       models.ToCents(getFloat(m, "quantity", 1) * getFloat(m, "rate", 0)),
+			}
 				items = append(items, item)
 			}
 		}
 	}
 	
 	// Calculate subtotal
-	subtotal := 0.0
+	var subtotal models.Money
 	for _, item := range items {
 		subtotal += item.Total
 	}
-	taxAmount := subtotal * (taxRate / 100)
-	totalAmount := subtotal + taxAmount
+	taxAmount := subtotal.Multiply(taxRate / 100)
+	totalAmount := subtotal.Add(taxAmount)
 	
 	invoice := &models.Invoice{
 		ID:             uuid.New().String(),
@@ -528,14 +574,14 @@ func (s *AutoRecurringInvoiceService) ProcessRecurringInvoice(job *models.Automa
 			if m, ok := item.(map[string]interface{}); ok {
 				if qty, ok := m["quantity"].(float64); ok {
 					if rate, ok := m["rate"].(float64); ok {
-						invoice.Subtotal += qty * rate
+						invoice.Subtotal = invoice.Subtotal.Add(models.ToCents(qty * rate))
 					}
 				}
 			}
 		}
 	}
-	invoice.TotalTax = invoice.Subtotal * (invoice.TaxRate / 100)
-	invoice.Total = invoice.Subtotal + invoice.TotalTax
+	invoice.TotalTax = invoice.Subtotal.Multiply(invoice.TaxRate / 100)
+	invoice.Total = invoice.Subtotal.Add(invoice.TotalTax)
 	invoice.BalanceDue = invoice.Total
 	
 	if err := s.db.Create(invoice).Error; err != nil {

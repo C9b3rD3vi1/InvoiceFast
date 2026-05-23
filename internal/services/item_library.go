@@ -33,7 +33,7 @@ func (s *ItemLibraryService) CreateItem(tenantID, userID string, req *CreateItem
 		TenantID:  tenantID,
 		UserID:    userID,
 		Name:      req.Name,
-		UnitPrice: req.UnitPrice,
+		UnitPrice: models.ToCents(req.UnitPrice),
 		Unit:      req.Unit,
 		Taxable:   false,
 		Notes:     "",
@@ -119,7 +119,7 @@ func (s *ItemLibraryService) UpdateItem(tenantID, itemID string, req *UpdateItem
 		item.Name = *req.Name
 	}
 	if req.UnitPrice != nil {
-		item.UnitPrice = *req.UnitPrice
+		item.UnitPrice = models.ToCents(*req.UnitPrice)
 	}
 	if req.Unit != nil {
 		item.Unit = *req.Unit

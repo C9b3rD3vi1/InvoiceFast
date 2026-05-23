@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"invoicefast/internal/database"
@@ -60,11 +61,48 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		if h.auditService != nil {
 			_ = h.auditService.LogLoginAttempt(context.Background(), "", req.Email, ip, false, err.Error())
 		}
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+		return sendUnauthorized(c, err)
+	}
+
+	if resp.RequiresTwoFactor {
+		return c.JSON(fiber.Map{
+			"requires_two_factor": true,
+			"two_factor_token":    resp.TwoFactorToken,
+		})
 	}
 
 	if h.auditService != nil {
 		_ = h.auditService.LogLoginAttempt(context.Background(), resp.User.TenantID, req.Email, ip, true, "")
+	}
+
+	return c.JSON(fiber.Map{
+		"access_token":  resp.AccessToken,
+		"refresh_token": resp.RefreshToken,
+		"user": fiber.Map{
+			"id":      resp.User.ID,
+			"name":    resp.User.Name,
+			"email":   resp.User.Email,
+			"company": resp.User.CompanyName,
+		},
+	})
+}
+
+// VerifyTwoFactorLogin - complete login with 2FA code
+func (h *AuthHandler) VerifyTwoFactorLogin(c *fiber.Ctx) error {
+	var req struct {
+		TwoFactorToken string `json:"two_factor_token"`
+		Code           string `json:"code"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+	if req.TwoFactorToken == "" || req.Code == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "two_factor_token and code are required"})
+	}
+
+	resp, err := h.authService.VerifyTwoFactorLogin(req.TwoFactorToken, req.Code)
+	if err != nil {
+		return sendUnauthorized(c, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -88,7 +126,10 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	resp, err := h.authService.Register(&req)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		if errors.Is(err, services.ErrEmailExists) {
+			return sendConflict(c, err)
+		}
+		return sendBadRequest(c, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -119,7 +160,7 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 
 	resp, err := h.authService.RefreshToken(tenantID, req.RefreshToken)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
+		return sendUnauthorized(c, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -186,7 +227,7 @@ func (h *AuthHandler) UpdateUser(c *fiber.Ctx) error {
 
 	user, err := h.authService.UpdateUser(tenantID, userID, &req)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(user)
@@ -210,7 +251,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 
 	err := h.authService.ChangePassword(tenantID, userID, req.OldPassword, req.NewPassword)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "Password changed successfully"})
@@ -269,7 +310,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	}
 
 	if err := h.authService.Logout(req.RefreshToken); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "Logged out successfully"})
@@ -342,7 +383,7 @@ func (h *AuthHandler) SetupTwoFactor(c *fiber.Ctx) error {
 
 	setup, err := h.authService.SetupTwoFactor(tenantID, userID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -368,7 +409,7 @@ func (h *AuthHandler) VerifyTwoFactor(c *fiber.Ctx) error {
 	}
 
 	if err := h.authService.VerifyAndEnableTwoFactor(tenantID, userID, req.Code); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "Two-factor authentication enabled"})
@@ -390,7 +431,7 @@ func (h *AuthHandler) DisableTwoFactor(c *fiber.Ctx) error {
 	}
 
 	if err := h.authService.DisableTwoFactor(tenantID, userID, req.Password, req.Code); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "Two-factor authentication disabled"})
@@ -405,7 +446,7 @@ func (h *AuthHandler) GetSessions(c *fiber.Ctx) error {
 
 	sessions, err := h.authService.GetSessions(tenantID, userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	result := make([]map[string]interface{}, len(sessions))
@@ -432,7 +473,7 @@ func (h *AuthHandler) RevokeSession(c *fiber.Ctx) error {
 	}
 
 	if err := h.authService.RevokeSession(tenantID, userID, sessionID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "Session revoked"})
@@ -447,7 +488,7 @@ func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 
 	currentSessionID := c.Query("except")
 	if err := h.authService.RevokeAllSessions(tenantID, userID, currentSessionID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "All other sessions revoked"})
@@ -463,7 +504,7 @@ func (h *AuthHandler) GetLoginHistory(c *fiber.Ctx) error {
 	limit := c.QueryInt("limit", 20)
 	history, err := h.authService.GetLoginHistory(tenantID, userID, limit)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	return c.JSON(history)
@@ -484,7 +525,7 @@ func (h *AuthHandler) UpdateLoginAlerts(c *fiber.Ctx) error {
 	}
 
 	if err := h.authService.UpdateLoginAlerts(tenantID, userID, req.Enabled); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"message": "Login alerts updated"})
@@ -538,7 +579,7 @@ func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
 		if err == services.ErrRateLimited {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": "too many requests, please try again later"})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	// Always return success to prevent email enumeration
@@ -577,7 +618,7 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 		case err.Error() == "passwords do not match":
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "passwords do not match"})
 		default:
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+			return sendBadRequest(c, err)
 		}
 	}
 
@@ -592,7 +633,7 @@ func (h *AuthHandler) HandleSendVerificationLink(c *fiber.Ctx) error {
 	}
 
 	if err := h.authService.SendVerificationLink(userID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(fiber.Map{"status": "sent"})

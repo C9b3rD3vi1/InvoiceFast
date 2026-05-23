@@ -18,6 +18,9 @@ func NewIdempotencyService(redisCache *cache.RedisCache) *IdempotencyService {
 }
 
 func (s *IdempotencyService) CheckAndLock(ctx context.Context,key string) (bool, func(), error) {
+	if ctx.Err() != nil {
+		return false, nil, ctx.Err()
+	}
 
 	lock, err := s.cache.Lock(ctx, key, 5*time.Minute)
 
@@ -39,16 +42,25 @@ func (s *IdempotencyService) CheckAndLock(ctx context.Context,key string) (bool,
 
 
 func (s *IdempotencyService) IsProcessed(ctx context.Context, key string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 	key = "idempotent:" + key
 	return s.cache.Exists(ctx, key)
 }
 
 func (s *IdempotencyService) MarkProcessed(ctx context.Context, key string, data interface{}) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	key = "idempotent:" + key
 	return s.cache.Set(ctx, key, data, 24*time.Hour)
 }
 
 func (s *IdempotencyService) HandlePaymentCallback(ctx context.Context,checkoutID string,payload map[string]interface{},) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 
 	lockKey := "payment:lock:" + checkoutID
 

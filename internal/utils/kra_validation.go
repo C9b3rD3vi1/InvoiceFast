@@ -47,15 +47,15 @@ func CalculateTaxBreakdown(subtotal float64, vatRate float64, items []models.Inv
 		if item.Description != "" {
 			descLower := strings.ToLower(item.Description)
 			if strings.Contains(descLower, "zero-rated") || strings.Contains(descLower, "zero rated") {
-				zeroRated += item.Total
+				zeroRated += item.Total.Float64()
 			} else if strings.Contains(descLower, "exempt") || strings.Contains(descLower, "vat exempt") {
-				exempt += item.Total
+				exempt += item.Total.Float64()
 			}
 		}
 
 		// Calculate excise duty (if applicable)
 		if item.TaxAmount > 0 { // Using TaxAmount instead of ExciseDuty for now
-			excise += item.TaxAmount
+			excise += item.TaxAmount.Float64()
 		}
 	}
 

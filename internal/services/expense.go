@@ -74,14 +74,14 @@ func (s *ExpenseService) CreateExpense(tenantID, userID string, req *CreateExpen
 		CategoryID:      req.CategoryID,
 		Title:           req.Title,
 		Description:     req.Description,
-		Amount:          req.Amount,
+		Amount:          models.ToCents(req.Amount),
 		Currency:        req.Currency,
 		Date:            expenseDate,
 		Status:          "pending",
 		PaymentMethod:   req.PaymentMethod,
 		Reference:       req.Reference,
 		Vendor:          req.Vendor,
-		TaxAmount:       req.TaxAmount,
+		TaxAmount:       models.ToCents(req.TaxAmount),
 		TaxRate:         req.TaxRate,
 		IsRecurring:     req.IsRecurring,
 		RecurringPeriod: req.RecurringPeriod,
@@ -210,7 +210,7 @@ func (s *ExpenseService) UpdateExpense(tenantID, expenseID string, req *UpdateEx
 		expense.Description = *req.Description
 	}
 	if req.Amount != nil {
-		expense.Amount = *req.Amount
+		expense.Amount = models.ToCents(*req.Amount)
 	}
 	if req.Currency != nil {
 		expense.Currency = *req.Currency
@@ -239,7 +239,7 @@ func (s *ExpenseService) UpdateExpense(tenantID, expenseID string, req *UpdateEx
 		expense.Vendor = *req.Vendor
 	}
 	if req.TaxAmount != nil {
-		expense.TaxAmount = *req.TaxAmount
+		expense.TaxAmount = models.ToCents(*req.TaxAmount)
 	}
 	if req.TaxRate != nil {
 		expense.TaxRate = *req.TaxRate

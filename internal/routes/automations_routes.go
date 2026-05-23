@@ -18,16 +18,11 @@ func AutomationRoutes(app *fiber.App, db *database.DB, authService *services.Aut
 	workflowService := services.NewAutoWorkflowService(db, jobQueue)
 	
 	// Create handler
-	handler := handlers.NewAutomationHandler(jobQueue, recurringInvoice, reminderService, workflowService)
+	handler := handlers.NewAutomationHandler(db, jobQueue, recurringInvoice, reminderService, workflowService)
 	
 	group := app.Group("/api/v1/tenant/automations")
 	group.Use(middleware.TenantMiddleware(authService, db))
 	group.Use(middleware.RequireEmailVerified(db))
-	
-	// ==========================================================================
-	// OVERVIEW
-	// ==========================================================================
-	group.Get("/", handler.GetAutomationOverview)
 	
 	// ==========================================================================
 	// RECURRING INVOICES
@@ -36,6 +31,7 @@ func AutomationRoutes(app *fiber.App, db *database.DB, authService *services.Aut
 	recurring.Get("/", handler.GetRecurringInvoices)
 	recurring.Get("/:id", handler.GetRecurringInvoice)
 	recurring.Post("/", handler.CreateRecurringInvoice)
+	recurring.Put("/:id", handler.UpdateRecurringInvoice)
 	recurring.Post("/:id/pause", handler.PauseRecurringInvoice)
 	recurring.Post("/:id/resume", handler.ResumeRecurringInvoice)
 	recurring.Delete("/:id", handler.DeleteRecurringInvoice)
@@ -74,5 +70,15 @@ func AutomationRoutes(app *fiber.App, db *database.DB, authService *services.Aut
 	jobs.Post("/:id/retry", handler.RetryJob)
 	jobs.Post("/:id/cancel", handler.CancelJob)
 	
+	// ==========================================================================
+	// BASE CRUD — generic automation registry (must be last to avoid shadowing)
+	// ==========================================================================
+	group.Get("/:id", handler.GetAutomation)
+	group.Put("/:id", handler.UpdateAutomation)
+	group.Delete("/:id", handler.DeleteAutomation)
+	group.Post("/:id/run", handler.RunAutomation)
+	group.Get("/:id/logs", handler.GetAutomationLogs)
+	group.Post("/", handler.CreateAutomation)
+
 	return group
 }

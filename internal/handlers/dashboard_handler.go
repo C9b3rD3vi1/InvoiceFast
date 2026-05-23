@@ -420,7 +420,7 @@ func (h *DashboardHandler) getClientRevenueChartData(tenantID string) ChartData 
 
 	for i, client := range clients {
 		labels[i] = client.Name
-		values[i] = client.TotalBilled
+		values[i] = client.TotalBilled.Float64()
 	}
 
 	return ChartData{

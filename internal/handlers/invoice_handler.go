@@ -154,20 +154,12 @@ func (h *InvoiceHandler) GetInvoices(c *fiber.Ctx) error {
 
 	invoices, total, err := h.invoiceService.GetUserInvoices(tenantID, filter)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
-	// Calculate pagination info
-	totalPages := (int(total) + lim - 1) / lim
 	currentPage := offset/lim + 1
 
-	return c.JSON(fiber.Map{
-		"invoices":    invoices,
-		"total":       total,
-		"page":        currentPage,
-		"total_pages": totalPages,
-		"per_page":    lim,
-	})
+	return c.JSON(NewPaginatedResponse(invoices, currentPage, lim, total))
 }
 
 // GetInvoice - get single invoice
@@ -246,7 +238,7 @@ func (h *InvoiceHandler) SendReminder(c *fiber.Ctx) error {
 			InvoiceNumber: invoice.InvoiceNumber,
 			ClientName:    invoice.Client.Name,
 			ClientEmail:   invoice.Client.Email,
-			Amount:        invoice.Total - invoice.PaidAmount,
+			Amount:        invoice.Total.Subtract(invoice.PaidAmount).Float64(),
 			Currency:      invoice.Currency,
 			DueDate:       invoice.DueDate.Format("2006-01-02"),
 			InvoiceLink:   invoice.PaymentLink,
@@ -357,7 +349,7 @@ func (h *InvoiceHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 	var amount float64
 	fmt.Sscanf(payload.Amount, "%f", &amount)
 	if amount == 0 {
-		amount = invoice.Total
+		amount = invoice.Total.Float64()
 	}
 
 	now := time.Now()
@@ -365,11 +357,12 @@ func (h *InvoiceHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		TenantID:    invoice.TenantID,
 		InvoiceID:  invoice.ID,
 		UserID:      invoice.UserID,
-		Amount:      amount,
+		Amount:      models.ToCents(amount),
 		Currency:    invoice.Currency,
 		Method:     models.PaymentMethodMpesa,
 		Status:     models.PaymentStatusCompleted,
 		Reference:  payload.Reference,
+		IdempotencyKey: key,
 		CompletedAt: &now,
 	}
 
@@ -639,7 +632,7 @@ func (h *InvoiceHandler) RecordPayment(c *fiber.Ctx) error {
 		TenantID:    tenantID,
 		UserID:      userID,
 		InvoiceID:   invoiceID,
-		Amount:      req.Amount,
+		Amount:      models.ToCents(req.Amount),
 		Currency:    "KES",
 		Method:      models.PaymentMethod(req.Method),
 		Status:      models.PaymentStatusCompleted,
@@ -821,7 +814,7 @@ func (h *InvoiceHandler) DeleteInvoiceAttachment(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
 	}
 
-	attachmentID := c.Params("id")
+	attachmentID := c.Params("attachmentId")
 	if attachmentID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "attachment ID required"})
 	}
@@ -895,7 +888,7 @@ Thank you for your business!`,
 		invoice.User.CompanyName,
 		invoice.InvoiceNumber,
 		invoice.Currency,
-		fmt.Sprintf("%.2f", invoice.Total),
+		fmt.Sprintf("%.2f", invoice.Total.Float64()),
 		invoice.DueDate.Format("02 Jan 2006"),
 		paymentLink,
 	)
@@ -940,4 +933,81 @@ Thank you for your business!`,
 		"has_pdf":  result.HasPDF,
 		"pdf_name": result.PDFName,
 	})
+}
+
+// DuplicateInvoice creates a copy of an existing invoice
+func (h *InvoiceHandler) DuplicateInvoice(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	invoiceID := c.Params("id")
+
+	original, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	req := services.CreateInvoiceRequest{
+		ClientID:  original.ClientID,
+		Reference: original.Reference,
+		Title:     "Copy - " + original.Title,
+		Currency:  original.Currency,
+		TaxRate:   original.TaxRate,
+		Discount:  original.Discount.Float64(),
+		DueDate:   original.DueDate,
+		Notes:     original.Notes,
+		Terms:     original.Terms,
+		BrandColor: original.BrandColor,
+	}
+
+	for _, item := range original.Items {
+		req.Items = append(req.Items, services.InvoiceItemRequest{
+			Description:  item.Description,
+			Quantity:     item.Quantity,
+			UnitPrice:    item.UnitPrice.Float64(),
+			TaxRate:      item.TaxRate,
+			DiscountRate: item.DiscountRate,
+			Unit:         item.Unit,
+		})
+	}
+
+	req.ExchangeRate = &original.ExchangeRate
+	kesEq := original.KESEquivalent.Float64()
+	req.KESEquivalent = &kesEq
+
+	invoice, err := h.invoiceService.CreateInvoice(tenantID, userID, original.ClientID, &req)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(invoice)
+}
+
+// RequestPayment sends a payment request for an invoice
+func (h *InvoiceHandler) RequestPayment(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	invoiceID := c.Params("id")
+
+	invoice, err := h.invoiceService.GetInvoiceByID(tenantID, invoiceID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
+	}
+
+	if invoice.Status == "paid" || invoice.Status == "cancelled" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invoice is already " + invoice.Status})
+	}
+
+	if _, err := h.invoiceService.SendInvoice(tenantID, invoiceID, userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to send payment request"})
+	}
+
+	return c.JSON(fiber.Map{"message": "Payment request sent"})
 }

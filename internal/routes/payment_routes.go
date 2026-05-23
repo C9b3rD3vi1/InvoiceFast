@@ -37,9 +37,11 @@ func TenantPaymentRoutes(app fiber.Router, h *handlers.PaymentHandler, authServi
 	group.Get("/", h.GetPayments)
 	group.Get("/summary", h.GetPaymentSummary)
 	group.Get("/unmatched", h.GetUnmatchedPayments)
-	group.Post("/manual-match", h.ManualMatchPayment)
-	group.Post("/auto-match", h.AutoMatchPayments)
+	group.Post("/manual-match", middleware.CanEditInvoice(), h.ManualMatchPayment)
+	group.Post("/auto-match", middleware.CanEditInvoice(), h.AutoMatchPayments)
 	group.Get("/audit/:id", h.GetPaymentAudit)
+	group.Post("/:id/refund", middleware.CanEditInvoice(), h.RefundPayment)
+	group.Post("/:id/receipt", h.ResendReceipt)
 
 	return group
 }

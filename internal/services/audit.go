@@ -59,6 +59,9 @@ const (
 
 // LogAction records an audit log entry
 func (s *AuditService) LogAction(ctx context.Context, tenantID, userID, action, entityType, entityID string, details map[string]interface{}) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	detailsJSON, _ := json.Marshal(details)
 
 	entry := &models.AuditLog{
@@ -77,6 +80,9 @@ func (s *AuditService) LogAction(ctx context.Context, tenantID, userID, action, 
 
 // LogPaymentCompleted logs a completed payment with full details
 func (s *AuditService) LogPaymentCompleted(ctx context.Context, tenantID, userID, paymentID, invoiceID string, amount float64, method string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	return s.LogAction(ctx, tenantID, userID, AuditActionPaymentComplete, AuditEntityPayment, paymentID, map[string]interface{}{
 		"invoice_id": invoiceID,
 		"amount":     amount,
@@ -86,12 +92,18 @@ func (s *AuditService) LogPaymentCompleted(ctx context.Context, tenantID, userID
 
 // LogSecurityEvent logs security-related events
 func (s *AuditService) LogSecurityEvent(ctx context.Context, tenantID, eventType, description string, details map[string]interface{}) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	details["event_type"] = eventType
 	return s.LogAction(ctx, tenantID, "", AuditActionSecurityEvent, "security", "", details)
 }
 
 // LogLoginAttempt logs login attempts (success and failure)
 func (s *AuditService) LogLoginAttempt(ctx context.Context, tenantID, email, ipAddress string, success bool, reason string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	action := AuditActionUserLogin
 	if !success {
 		action = "user_login_failed"
@@ -107,6 +119,9 @@ func (s *AuditService) LogLoginAttempt(ctx context.Context, tenantID, email, ipA
 
 // GetAuditLogs retrieves audit logs with filters
 func (s *AuditService) GetAuditLogs(ctx context.Context, tenantID string, filter AuditFilter) ([]models.AuditLog, int64, error) {
+	if ctx.Err() != nil {
+		return nil, 0, ctx.Err()
+	}
 	if tenantID == "" {
 		return nil, 0, fmt.Errorf("tenant_id required")
 	}
@@ -171,6 +186,9 @@ func (s *AuditService) CreateDefaultAuditLogs() error {
 
 // GetSecurityAuditLogs retrieves security-related audit logs
 func (s *AuditService) GetSecurityAuditLogs(ctx context.Context, tenantID string, days int) ([]models.AuditLog, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	fromDate := time.Now().AddDate(0, 0, -days)
 
 	var logs []models.AuditLog
@@ -183,6 +201,9 @@ func (s *AuditService) GetSecurityAuditLogs(ctx context.Context, tenantID string
 
 // GetUserActivityLog retrieves activity logs for a specific user
 func (s *AuditService) GetUserActivityLog(ctx context.Context, tenantID, userID string, limit int) ([]models.AuditLog, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var logs []models.AuditLog
 	err := s.db.Where("tenant_id = ? AND user_id = ?", tenantID, userID).
 		Order("created_at DESC").
@@ -194,6 +215,9 @@ func (s *AuditService) GetUserActivityLog(ctx context.Context, tenantID, userID 
 
 // GenerateAuditReport generates an audit summary report
 func (s *AuditService) GenerateAuditReport(ctx context.Context, tenantID string, fromDate, toDate time.Time) (map[string]interface{}, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var totalActions int64
 	var uniqueUsers int64
 	var actionCounts map[string]int64

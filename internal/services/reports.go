@@ -972,27 +972,27 @@ func (s *ReportService) GetClientStatement(tenantID, clientID string, startDate,
 	var transactions []ClientTransaction
 
 	for _, inv := range invoices {
-		balance += inv.Total
+		balance += inv.Total.Float64()
 		transactions = append(transactions, ClientTransaction{
 			Date:        inv.CreatedAt,
 			Type:        "invoice",
 			Reference:   inv.InvoiceNumber,
 			Description: fmt.Sprintf("Invoice %s", inv.InvoiceNumber),
-			Debit:       inv.Total,
+			Debit:       inv.Total.Float64(),
 			Credit:      0,
 			Balance:     balance,
 		})
 	}
 
 	for _, pay := range payments {
-		balance -= pay.Amount
+		balance -= pay.Amount.Float64()
 		transactions = append(transactions, ClientTransaction{
 			Date:        pay.CreatedAt,
 			Type:        "payment",
 			Reference:   pay.Reference,
 			Description: fmt.Sprintf("Payment received"),
 			Debit:       0,
-			Credit:      pay.Amount,
+			Credit:      pay.Amount.Float64(),
 			Balance:     balance,
 		})
 	}
@@ -1355,7 +1355,7 @@ func (s *ReportService) GetDetailedAging(tenantID string) (*DetailedAging, error
 
 	for _, inv := range invoices {
 		age := int(now.Sub(inv.DueDate).Hours() / 24)
-		balance := inv.Total - inv.PaidAmount
+		balance := inv.Total.Subtract(inv.PaidAmount).Float64()
 
 		switch {
 		case age <= 0:
@@ -1633,11 +1633,11 @@ func (s *ReportService) GetPaymentVerification(tenantID string, invoiceID string
 	var paidViaPayments float64
 	for _, p := range payments {
 		if p.Status == models.PaymentStatusCompleted {
-			paidViaPayments += p.Amount
+			paidViaPayments += p.Amount.Float64()
 		}
 	}
 	verification["paid_via_payments"] = paidViaPayments
-	verification["reconciliation_match"] = math.Abs(invoice.PaidAmount-paidViaPayments) < 0.01
+	verification["reconciliation_match"] = math.Abs(invoice.PaidAmount.Float64()-paidViaPayments) < 0.01
 
 	return verification, nil
 }

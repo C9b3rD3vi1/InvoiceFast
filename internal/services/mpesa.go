@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-	"invoicefast/internal/logger"
 	"strings"
 	"time"
 
+	"invoicefast/internal/circuitbreaker"
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
+	"invoicefast/internal/logger"
 	"invoicefast/internal/models"
 
 	"gorm.io/gorm"
@@ -108,6 +108,9 @@ func (s *MPesaService) IsConfigured() bool {
 }
 
 func (s *MPesaService) InitiateSTKPush(ctx context.Context, tenantID, invoiceID, phoneNumber, amount, invoiceNumber string) (*STKPushResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if !s.IsConfigured() {
 		return nil, ErrMpesaNotConfigured
 	}
@@ -161,20 +164,33 @@ func (s *MPesaService) InitiateSTKPush(ctx context.Context, tenantID, invoiceID,
 	httpReq.Header.Set("Authorization", "Bearer "+token)
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("STK push request failed: %w", err)
+	// Execute STK push with circuit breaker protection
+	type stkResult struct {
+		body       []byte
+		statusCode int
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	result, err := circuitbreaker.MpesaCircuit().ExecuteWithResult(ctx, func(ctx context.Context) (interface{}, error) {
+		resp, err := s.client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("STK push request failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
+		return &stkResult{body: body, statusCode: resp.StatusCode}, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, err
 	}
+	cbResult := result.(*stkResult)
+	body := cbResult.body
+	respStatusCode := cbResult.statusCode
 
-	if resp.StatusCode >= 400 {
-		logger.Get().Error(ctx, "STK push failed", "status_code", resp.StatusCode)
-		return nil, fmt.Errorf("%s: HTTP %d", ErrSTKPushFailed, resp.StatusCode)
+	if respStatusCode >= 400 {
+		logger.Get().Error(ctx, "STK push failed", "status_code", respStatusCode)
+		return nil, fmt.Errorf("%s: HTTP %d", ErrSTKPushFailed, respStatusCode)
 	}
 
 	var stkResp STKPushResponse
@@ -197,6 +213,9 @@ func (s *MPesaService) InitiateSTKPush(ctx context.Context, tenantID, invoiceID,
 // The middleware handles signature verification, IP allowlisting, and replay protection
 // This function handles the idempotent payment processing logic
 func (s *MPesaService) ProcessSTKCallback(ctx context.Context, callback STKCallback) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	// If we have a webhook verifier, this callback SHOULD have been verified
 	// The verification happens in the middleware BEFORE this is called
 	// This is a safety check
@@ -239,6 +258,9 @@ func (s *MPesaService) ProcessSTKCallback(ctx context.Context, callback STKCallb
 }
 
 func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, checkoutReqID, receipt, phone, amount string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	// SECURITY: Idempotency check - prevent double-crediting
 	// Use MerchantRequestID as unique key to detect duplicate callbacks
 	idempotencyKey := "mpesa:processed:" + merchantReqID
@@ -285,8 +307,9 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 			return fmt.Errorf("invoice not found: %w", err)
 		}
 
-		invoice.PaidAmount += amountFloat
-		if invoice.PaidAmount >= invoice.Total {
+		amountCents := models.ToCents(amountFloat)
+		invoice.PaidAmount = invoice.PaidAmount.Add(amountCents)
+		if invoice.PaidAmount.GreaterThan(invoice.Total) || invoice.PaidAmount.Equals(invoice.Total) {
 			invoice.PaidAmount = invoice.Total
 			invoice.Status = models.InvoiceStatusPaid
 			now := time.Now()
@@ -300,7 +323,7 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 		}
 
 		tx.Model(&models.Client{}).Where("id = ?", invoice.ClientID).
-			Update("total_paid", gorm.Expr("total_paid + ?", amountFloat))
+			Update("total_paid", gorm.Expr("total_paid + ?", amountCents))
 
 		logger.Get().Info(ctx, "Payment completed", "receipt", receipt, "invoice", invoice.InvoiceNumber, "amount", amount)
 		return nil
@@ -317,6 +340,9 @@ func (s *MPesaService) markPaymentCompleted(ctx context.Context, merchantReqID, 
 }
 
 func (s *MPesaService) markPaymentFailed(ctx context.Context, merchantReqID, checkoutReqID, reason string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	var payment models.Payment
 	err := s.db.Where("reference = ? OR id = ?", checkoutReqID, merchantReqID).First(&payment).Error
 	if err != nil {
@@ -330,6 +356,9 @@ func (s *MPesaService) markPaymentFailed(ctx context.Context, merchantReqID, che
 }
 
 func (s *MPesaService) getAccessToken(ctx context.Context) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	if s.cache != nil {
 		token, err := s.cache.GetString(ctx, "mpesa:access_token")
 		if err == nil && token != "" {
@@ -351,19 +380,32 @@ func (s *MPesaService) getAccessToken(ctx context.Context) (string, error) {
 	credentials := base64.StdEncoding.EncodeToString([]byte(s.cfg.MPesa.ConsumerKey + ":" + s.cfg.MPesa.ConsumerSecret))
 	req.Header.Set("Authorization", "Basic "+credentials)
 
-	resp, err := s.client.Do(req)
+	// Execute token request with circuit breaker protection
+	type tokenResult struct {
+		body       []byte
+		statusCode int
+	}
+	result, err := circuitbreaker.MpesaCircuit().ExecuteWithResult(ctx, func(ctx context.Context) (interface{}, error) {
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return &tokenResult{body: body, statusCode: resp.StatusCode}, nil
+	})
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	cbResult := result.(*tokenResult)
+	body := cbResult.body
+	respStatusCode := cbResult.statusCode
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("token request failed: HTTP %d - %s", resp.StatusCode, string(body))
+	if respStatusCode >= 400 {
+		return "", fmt.Errorf("token request failed: HTTP %d - %s", respStatusCode, string(body))
 	}
 
 	var tokenResp MpesaAccessToken

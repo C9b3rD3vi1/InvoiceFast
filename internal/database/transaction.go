@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Transaction executes a function within a database transaction
@@ -121,9 +122,9 @@ func (db *DB) ExecutePaymentProcessing(paymentUpdate, invoiceUpdate, clientUpdat
 // ============================================================================
 
 // LockRow locks a row for update to prevent concurrent modifications
-func (db *DB) LockRow(table string, where interface{}) error {
+func (db *DB) LockRow(model interface{}, where interface{}) error {
 	if db.isPostgres {
-		return db.DB.Raw("SELECT * FROM ? WHERE ? FOR UPDATE", table, where).Error
+		return db.DB.Model(model).Where(where).Clauses(clause.Locking{Strength: "UPDATE"}).Error
 	}
 	// SQLite doesn't support ROW LOCK, but using transactions provides some protection
 	return nil

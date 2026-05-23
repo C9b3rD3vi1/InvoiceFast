@@ -71,18 +71,19 @@ func (h *PaymentHandler) HandleIntasendWebhook(c *fiber.Ctx) error {
 		var amount float64
 		fmt.Sscanf(payload.Amount, "%f", &amount)
 		if amount == 0 {
-			amount = invoice.Total
+			amount = invoice.Total.Float64()
 		}
 
 		payment := &models.Payment{
 			TenantID:  invoice.TenantID,
 			InvoiceID: invoice.ID,
 			UserID:    invoice.UserID,
-			Amount:    amount,
+			Amount:    models.ToCents(amount),
 			Currency:  invoice.Currency,
 			Method:    models.PaymentMethodMpesa,
 			Status:    models.PaymentStatusCompleted,
 			Reference: payload.Reference,
+			IdempotencyKey: key,
 		}
 
 		h.invoiceService.RecordPayment(invoice.TenantID, invoice.ID, payment)
@@ -161,10 +162,10 @@ func (h *PaymentHandler) InitiateSTKPush(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "invoice not found"})
 	}
 
-	amountStr := fmt.Sprintf("%.2f", invoice.Total)
+	amountStr := fmt.Sprintf("%.2f", invoice.Total.Float64())
 	resp, err := h.mpesaService.InitiateSTKPush(c.Context(), tenantID, invoice.ID, req.Phone, amountStr, invoice.InvoiceNumber)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return sendBadRequest(c, err)
 	}
 
 	return c.JSON(resp)
@@ -280,7 +281,7 @@ func (h *PaymentHandler) ManualMatchPayment(c *fiber.Ctx) error {
 
 	payment.InvoiceID = req.InvoiceID
 	if err := h.db.Save(&payment).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendInternalError(c, err)
 	}
 
 	return c.JSON(fiber.Map{"status": "matched"})
@@ -315,6 +316,61 @@ func (h *PaymentHandler) AutoMatchPayments(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"matched": matched, "total": len(unmatched)})
+}
+
+// ResendReceipt re-sends the payment receipt email
+func (h *PaymentHandler) ResendReceipt(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	paymentID := c.Params("id")
+
+	var payment models.Payment
+	if err := h.db.Where("id = ? AND tenant_id = ?", paymentID, tenantID).First(&payment).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "payment not found"})
+	}
+
+	if payment.InvoiceID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "payment has no associated invoice"})
+	}
+
+	if _, err := h.invoiceService.SendInvoice(tenantID, payment.InvoiceID, userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to resend receipt"})
+	}
+
+	return c.JSON(fiber.Map{"message": "receipt resent successfully"})
+}
+
+// RefundPayment marks a payment as refunded
+func (h *PaymentHandler) RefundPayment(c *fiber.Ctx) error {
+	tenantID := middleware.GetTenantID(c)
+	if tenantID == "" {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "tenant required"})
+	}
+
+	paymentID := c.Params("id")
+
+	var payment models.Payment
+	if err := h.db.Where("id = ? AND tenant_id = ?", paymentID, tenantID).First(&payment).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "payment not found"})
+	}
+
+	if payment.Status == "refunded" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "payment already refunded"})
+	}
+
+	now := time.Now()
+	payment.Status = "refunded"
+	payment.UpdatedAt = now
+
+	if err := h.db.Save(&payment).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to process refund"})
+	}
+
+	return c.JSON(fiber.Map{"message": "payment refunded successfully"})
 }
 
 // GetPaymentAudit returns audit logs for a payment

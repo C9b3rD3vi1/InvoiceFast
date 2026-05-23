@@ -77,6 +77,9 @@ func (s *BackupService) Stop() {
 }
 
 func (s *BackupService) RunBackup(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	timestamp := time.Now().Format("2006-01-02T150405")
 	backupName := fmt.Sprintf("invoicefast-%s.db.gz", timestamp)
 	backupPath := filepath.Join(s.cfg.LocalDir, backupName)
@@ -113,6 +116,9 @@ func (s *BackupService) RunBackup(ctx context.Context) error {
 }
 
 func (s *BackupService) backupSQLite(ctx context.Context, destPath string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	srcFile, err := os.Open(s.dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open source database: %w", err)
@@ -141,6 +147,9 @@ func (s *BackupService) backupSQLite(ctx context.Context, destPath string) error
 }
 
 func (s *BackupService) backupPostgres(ctx context.Context, destPath string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	cmd := exec.CommandContext(ctx, "pg_dump", s.dbPath)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -177,6 +186,9 @@ func (s *BackupService) backupPostgres(ctx context.Context, destPath string) err
 }
 
 func (s *BackupService) uploadToS3(ctx context.Context, filePath string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if s.cfg.S3Bucket == "" {
 		logger.Get().Info(ctx, "Backup: S3 not configured, skipping upload")
 		return nil
@@ -205,6 +217,9 @@ func (s *BackupService) uploadToS3(ctx context.Context, filePath string) error {
 }
 
 func (s *BackupService) pruneBackups(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	entries, err := os.ReadDir(s.cfg.LocalDir)
 	if err != nil {
 		return fmt.Errorf("failed to read backup directory: %w", err)

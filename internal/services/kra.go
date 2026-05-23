@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"invoicefast/internal/circuitbreaker"
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/logger"
@@ -340,19 +341,33 @@ func (s *KRAService) submitToKRA(payload []byte) (*KRAResponse, error) {
 	httpReq.Header.Set("X-Branch-ID", s.cfg.KRA.BranchID)
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to submit to KRA: %w", err)
-	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	// Execute KRA submission with circuit breaker protection
+	type kraSubmitResult struct {
+		body       []byte
+		statusCode int
 	}
+	result, err := circuitbreaker.KRACircuit().ExecuteWithResult(context.Background(), func(ctx context.Context) (interface{}, error) {
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to submit to KRA: %w", err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
+		return &kraSubmitResult{body: body, statusCode: resp.StatusCode}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	kraResult := result.(*kraSubmitResult)
+	body := kraResult.body
+	respStatusCode := kraResult.statusCode
 
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("KRA API error (status %d): %s", resp.StatusCode, string(body))
+	if respStatusCode >= 400 {
+		return nil, fmt.Errorf("KRA API error (status %d): %s", respStatusCode, string(body))
 	}
 
 	// Parse KRA response
@@ -549,13 +564,13 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 			ItemDescription:        item.Description,
 			Quantity:               item.Quantity,
 			UnitOfMeasure:          item.Unit,
-			UnitPrice:              item.UnitPrice,
-			Total:                  item.Total,
-			Discount:               item.DiscountAmt,
-			ExciseDuty:             0, // Will be calculated if excise applies
+			UnitPrice:              item.UnitPrice.Float64(),
+			Total:                  item.Total.Float64(),
+			Discount:               item.DiscountAmt.Float64(),
+			ExciseDuty:             0,
 			VATRate:                taxRate,
-			VATAmount:              item.TaxAmount,
-			ItemClassificationCode: "001", // General goods - would be mapped from item category
+			VATAmount:              item.TaxAmount.Float64(),
+			ItemClassificationCode: "001",
 		}
 	}
 
@@ -572,10 +587,10 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 	// Get seller address from user profile (not hardcoded)
 	sellerAddress := ""
 	if usr != nil {
-		sellerAddress = usr.CompanyName // Would pull from user settings in production
+		sellerAddress = usr.CompanyName
 	}
 	if sellerAddress == "" {
-		sellerAddress = "Kenya" // Fallback
+		sellerAddress = "Kenya"
 	}
 
 	return &KRAInvoiceData{
@@ -600,14 +615,14 @@ func (s *KRAService) ConvertInvoiceToKRA(invoice *models.Invoice, usr *models.Us
 			ContactEmail:       cli.Email,
 		},
 		Items:             items,
-		SubTotal:          invoice.Subtotal,
-		Discount:          invoice.Discount,
-		TotalExcludingVAT: invoice.Subtotal - invoice.Discount,
+		SubTotal:          invoice.Subtotal.Float64(),
+		Discount:          invoice.Discount.Float64(),
+		TotalExcludingVAT: invoice.Subtotal.Subtract(invoice.Discount).Float64(),
 		VATRate:           taxRate,
-		VATAmount:         invoice.TotalTax,
-		TotalIncludingVAT: invoice.Total,
+		VATAmount:         invoice.TotalTax.Float64(),
+		TotalIncludingVAT: invoice.Total.Float64(),
 		PaymentMode:       "CASH",
-		ESDAmount:         invoice.ExciseDuty,
+		ESDAmount:         invoice.ExciseDuty.Float64(),
 		ESCAmount:         0,
 		Currency:          invoice.Currency,
 	}

@@ -16,6 +16,7 @@ import (
 	"invoicefast/internal/config"
 	"invoicefast/internal/database"
 	"invoicefast/internal/handlers"
+	"invoicefast/internal/health"
 	appLogger "invoicefast/internal/logger"
 	"invoicefast/internal/metrics"
 	"invoicefast/internal/middleware"
@@ -29,6 +30,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberRecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/template/html/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -105,6 +107,7 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName:      "InvoiceFast",
 		ServerHeader: "InvoiceFast/1.0.0",
+		BodyLimit:    10 * 1024 * 1024, // 10MB max body
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
@@ -118,13 +121,13 @@ func main() {
 	app.Use(middleware.RequestIDMiddleware())
 
 	// SECURITY: Security headers middleware
-	app.Use(middleware.SecurityHeadersMiddleware())
+	app.Use(middleware.SecurityHeadersMiddleware(cfg.Server.Mode))
 
 	// SECURITY: Request logging middleware (after headers, before CSRF)
 	app.Use(middleware.LoggingMiddleware(logSvc))
 
-	// SECURITY: CSRF protection for state-changing requests
-	csrfHandler, csrfStop := middleware.NewCSRFMiddleware()
+	// SECURITY: CSRF protection for state-changing requests (Redis-backed when available)
+	csrfHandler, csrfStop := middleware.NewRedisCSRFMiddleware(redisCache)
 	defer csrfStop()
 	app.Use(csrfHandler)
 
@@ -147,24 +150,44 @@ func main() {
 
 	logSvc.Info(context.Background(), "InvoiceFast: Server initialized")
 
+	// Initialize health check registry
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		logSvc.Warn(context.Background(), "InvoiceFast: Failed to get underlying sql.DB for health checks", "error", err.Error())
+	}
+	var redisClient redis.UniversalClient
+	if redisCache != nil {
+		redisClient = redisCache.Client()
+	}
+	healthRegistry := health.CreateDefaultHealthChecks(sqlDB, redisClient)
+
 	// CORS configuration
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.CORS.AllowedOrigins,
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Idempotency-Key, X-Request-ID",
-		AllowCredentials: true,
-		MaxAge:           86400,
-	}))
+	// Only apply CORS middleware when explicit origins are configured.
+	// Empty = no CORS headers = browser same-origin policy (most secure default).
+	if cfg.CORS.AllowedOrigins != "" {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins:     cfg.CORS.AllowedOrigins,
+			AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
+			AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, Idempotency-Key, X-Request-ID",
+			AllowCredentials: true,
+			MaxAge:           86400,
+		}))
+	}
 
 	// Layout middleware
 	app.Use(middleware.LayoutMiddleware())
 
-	// Initialize rate limiter (production-ready Fiber version)
+	// Initialize rate limiters (production-ready)
 	rateLimiter := middleware.NewFiberRateLimiter()
 	defer rateLimiter.Stop()
+	redisRateLimiter := middleware.NewRedisRateLimiter(redisCache)
 
-	// Apply rate limiting globally
-	app.Use(rateLimiter.Middleware())
+	// Apply rate limiting globally (Redis-backed when available for horizontal scaling)
+	if redisRateLimiter != nil {
+		app.Use(redisRateLimiter.Middleware(100, time.Minute))
+	} else {
+		app.Use(rateLimiter.Middleware())
+	}
 
 	// Initialize services
 	var idempotencySvc *services.IdempotencyService
@@ -435,7 +458,7 @@ func main() {
 	paymentHandler := handlers.NewPaymentHandler(invoiceService, mpesaService, db, thankYouService)
 	dashboardHandler := handlers.NewDashboardHandler(invoiceService, clientService, kraService)
 	reportHandler := handlers.NewReportHandler(reportService)
-	automationHandler := handlers.NewAutomationHandler(jobQueue, recurringInvoice, reminderService, workflowService)
+	automationHandler := handlers.NewAutomationHandler(db, jobQueue, recurringInvoice, reminderService, workflowService)
 	publicHandler := handlers.NewPublicHandlerWithTracking(invoiceService, authService, paymentService, mpesaService, intasendService, emailTrackingService, planService)
 	passwordResetService := services.NewPasswordResetService(db, cfg, emailService)
 	authHandler := handlers.NewAuthHandlerWithDeps(authService, auditService, invoiceService, clientService, passwordResetService, db)
@@ -460,6 +483,9 @@ func main() {
 	// Onboarding handler
 	onboardingHandler := handlers.NewOnboardingHandler(authService, invoiceService, clientService, settingsService, db)
 
+	// Subscription middleware for plan enforcement on create routes
+	subMiddleware := middleware.NewSubscriptionMiddleware(subscriptionService)
+
 	// Static files
 	app.Static("/static", "./static")
 	app.Static("/css", "./static/css")
@@ -472,7 +498,7 @@ func main() {
 	setupRoutes(app, cfg, invoiceHandler, clientHandler, settingsHandler, paymentHandler,
 		dashboardHandler, reportHandler, automationHandler, notificationHandler, authService, idempotencySvc,
 		db, publicHandler, authHandler, webhookVerifier, emailService, rateLimiter, billingHandler,
-		notificationAdminHandler)
+		notificationAdminHandler, subMiddleware)
 
 	// Item library routes
 	itemLibraryHandler := handlers.NewItemLibraryHandler(itemLibraryService)
@@ -553,6 +579,24 @@ func main() {
 	app.Use(func(c *fiber.Ctx) error {
 		hostname := c.Hostname()
 
+		// SECURITY: Validate Host header against configured domains
+		allowedDomains := cfg.Server.AllowedDomains
+		if len(allowedDomains) > 0 {
+			validHost := false
+			for _, d := range allowedDomains {
+				if strings.HasSuffix(hostname, "."+d) || hostname == d {
+					validHost = true
+					break
+				}
+			}
+			if !validHost {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "invalid host",
+					"code":  "INVALID_HOST",
+				})
+			}
+		}
+
 		// Check if this is a subdomain request
 		if strings.Contains(hostname, ".") {
 			parts := strings.Split(hostname, ".")
@@ -604,39 +648,9 @@ func main() {
 	metricsGroup.Get("/metrics", metrics.Handler())
 	metricsGroup.Get("/api/v1/metrics", metrics.Handler())
 
-	// Health endpoint (liveness)
-	app.Get("/health", func(c *fiber.Ctx) error {
-		dbErr := db.Ping()
-
-		status := "healthy"
-		code := fiber.StatusOK
-
-		if dbErr != nil {
-			status = "degraded"
-			code = fiber.StatusServiceUnavailable
-		}
-
-		return c.Status(code).JSON(fiber.Map{
-			"status":   status,
-			"time":     time.Now().UTC().Format(time.RFC3339),
-			"version":  "1.0.0",
-			"database": dbErr == nil,
-			"redis":    redisCache != nil,
-		})
-	})
-
-	// Readiness endpoint (for Kubernetes)
-	app.Get("/ready", func(c *fiber.Ctx) error {
-		if err := db.Ping(); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"status": "not ready",
-				"error":  "database unavailable",
-			})
-		}
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ready",
-		})
-	})
+	// Health check endpoints
+	app.Get("/health", health.Handler(healthRegistry))
+	app.Get("/ready", health.ReadyHandler(sqlDB))
 
 	// Start server
 	go func() {
@@ -693,7 +707,8 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	db *database.DB, publicHandler *handlers.PublicHandler, authHandler *handlers.AuthHandler,
 	webhookVerifier *middleware.WebhookVerifierMiddleware, emailService *services.EmailService,
 	rateLimiter *middleware.FiberRateLimiter, billingHandler *handlers.BillingHandler,
-	notificationAdminHandler *services.NotificationHandler) {
+	notificationAdminHandler *services.NotificationHandler,
+	subMiddleware *middleware.SubscriptionMiddleware) {
 
 	teamHandler := handlers.NewTeamHandler(db, authService, emailService)
 
@@ -715,7 +730,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config,
 	routes.PublicAuthRoutes(app, publicHandler)
 
 	// Protected tenant routes (require authentication)
-	subMiddleware := middleware.NewSubscriptionMiddleware(subscriptionService)
 	routes.TenantRoutes(app, authHandler, authService, db)
 	routes.InvoiceRoutes(app, invoiceHandler, authService, db, subMiddleware)
 	routes.ClientRoutes(app, clientHandler, authService, db, subMiddleware)

@@ -92,7 +92,7 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 		ID:        generateUUID(),
 		UserID:    user.ID,
 		Token:     hashedToken,
-		RawToken:  rawToken, // Will be cleared after sending
+		RawToken:  "", // Never store raw token in DB
 		Email:     email,
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 		IPAddress: ipAddress,
@@ -103,6 +103,8 @@ func (s *PasswordResetService) InitiatePasswordReset(email, ipAddress, userAgent
 	if err := s.db.Create(resetToken).Error; err != nil {
 		return nil, fmt.Errorf("failed to create reset token: %w", err)
 	}
+
+	// The raw token is held in the local variable `rawToken` for email delivery
 
 	// 6. Send reset email if email service is configured
 	if s.emailService != nil {

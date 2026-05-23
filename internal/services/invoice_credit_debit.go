@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"invoicefast/internal/models"
@@ -27,17 +26,20 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 			ID:          uuid.New().String(),
 			Description: item.Description,
 			Quantity:    item.Quantity,
-			UnitPrice:   item.UnitPrice,
+			UnitPrice:   models.ToCents(item.UnitPrice),
 			Unit:        item.Unit,
-			Total:       lineTotal,
+			Total:       models.ToCents(lineTotal),
 			SortOrder:   i,
 		})
 	}
 
 	taxRate := original.TaxRate
 	taxAmount := subtotal * (taxRate / 100)
-	discount := math.Max(0, original.Discount)
-	total := subtotal + taxAmount - discount
+	discount := original.Discount
+	if discount.LessThan(0) {
+		discount = 0
+	}
+	total := subtotal + taxAmount - discount.Float64()
 
 	// Validate buyer type inheritance - must match original for KRA compliance
 	buyerType := original.BuyerClassification
@@ -60,13 +62,13 @@ func (s *InvoiceService) CreateCreditNote(tenantID, userID, originalInvoiceID st
 		Currency:          original.Currency,
 		InvoiceType:       "credit_note",
 		OriginalInvoiceID: originalInvoiceID,
-		OriginalICN:       original.KRAICN, // Link to original KRA ICN
-		BuyerClassification: buyerType, // Inherit buyer type
-		Subtotal:          math.Round(subtotal*100) / 100,
+		OriginalICN:       original.KRAICN,
+		BuyerClassification: buyerType,
+		Subtotal:          models.ToCents(subtotal),
 		TaxRate:           taxRate,
-		TaxAmount:         math.Round(taxAmount*100) / 100,
-		Discount:          math.Round(discount*100) / 100,
-		Total:             math.Round((-total)*100) / 100,
+		TaxAmount:         models.ToCents(taxAmount),
+		Discount:          discount,
+		Total:             models.ToCents(-total),
 		Status:            models.InvoiceStatusCreditNote,
 		DueDate:           time.Now().AddDate(0, 0, 30),
 		Notes:             "Credit note for: " + original.InvoiceNumber,
@@ -124,17 +126,20 @@ func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID str
 			ID:          uuid.New().String(),
 			Description: item.Description,
 			Quantity:    item.Quantity,
-			UnitPrice:   item.UnitPrice,
+			UnitPrice:   models.ToCents(item.UnitPrice),
 			Unit:        item.Unit,
-			Total:       lineTotal,
+			Total:       models.ToCents(lineTotal),
 			SortOrder:   i,
 		})
 	}
 
 	taxRate := original.TaxRate
 	taxAmount := subtotal * (taxRate / 100)
-	discount := math.Max(0, original.Discount)
-	total := subtotal + taxAmount - discount
+	discount := original.Discount
+	if discount.LessThan(0) {
+		discount = 0
+	}
+	total := subtotal + taxAmount - discount.Float64()
 
 	// Validate buyer type inheritance - must match original for KRA compliance
 	buyerType := original.BuyerClassification
@@ -159,11 +164,11 @@ func (s *InvoiceService) CreateDebitNote(tenantID, userID, originalInvoiceID str
 		OriginalInvoiceID: originalInvoiceID,
 		OriginalICN:       original.KRAICN,
 		BuyerClassification: buyerType,
-		Subtotal:          math.Round(subtotal*100) / 100,
+		Subtotal:          models.ToCents(subtotal),
 		TaxRate:           taxRate,
-		TaxAmount:         math.Round(taxAmount*100) / 100,
-		Discount:          math.Round(discount*100) / 100,
-		Total:             math.Round(total*100) / 100,
+		TaxAmount:         models.ToCents(taxAmount),
+		Discount:          discount,
+		Total:             models.ToCents(total),
 		Status:            models.InvoiceStatusSent,
 		DueDate:           time.Now().AddDate(0, 0, 30),
 		Notes:             "Debit note for: " + original.InvoiceNumber,

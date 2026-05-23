@@ -24,6 +24,16 @@ func NewWebhookVerifierMiddleware(verifier *services.WebhookVerifier) *WebhookVe
 // This middleware verifies the callback BEFORE any business logic runs
 func (m *WebhookVerifierMiddleware) MpesaVerification() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		// SECURITY: Verify request Origin header if present
+		if origin := c.Get("Origin"); origin != "" {
+			if !strings.HasPrefix(origin, "https://") && !strings.HasPrefix(origin, "http://") {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "invalid origin",
+					"code":  "INVALID_ORIGIN",
+				})
+			}
+		}
+
 		// Get signature from header
 		signature := c.Get("X-Mpesa-Signature")
 

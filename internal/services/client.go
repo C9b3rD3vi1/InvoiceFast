@@ -135,7 +135,7 @@ func (s *ClientService) GetClient(tenantID, clientID string) (*models.Client, er
 	}
 
 	// Calculate totals
-	var totalBilled, totalPaid float64
+	var totalBilled, totalPaid models.Money
 	for _, inv := range client.Invoices {
 		totalBilled += inv.Total
 		totalPaid += inv.PaidAmount
@@ -209,7 +209,7 @@ func (s *ClientService) GetUserClients(tenantID string, filter ClientFilter) ([]
 	// Calculate totals using the preloaded data
 	for i := range clients {
 		clientInvoices := invoiceMap[clients[i].ID]
-		var totalBilled, totalPaid float64
+		var totalBilled, totalPaid models.Money
 		for _, inv := range clientInvoices {
 			totalBilled += inv.Total
 			totalPaid += inv.PaidAmount

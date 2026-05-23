@@ -7,10 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"invoicefast/internal/config"
+
+	stripewebhook "github.com/stripe/stripe-go/v72/webhook"
 )
 
 // WebhookVerifier verifies webhook signatures for security
@@ -155,7 +156,7 @@ func (v *WebhookVerifier) VerifyIntasendWebhook(payload []byte, signature string
 }
 
 // VerifyStripeWebhook verifies Stripe webhook signatures
-// This is well-documented by Stripe and MUST be implemented
+// Uses the official Stripe Go library for secure verification
 func (v *WebhookVerifier) VerifyStripeWebhook(payload []byte, signature string, timestamp string, eventID string) *WebhookVerificationResult {
 	if v.stripeWebhookSecret == "" {
 		return &WebhookVerificationResult{
@@ -165,63 +166,21 @@ func (v *WebhookVerifier) VerifyStripeWebhook(payload []byte, signature string, 
 		}
 	}
 
-	// Stripe uses a specific signature format: t=timestamp,v1=signature
-	parts := strings.Split(signature, ",")
-	if len(parts) != 2 {
-		return &WebhookVerificationResult{
-			Valid:    false,
-			Provider: "stripe",
-			Error:    fmt.Errorf("invalid Stripe signature format"),
-		}
-	}
-
-	// Extract timestamp and signature
-	var ts string
-	var sig string
-	for _, part := range parts {
-		if strings.HasPrefix(part, "t=") {
-			ts = strings.TrimPrefix(part, "t=")
-		}
-		if strings.HasPrefix(part, "v1=") {
-			sig = strings.TrimPrefix(part, "v1=")
-		}
-	}
-
-	if ts == "" || sig == "" {
-		return &WebhookVerificationResult{
-			Valid:    false,
-			Provider: "stripe",
-			Error:    fmt.Errorf("incomplete Stripe signature"),
-		}
-	}
-
-	// Verify timestamp is not too old (5 minute window)
-	tsUnix, err := strconv.ParseInt(ts, 10, 64)
+	event, err := stripewebhook.ConstructEvent(payload, signature, v.stripeWebhookSecret)
 	if err != nil {
 		return &WebhookVerificationResult{
 			Valid:    false,
 			Provider: "stripe",
-			Error:    fmt.Errorf("invalid timestamp"),
+			Error:    fmt.Errorf("Stripe webhook signature verification failed: %w", err),
 		}
 	}
 
-	webhookTime := time.Unix(tsUnix, 0)
-	if time.Since(webhookTime) > 5*time.Minute {
+	// Verify timestamp is not too old (5 minute window)
+	if time.Since(time.Unix(event.Created, 0)) > 5*time.Minute {
 		return &WebhookVerificationResult{
 			Valid:    false,
 			Provider: "stripe",
-			Error:    fmt.Errorf("Stripe webhook too old"),
-		}
-	}
-
-	// Compute expected signature: HMAC-SHA256 of "timestamp.payload"
-	expectedSig := computeHMAC(fmt.Sprintf("%s.%s", ts, string(payload)), v.stripeWebhookSecret)
-
-	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
-		return &WebhookVerificationResult{
-			Valid:    false,
-			Provider: "stripe",
-			Error:    fmt.Errorf("invalid Stripe webhook signature"),
+			Error:    fmt.Errorf("Stripe webhook event too old"),
 		}
 	}
 
@@ -231,7 +190,7 @@ func (v *WebhookVerifier) VerifyStripeWebhook(payload []byte, signature string, 
 	return &WebhookVerificationResult{
 		Valid:     true,
 		Provider:  "stripe",
-		Timestamp: webhookTime,
+		Timestamp: time.Unix(event.Created, 0),
 		RequestID: eventID,
 	}
 }

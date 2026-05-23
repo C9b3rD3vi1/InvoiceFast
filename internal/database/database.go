@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"invoicefast/internal/config"
@@ -158,24 +159,29 @@ func newSQLiteDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	return db, nil
 }
 
-// buildPostgresDSN builds PostgreSQL connection string from config
+// buildPostgresDSN builds PostgreSQL connection string from config or env vars
 func buildPostgresDSN(cfg *config.DatabaseConfig) string {
-	// If DSN is provided directly, use it
-	if cfg.DSN != "" {
-		return cfg.DSN
-	}
+	// Build from individual env vars or hardcoded dev defaults
+	host := envOrDefault("DB_HOST", "localhost")
+	port := envOrDefault("DB_PORT", "5432")
+	user := envOrDefault("DB_USER", "postgres")
+	password := os.Getenv("DB_PASSWORD")
+	dbname := envOrDefault("DB_NAME", "invoicefast")
+	sslmode := envOrDefault("DB_SSLMODE", "disable")
 
-	// Build from individual components (would need additional env vars)
-	// This is a fallback - in production, provide full DSN via DB_DSN
-	host := "localhost"
-	port := "5432"
-	user := "postgres"
-	password := ""
-	dbname := "invoicefast"
-	sslmode := "disable"
+	if password == "" {
+		logger.Get().Warn(context.Background(), "DB_PASSWORD not set — using empty password. Set DB_PASSWORD env var or DB_DSN for production.")
+	}
 
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbname, sslmode)
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // Migrate runs database migrations based on the database type

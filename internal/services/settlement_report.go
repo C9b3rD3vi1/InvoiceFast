@@ -70,7 +70,7 @@ func (s *MPaySettlementService) GenerateDailySettlement(date time.Time) (*Settle
 		item := SettlementItem{
 			Time:        p.CreatedAt,
 			Reference:   p.Reference,
-			Amount:      p.Amount,
+			Amount:      p.Amount.Float64(),
 			Status:      string(p.Status),
 			PhoneNumber: p.PhoneNumber,
 			InvoiceID:   p.InvoiceID,
@@ -78,10 +78,10 @@ func (s *MPaySettlementService) GenerateDailySettlement(date time.Time) (*Settle
 		report.Transactions = append(report.Transactions, item)
 
 		if p.Status == models.PaymentStatusCompleted {
-			totalDebited += p.Amount
+			totalDebited += p.Amount.Float64()
 			successCount++
 		} else if p.Status == models.PaymentStatusPending {
-			totalPending += p.Amount
+			totalPending += p.Amount.Float64()
 			failedCount++
 		}
 	}
@@ -99,14 +99,14 @@ func (s *MPaySettlementService) GenerateDailySettlement(date time.Time) (*Settle
 	minAmount := 0.0
 	maxAmount := 0.0
 	if len(payments) > 0 {
-		minAmount = payments[0].Amount
-		maxAmount = payments[0].Amount
+		minAmount = payments[0].Amount.Float64()
+		maxAmount = payments[0].Amount.Float64()
 		for _, p := range payments {
-			if p.Amount < minAmount {
-				minAmount = p.Amount
+			if p.Amount.Float64() < minAmount {
+				minAmount = p.Amount.Float64()
 			}
-			if p.Amount > maxAmount {
-				maxAmount = p.Amount
+			if p.Amount.Float64() > maxAmount {
+				maxAmount = p.Amount.Float64()
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"encoding/base64"
 	"os"
 	"testing"
 
@@ -42,16 +43,16 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 
 func TestEncryptEmptyString(t *testing.T) {
 	svc := setupAuthServiceForEncryption(t)
-	_, err := svc.EncryptSecretForTest("")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot encrypt empty")
+	result, err := svc.EncryptSecretForTest("")
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
 }
 
 func TestDecryptEmptyString(t *testing.T) {
 	svc := setupAuthServiceForEncryption(t)
-	_, err := svc.DecryptSecretForTest("")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot decrypt empty")
+	result, err := svc.DecryptSecretForTest("")
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
 }
 
 func TestDecryptInvalidBase64(t *testing.T) {
@@ -67,31 +68,28 @@ func TestDecryptTamperedCiphertext(t *testing.T) {
 	encrypted, err := svc.EncryptSecretForTest(original)
 	require.NoError(t, err)
 
-	tampered := encrypted[:len(encrypted)-1] + "X"
+	// Decode to bytes, flip a bit in the ciphertext portion, re-encode
+	raw, _ := base64.StdEncoding.DecodeString(encrypted)
+	nonceSize := 12
+	if len(raw) > nonceSize+1 {
+		raw[nonceSize] ^= 0x01
+	}
+	tampered := base64.StdEncoding.EncodeToString(raw)
 	_, err = svc.DecryptSecretForTest(tampered)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "decryption failed")
+	assert.Contains(t, err.Error(), "decryption failed",
+		"tampering ciphertext after nonce should trigger GCM auth failure")
 }
 
 func TestEncryptionDifferentKeys(t *testing.T) {
-	if os.Getenv("ENCRYPTION_KEY") == "" {
-		os.Setenv("ENCRYPTION_KEY", "test-encryption-key-for-testing-only-1234567890")
-	}
-	models.InitEncryption(os.Getenv("ENCRYPTION_KEY"))
+	key1 := "key-one-for-encrypt-decrypt-test-min-len-123456789012"
+	key2 := "key-two-for-encrypt-decrypt-test-different-1234567890"
 
-	cfg1 := &config.Config{
-		JWT: config.JWTConfig{Secret: "key-one-for-encrypt-decrypt-test-min-len!!"},
-	}
-	cfg2 := &config.Config{
-		JWT: config.JWTConfig{Secret: "key-two-for-encrypt-decrypt-test-different!!"},
-	}
-
-	svc1 := services.NewAuthService(nil, cfg1, nil, nil, nil)
-	svc2 := services.NewAuthService(nil, cfg2, nil, nil, nil)
-
-	encrypted, err := svc1.EncryptSecretForTest("secret-data")
+	models.InitEncryption(key1)
+	encrypted, err := models.EncryptValue("secret-data")
 	require.NoError(t, err)
 
-	_, err = svc2.DecryptSecretForTest(encrypted)
-	assert.Error(t, err, "decrypting with different key should fail")
+	models.InitEncryption(key2)
+	_, err = models.DecryptValue(encrypted)
+	assert.Error(t, err, "decrypting with different ENCRYPTION_KEY should fail")
 }

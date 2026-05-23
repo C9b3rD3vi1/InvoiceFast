@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"strings"
 	"sync"
 	"time"
 
@@ -86,7 +87,7 @@ func DefaultCSRFConfig() CSRFConfig {
 		CookieName:     "csrf_token",
 		CookiePath:     "/",
 		CookieSecure:   true,
-		CookieHTTPOnly: false, // SPA needs to read this for header-based submission
+		CookieHTTPOnly: true, // No JS code needs to read this; Bearer auth is immune to CSRF
 		CookieSameSite: "Strict",
 		Expiration:     24 * time.Hour,
 		store:          newCSRFStore(),
@@ -125,14 +126,24 @@ func csrfHandler(config CSRFConfig) fiber.Handler {
 			return c.Next()
 		}
 
-		// Skip health endpoints
+		// Skip health endpoints and webhook callbacks (third-party, no CSRF)
 		if c.Path() == "/api/v1/health" || c.Path() == "/health" ||
 			c.Path() == "/ready" || c.Path() == "/api/v1/metrics" ||
-			c.Path() == "/metrics" {
+			c.Path() == "/metrics" || strings.HasPrefix(c.Path(), "/api/v1/webhook/") {
 			return c.Next()
 		}
 
-		// ALL state-changing requests require CSRF validation, authenticated or not
+		// Skip auth routes — they need to work without prior CSRF token
+		if strings.HasPrefix(c.Path(), "/api/v1/auth/") {
+			return c.Next()
+		}
+
+		// Skip requests with Bearer token (JWT auth is immune to CSRF)
+		if strings.HasPrefix(c.Get("Authorization"), "Bearer ") {
+			return c.Next()
+		}
+
+		// ALL other state-changing requests require CSRF validation
 		cookieToken := c.Cookies(config.CookieName)
 
 		// If no cookie exists, generate one but still reject the request

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"invoicefast/internal/config"
+	"invoicefast/internal/metrics"
 )
 
 // SMSService handles SMS sending for critical alerts
@@ -44,17 +45,24 @@ func (s *SMSService) Send(to, message string) error {
 		return nil
 	}
 
+	var err error
 	switch s.cfg.Provider {
 	case "africastalking":
-		return s.sendViaAfricaStalking(to, message)
+		err = s.sendViaAfricaStalking(to, message)
 	case "twilio":
-		return s.sendViaTwilio(to, message)
+		err = s.sendViaTwilio(to, message)
 	case "bulk":
-		return s.sendViaBulkAPI(to, message)
+		err = s.sendViaBulkAPI(to, message)
 	default:
-		// Default to Africa Stalking
-		return s.sendViaAfricaStalking(to, message)
+		err = s.sendViaAfricaStalking(to, message)
 	}
+
+	if err != nil {
+		metrics.RecordSMSFailed()
+	} else {
+		metrics.RecordSMSSent()
+	}
+	return err
 }
 
 // sendViaAfricaStalking sends SMS via Africa's Talking API

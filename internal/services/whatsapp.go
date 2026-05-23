@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"invoicefast/internal/circuitbreaker"
 )
 
 // WhatsAppService handles WhatsApp messaging
@@ -259,17 +262,22 @@ func (s *WhatsAppService) sendTwilioMessage(from, to, message string) error {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("twilio request failed: %w", err)
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("twilio API error: status=%d body=%s", resp.StatusCode, string(body))
-	}
-	return nil
+	// Execute Twilio API call with circuit breaker protection
+	_, err = circuitbreaker.WhatsAppCircuit().ExecuteWithResult(context.Background(), func(ctx context.Context) (interface{}, error) {
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("twilio request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("twilio API error: status=%d body=%s", resp.StatusCode, string(body))
+		}
+		return nil, nil
+	})
+	return err
 }
 
 func (s *WhatsAppService) sendTwilioMessageWithMedia(from, to, message string, mediaData []byte, mediaName string) error {
@@ -316,21 +324,22 @@ func (s *WhatsAppService) uploadMediaToCDN(data []byte, name string) (string, er
 	return fmt.Sprintf("%s/api/invoices/download/%s", baseURL, name), nil
 }
 
+type whatsappTextObject struct {
+	Body       string `json:"body"`
+	PreviewURL bool   `json:"preview_url"`
+}
+
 func (s *WhatsAppService) sendMetaMessage(to, message string) error {
 	if s.metaPhoneID == "" || s.metaToken == "" {
 		return fmt.Errorf("Meta WhatsApp not configured: missing phone ID or access token")
 	}
 
-	type textObject struct {
-		Body       string `json:"body"`
-		PreviewURL bool   `json:"preview_url"`
-	}
 	type messagePayload struct {
-		MessagingProduct string     `json:"messaging_product"`
-		RecipientType    string     `json:"recipient_type"`
-		To               string     `json:"to"`
-		Type             string     `json:"type"`
-		Text             textObject `json:"text"`
+		MessagingProduct string            `json:"messaging_product"`
+		RecipientType    string            `json:"recipient_type"`
+		To               string            `json:"to"`
+		Type             string            `json:"type"`
+		Text             whatsappTextObject `json:"text"`
 	}
 
 	payload := messagePayload{
@@ -338,7 +347,7 @@ func (s *WhatsAppService) sendMetaMessage(to, message string) error {
 		RecipientType:    "individual",
 		To:               to,
 		Type:             "text",
-		Text:             textObject{Body: message, PreviewURL: false},
+		Text:             whatsappTextObject{Body: message, PreviewURL: false},
 	}
 
 	body, err := json.Marshal(payload)
@@ -388,7 +397,7 @@ func (s *WhatsAppService) sendMetaMessageWithMedia(to, message string, mediaData
 		RecipientType    string     `json:"recipient_type"`
 		To               string     `json:"to"`
 		Type             string     `json:"type"`
-		Text             *textObject `json:"text,omitempty"`
+		Text             *whatsappTextObject `json:"text,omitempty"`
 		Document         *mediaObject `json:"document,omitempty"`
 	}
 
@@ -397,7 +406,7 @@ func (s *WhatsAppService) sendMetaMessageWithMedia(to, message string, mediaData
 		RecipientType:    "individual",
 		To:               to,
 		Type:             "document",
-		Text:             &textObject{Body: message, PreviewURL: false},
+		Text:             &whatsappTextObject{Body: message, PreviewURL: false},
 		Document:         &mediaObject{ID: mediaID},
 	}
 

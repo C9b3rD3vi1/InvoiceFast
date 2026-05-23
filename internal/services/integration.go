@@ -124,7 +124,10 @@ func (s *IntegrationService) SaveIntegration(tenantID, provider, name, descripti
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	encryptedConfig := models.EncryptValue(string(configJSON))
+	encryptedConfig, err := models.EncryptValue(string(configJSON))
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt config: %w", err)
+	}
 
 	existing, err := s.GetIntegrationByProvider(tenantID, provider)
 	if err != nil {
@@ -175,7 +178,10 @@ func (s *IntegrationService) GetIntegrationConfig(tenantID, provider string) (*I
 		return nil, nil
 	}
 
-	decrypted := models.DecryptValue(integration.Config)
+	decrypted, err := models.DecryptValue(integration.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt integration config: %w", err)
+	}
 
 	var config IntegrationConfig
 	err = json.Unmarshal([]byte(decrypted), &config)

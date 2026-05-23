@@ -25,15 +25,15 @@ type Expense struct {
 	CategoryID      string     `json:"category_id" gorm:"type:uuid;index"`
 	Title           string     `json:"title" gorm:"not null"`
 	Description     string     `json:"description"`
-	Amount          float64    `json:"amount" gorm:"not null"`
+	Amount    Money      `json:"amount" gorm:"not null"`
 	Currency        string     `json:"currency" gorm:"default:KES"`
 	Date            time.Time  `json:"date" gorm:"index"`
 	Status          string     `json:"status" gorm:"default:pending"` // pending, approved, rejected, paid
 	PaymentMethod   string     `json:"payment_method"`                // cash, bank, mpesa, card
 	Reference       string     `json:"reference"`
 	Vendor          string     `json:"vendor"`
-	TaxAmount       float64    `json:"tax_amount"`
-	TaxRate         float64    `json:"tax_rate"`
+	TaxAmount Money      `json:"tax_amount"`
+	TaxRate   float64    `json:"tax_rate"`
 	IsRecurring     bool       `json:"is_recurring"`
 	RecurringPeriod string     `json:"recurring_period"` // weekly, monthly, yearly
 	Notes           string     `json:"notes"`

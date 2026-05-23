@@ -129,18 +129,34 @@ type BrandingSettings struct {
 func (s *SettingsService) encryptSettings(settings *TenantSettings) error {
 	if settings.Mpesa != nil {
 		if settings.Mpesa.ConsumerSecret != "" {
-			settings.Mpesa.ConsumerSecret = models.EncryptValue(settings.Mpesa.ConsumerSecret)
+			enc, err := models.EncryptValue(settings.Mpesa.ConsumerSecret)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt Mpesa consumer secret: %w", err)
+			}
+			settings.Mpesa.ConsumerSecret = enc
 		}
 		if settings.Mpesa.Passkey != "" {
-			settings.Mpesa.Passkey = models.EncryptValue(settings.Mpesa.Passkey)
+			enc, err := models.EncryptValue(settings.Mpesa.Passkey)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt Mpesa passkey: %w", err)
+			}
+			settings.Mpesa.Passkey = enc
 		}
 	}
 	if settings.KRA != nil {
 		if settings.KRA.APIKey != "" {
-			settings.KRA.APIKey = models.EncryptValue(settings.KRA.APIKey)
+			enc, err := models.EncryptValue(settings.KRA.APIKey)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt KRA API key: %w", err)
+			}
+			settings.KRA.APIKey = enc
 		}
 		if settings.KRA.RSAPrivateKey != "" {
-			settings.KRA.RSAPrivateKey = models.EncryptValue(settings.KRA.RSAPrivateKey)
+			enc, err := models.EncryptValue(settings.KRA.RSAPrivateKey)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt KRA RSA private key: %w", err)
+			}
+			settings.KRA.RSAPrivateKey = enc
 		}
 	}
 	return nil
@@ -150,18 +166,34 @@ func (s *SettingsService) encryptSettings(settings *TenantSettings) error {
 func (s *SettingsService) decryptSettings(settings *TenantSettings) error {
 	if settings.Mpesa != nil {
 		if settings.Mpesa.ConsumerSecret != "" {
-			settings.Mpesa.ConsumerSecret = models.DecryptValue(settings.Mpesa.ConsumerSecret)
+			dec, err := models.DecryptValue(settings.Mpesa.ConsumerSecret)
+			if err != nil {
+				return fmt.Errorf("failed to decrypt Mpesa consumer secret: %w", err)
+			}
+			settings.Mpesa.ConsumerSecret = dec
 		}
 		if settings.Mpesa.Passkey != "" {
-			settings.Mpesa.Passkey = models.DecryptValue(settings.Mpesa.Passkey)
+			dec, err := models.DecryptValue(settings.Mpesa.Passkey)
+			if err != nil {
+				return fmt.Errorf("failed to decrypt Mpesa passkey: %w", err)
+			}
+			settings.Mpesa.Passkey = dec
 		}
 	}
 	if settings.KRA != nil {
 		if settings.KRA.APIKey != "" {
-			settings.KRA.APIKey = models.DecryptValue(settings.KRA.APIKey)
+			dec, err := models.DecryptValue(settings.KRA.APIKey)
+			if err != nil {
+				return fmt.Errorf("failed to decrypt KRA API key: %w", err)
+			}
+			settings.KRA.APIKey = dec
 		}
 		if settings.KRA.RSAPrivateKey != "" {
-			settings.KRA.RSAPrivateKey = models.DecryptValue(settings.KRA.RSAPrivateKey)
+			dec, err := models.DecryptValue(settings.KRA.RSAPrivateKey)
+			if err != nil {
+				return fmt.Errorf("failed to decrypt KRA RSA private key: %w", err)
+			}
+			settings.KRA.RSAPrivateKey = dec
 		}
 	}
 	return nil

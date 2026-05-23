@@ -75,7 +75,7 @@ func (s *ThankYouMessageService) sendEmailThankYou(to string, invoice *models.In
 			<p>Best regards,<br>%s</p>
 		</body>
 		</html>
-	`, invoice.Client.Name, invoice.InvoiceNumber, invoice.Currency, invoice.PaidAmount, companyName)
+	`, invoice.Client.Name, invoice.InvoiceNumber, invoice.Currency, invoice.PaidAmount.Float64(), companyName)
 
 	billingName, billingEmail := s.emailService.sender("billing")
 	s.emailService.Send(EmailRequest{

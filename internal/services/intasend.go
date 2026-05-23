@@ -227,7 +227,7 @@ func (s *IntasendService) HandleWebhook(payload []byte, signature string, source
 }
 
 func (s *IntasendService) handlePaymentSuccess(checkoutID, tenantID string, event IntasendWebhookPayload) error {
-	amount := float64(event.Collection.Amount) / 100
+	amount := models.Money(event.Collection.Amount)
 	currency := event.Collection.Currency
 
 	existingPayment, err := s.findPaymentByRef(checkoutID)
@@ -273,9 +273,9 @@ func (s *IntasendService) handlePaymentSuccess(checkoutID, tenantID string, even
 	}
 
 	s.recordIdempotency(tenantID, checkoutID, "payment", payment.ID)
-	s.sendNotification(tenantID, EventPaymentReceived, fmt.Sprintf("Payment of %.2f %s received via M-Pesa", amount, currency))
+	s.sendNotification(tenantID, EventPaymentReceived, fmt.Sprintf("Payment of %.2f %s received via M-Pesa", amount.Float64(), currency))
 
-	logger.Get().Info(context.Background(), "Payment succeeded", "checkout_id", checkoutID, "currency", currency, "amount", amount)
+	logger.Get().Info(context.Background(), "Payment succeeded", "checkout_id", checkoutID, "currency", currency, "amount", amount.Float64())
 	return nil
 }
 

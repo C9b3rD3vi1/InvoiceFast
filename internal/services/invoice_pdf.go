@@ -33,9 +33,9 @@ func (s *InvoiceService) invoiceToPDFData(invoice *models.Invoice) *pdf.InvoiceD
 			Description: item.Description,
 			Quantity:    item.Quantity,
 			Unit:        item.Unit,
-			UnitPrice:   item.UnitPrice,
+			UnitPrice:   item.UnitPrice.Float64(),
 			TaxRate:     item.TaxRate,
-			Total:       item.Total,
+			Total:       item.Total.Float64(),
 		}
 	}
 
@@ -47,8 +47,8 @@ func (s *InvoiceService) invoiceToPDFData(invoice *models.Invoice) *pdf.InvoiceD
 	kraCompliant := invoice.KRAICN != ""
 	controlNumber := invoice.KRAICN
 
-	paidAmount := invoice.PaidAmount
-	balance := invoice.BalanceDue
+	paidAmount := invoice.PaidAmount.Float64()
+	balance := invoice.BalanceDue.Float64()
 
 	data := &pdf.InvoiceData{
 		CompanyName:    invoice.User.CompanyName,
@@ -67,11 +67,11 @@ func (s *InvoiceService) invoiceToPDFData(invoice *models.Invoice) *pdf.InvoiceD
 		DueDate:        invoice.DueDate,
 		Currency:       invoice.Currency,
 		Items:          items,
-		Subtotal:       invoice.Subtotal,
+		Subtotal:       invoice.Subtotal.Float64(),
 		TaxRate:        invoice.TaxRate,
-		TaxAmount:      invoice.TaxAmount,
-		Discount:       invoice.Discount,
-		Total:          invoice.Total,
+		TaxAmount:      invoice.TaxAmount.Float64(),
+		Discount:       invoice.Discount.Float64(),
+		Total:          invoice.Total.Float64(),
 		PaymentLink:    paymentLink,
 		Notes:          invoice.Notes,
 		Terms:          invoice.Terms,
